@@ -29,6 +29,33 @@ def manifest() -> dict[str, Any]:
     }
 
 
+def validation_queue(*, include_risky: bool, include_blocked: bool) -> dict[str, Any]:
+    grouped = models_by_status()
+    statuses = ["unverified"]
+    if include_risky:
+        statuses.append("risky")
+    if include_blocked:
+        statuses.append("blocked")
+    items: list[dict[str, Any]] = []
+    for status in statuses:
+        for record in grouped.get(status, []):
+            model = str(record["model"])
+            item = dict(record)
+            extra_flags = ""
+            if status == "risky":
+                extra_flags = " --allow-risky"
+            elif status == "blocked":
+                extra_flags = " --allow-blocked"
+            item["dry_run_command"] = f"pt-reverse/bin/pt730-models validate {model}{extra_flags} --dry-run"
+            item["live_command"] = f"pt-reverse/bin/pt730-models validate {model}{extra_flags} --live"
+            item["record_rule"] = "safe only after create/query/save/reopen; risky or blocked after crash/refusal"
+            items.append(item)
+    return {
+        "counts": {status: len(grouped.get(status, [])) for status in grouped},
+        "items": items,
+    }
+
+
 def probe_plan(model: str, *, allow_risky: bool, allow_blocked: bool) -> tuple[dict[str, Any], int]:
     record = MODEL_REGISTRY.get(model)
     if record is None:
@@ -125,6 +152,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("manifest", help="print grouped safety registry")
+    queue_p = sub.add_parser("queue", help="print the guarded common-model validation queue")
+    queue_p.add_argument("--include-risky", action="store_true")
+    queue_p.add_argument("--include-blocked", action="store_true")
     probe_p = sub.add_parser("probe-plan", help="generate a guarded one-model live validation plan")
     probe_p.add_argument("model")
     probe_p.add_argument("--allow-risky", action="store_true")
@@ -142,6 +172,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.cmd == "manifest":
         print_json(manifest())
+        return 0
+    if args.cmd == "queue":
+        print_json(validation_queue(include_risky=args.include_risky, include_blocked=args.include_blocked))
         return 0
     if args.cmd == "probe-plan":
         data, code = probe_plan(args.model, allow_risky=args.allow_risky, allow_blocked=args.allow_blocked)

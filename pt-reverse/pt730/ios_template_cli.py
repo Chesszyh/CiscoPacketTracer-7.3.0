@@ -144,6 +144,20 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
     return commands
 
 
+def render_records(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    devices = spec.get("devices")
+    if devices is None:
+        return [{"device": spec.get("device", spec.get("name")), "commands": render_commands(spec)}]
+    if not isinstance(devices, list):
+        raise ValueError("devices must be an array")
+    records: list[dict[str, Any]] = []
+    for index, device_spec in enumerate(devices):
+        if not isinstance(device_spec, dict):
+            raise ValueError(f"devices[{index}] must be an object")
+        records.append({"device": device_spec.get("device", device_spec.get("name")), "commands": render_commands(device_spec)})
+    return records
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -154,11 +168,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         spec = load_json(args.spec)
-        commands = render_commands(spec)
+        records = render_records(spec)
         if args.topology_json:
-            print(json.dumps({"ios_configs": [{"device": spec.get("device", spec.get("name")), "commands": commands}]}, ensure_ascii=False, indent=2))
+            print(json.dumps({"ios_configs": records}, ensure_ascii=False, indent=2))
         else:
-            print("\n".join(commands))
+            chunks = []
+            for record in records:
+                if len(records) > 1:
+                    chunks.append(f"! device {record['device']}")
+                chunks.append("\n".join(record["commands"]))
+            print("\n".join(chunks))
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"pt730-ios-template: {exc}", file=sys.stderr)

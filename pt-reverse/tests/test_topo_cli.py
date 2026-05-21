@@ -83,7 +83,10 @@ class TopologyCliTest(unittest.TestCase):
                     "model": "2911",
                     "type": "0",
                     "ports": [{"name": "GigabitEthernet0/0", "linked": True, "ip": "10.0.0.1", "mask": "255.255.255.0"}],
-                    "command_line": {"prompt": "R1#"},
+                    "command_line": {
+                        "prompt": "R1#",
+                        "output_tail": "\nshow running-config\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip nat inside\n no shutdown\nrouter rip\n version 2\n network 10.0.0.0\nip route 0.0.0.0 0.0.0.0 10.0.0.254\naccess-list 10 permit 10.0.0.0 0.0.0.255\nip nat inside source list 10 interface GigabitEthernet0/1 overload\n",
+                    },
                 },
                 {
                     "name": "SRV1",
@@ -117,6 +120,12 @@ class TopologyCliTest(unittest.TestCase):
         self.assertEqual(data["ip_configs"][0]["device"], "R1")
         self.assertEqual(data["server_services"][0]["device"], "SRV1")
         self.assertEqual(data["ios_devices"][0]["device"], "R1")
+        self.assertEqual(data["config_summaries"][0]["device"], "R1")
+        self.assertIn("GigabitEthernet0/0", data["config_summaries"][0]["interfaces"])
+        self.assertEqual(data["config_summaries"][0]["routing"]["rip_networks"], ["10.0.0.0"])
+        self.assertEqual(data["config_summaries"][0]["routing"]["static_routes"][0]["next_hop"], "10.0.0.254")
+        self.assertIn("10", data["config_summaries"][0]["acl_numbers"])
+        self.assertTrue(data["config_summaries"][0]["nat"]["overload"])
 
 
 if __name__ == "__main__":

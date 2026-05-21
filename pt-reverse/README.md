@@ -126,6 +126,7 @@ pt-reverse/bin/pt730-ftp PC_DHCP 192.168.200.10 --username lab --password packet
 pt-reverse/bin/pt730-sim simple-pdu PC_DHCP SRV_DHCP
 pt-reverse/bin/pt730-safety plan pt-reverse/examples/server-dhcp-lan.json
 pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-models queue
 pt-reverse/bin/pt730-models probe-plan 1841
 pt-reverse/bin/pt730-models validate 1841 --dry-run
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
@@ -282,15 +283,17 @@ status.  It is deliberately conservative: only locally exercised models are
 
 ```bash
 pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-models queue
 pt-reverse/bin/pt730-models probe-plan 1841
 pt-reverse/bin/pt730-models validate 1841 --dry-run
 pt-reverse/bin/pt730-models validate 1841 --live
 pt-reverse/bin/pt730-models probe-plan 3560-24PS --allow-risky
 ```
 
-`probe-plan` produces a one-device topology plan for manual, saved-workspace
-validation.  Promote a model to `safe` only after create/query/save/reopen
-works on this exact PT 7.3.0 setup.
+`queue` prints the unverified common-device validation backlog with exact
+`--dry-run` and `--live` commands.  `probe-plan` produces a one-device topology
+plan for manual, saved-workspace validation.  Promote a model to `safe` only
+after create/query/save/reopen works on this exact PT 7.3.0 setup.
 `validate --dry-run` prints the guarded live-check steps without contacting PT.
 `validate --live` actually creates just the candidate model and runs
 `pt730-topo query --summary`; use it one model at a time after saving the
@@ -308,13 +311,16 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus
 ```
 
 Use `--topology-json` when you want to merge the generated commands into a
-`pt730-topo` plan under `ios_configs`.
+`pt730-topo` plan under `ios_configs`.  A template file may contain either one
+device object or a top-level `devices` array for multiple IOS devices.
 
 ## Reverse query summaries
 
 `pt730-topo query` now asks Packet Tracer for devices, links, ports, IP fields,
-IOS prompts, and visible server-service states.  Add `--summary` for a compact
-agent/report-friendly view, or summarize a saved query result offline:
+IOS prompts, terminal output tails, and visible server-service states.  Add
+`--summary` for a compact agent/report-friendly view, including parsed IOS
+configuration hints for interfaces, VLANs, RIP networks, static routes, ACL
+numbers, and NAT.  You can also summarize a saved query result offline:
 
 ```bash
 pt-reverse/bin/pt730-topo query --summary

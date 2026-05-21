@@ -71,6 +71,15 @@ class ModelsCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--live", result.stderr)
 
+    def test_queue_lists_unverified_models_with_guarded_commands(self) -> None:
+        result = self.run_cmd("queue")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertGreater(data["counts"]["unverified"], 0)
+        self.assertEqual(data["items"][0]["status"], "unverified")
+        self.assertIn("--dry-run", data["items"][0]["dry_run_command"])
+        self.assertIn("--live", data["items"][0]["live_command"])
+
 
 if __name__ == "__main__":
     unittest.main()

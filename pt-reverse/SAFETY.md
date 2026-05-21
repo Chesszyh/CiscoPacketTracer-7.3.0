@@ -62,10 +62,11 @@ whether a live apply is worth the risk.  `course-audit` is specific to the
 college-network assignment and checks required VLAN presence plus the mandated
 server and PC address spaces.
 
-`pt730-models manifest`, `probe-plan`, and `validate --dry-run` never contact
-Packet Tracer.  `validate --live` is a supervised one-model experiment: save the
-current workspace first, validate one model, and record crashes/refusals as
-`risky` or `blocked` instead of retrying blindly.
+`pt730-models manifest`, `queue`, `probe-plan`, and `validate --dry-run` never
+contact Packet Tracer.  `queue` is the common-device validation backlog;
+`validate --live` is a supervised one-model experiment: save the current
+workspace first, validate one model, and record crashes/refusals as `risky` or
+`blocked` instead of retrying blindly.
 
 `pt730-topo apply` also runs this safety gate before contacting Packet Tracer.
 Known risky models fail by default.  Warnings are printed to stderr; use

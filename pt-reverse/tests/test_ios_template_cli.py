@@ -75,6 +75,22 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertEqual(data["ios_configs"][0]["device"], "R1")
         self.assertIn("hostname R1", data["ios_configs"][0]["commands"])
 
+    def test_render_multiple_device_templates_as_topology_json(self) -> None:
+        result = self.run_template(
+            {
+                "devices": [
+                    {"device": "R1", "hostname": "R1", "rip": {"version": 2, "networks": ["10.0.0.0"]}},
+                    {"device": "SW1", "hostname": "SW1", "vlans": [{"id": 10}], "interfaces": [{"name": "FastEthernet0/1", "mode": "access", "vlan": 10}]},
+                ]
+            },
+            "--topology-json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual([item["device"] for item in data["ios_configs"]], ["R1", "SW1"])
+        self.assertIn("router rip", data["ios_configs"][0]["commands"])
+        self.assertIn("switchport access vlan 10", [command.strip() for command in data["ios_configs"][1]["commands"]])
+
     def test_rejects_missing_acl_number(self) -> None:
         result = self.run_template({"device": "R1", "acls": [{"rules": [{"action": "permit", "source": "any"}]}]})
         self.assertNotEqual(result.returncode, 0)

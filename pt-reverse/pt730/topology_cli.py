@@ -984,7 +984,14 @@ for (var i = 0; i < net.getDeviceCount(); i++) {
   var commandLine = null;
   try {
     var cli = d.getCommandLine ? d.getCommandLine() : null;
-    if (cli) commandLine = {prompt: cli.getPrompt ? String(cli.getPrompt()) : ""};
+    if (cli) {
+      var output = cli.getOutput ? String(cli.getOutput()) : "";
+      commandLine = {
+        prompt: cli.getPrompt ? String(cli.getPrompt()) : "",
+        output_length: output.length,
+        output_tail: output.length > 12000 ? output.substring(output.length - 12000) : output
+      };
+    }
   } catch (e3) {}
   var services = {};
   try {
@@ -1037,12 +1044,127 @@ def _load_query(path: Path) -> dict[str, Any]:
     return data
 
 
+def _as_config_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "\n".join(str(item) for item in value)
+    return ""
+
+
+def _device_config_text(device: dict[str, Any]) -> str:
+    for key in ("running_config", "startup_config", "ios_config", "configuration", "config"):
+        text = _as_config_text(device.get(key))
+        if text.strip():
+            return text
+    command_line = device.get("command_line")
+    if isinstance(command_line, dict):
+        for key in ("running_config", "startup_config", "config", "output_tail", "output", "text"):
+            text = _as_config_text(command_line.get(key))
+            if text.strip():
+                return text
+    return ""
+
+
+def _parse_ios_config_summary(text: str) -> dict[str, Any]:
+    interfaces: dict[str, dict[str, Any]] = {}
+    vlans: dict[str, dict[str, str]] = {}
+    static_routes: list[dict[str, str]] = []
+    rip_networks: list[str] = []
+    acl_numbers: set[str] = set()
+    nat = {"inside_interfaces": [], "outside_interfaces": [], "overload": False}
+    current_interface: str | None = None
+    current_vlan: str | None = None
+    current_router: str | None = None
+
+    for raw_line in text.replace("\r\n", "\n").splitlines():
+        line = raw_line.strip()
+        if not line or line == "!" or line.startswith("--More--"):
+            continue
+        interface_match = re.match(r"^interface\s+(.+)$", line, flags=re.IGNORECASE)
+        if interface_match:
+            current_interface = interface_match.group(1).strip()
+            current_vlan = None
+            current_router = None
+            interfaces.setdefault(current_interface, {})
+            continue
+        vlan_match = re.match(r"^vlan\s+(\S+)$", line, flags=re.IGNORECASE)
+        if vlan_match:
+            current_vlan = vlan_match.group(1)
+            current_interface = None
+            current_router = None
+            vlans.setdefault(current_vlan, {})
+            continue
+        router_match = re.match(r"^router\s+(\S+)", line, flags=re.IGNORECASE)
+        if router_match:
+            current_router = router_match.group(1).lower()
+            current_interface = None
+            current_vlan = None
+            continue
+        route_match = re.match(r"^ip\s+route\s+(\S+)\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
+        if route_match:
+            current_interface = None
+            current_vlan = None
+            current_router = None
+            static_routes.append({"destination": route_match.group(1), "mask": route_match.group(2), "next_hop": route_match.group(3)})
+            continue
+        acl_match = re.match(r"^access-list\s+(\S+)\s+", line, flags=re.IGNORECASE)
+        if acl_match:
+            acl_numbers.add(acl_match.group(1))
+        if re.match(r"^ip\s+nat\s+inside\s+source\s+list\s+", line, flags=re.IGNORECASE):
+            nat["overload"] = True
+
+        if current_interface:
+            info = interfaces.setdefault(current_interface, {})
+            ip_match = re.match(r"^ip\s+address\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
+            if ip_match:
+                info["ip"] = ip_match.group(1)
+                info["mask"] = ip_match.group(2)
+            mode_match = re.match(r"^switchport\s+mode\s+(\S+)", line, flags=re.IGNORECASE)
+            if mode_match:
+                info["switchport_mode"] = mode_match.group(1)
+            access_match = re.match(r"^switchport\s+access\s+vlan\s+(\S+)", line, flags=re.IGNORECASE)
+            if access_match:
+                info["access_vlan"] = access_match.group(1)
+            trunk_match = re.match(r"^switchport\s+trunk\s+allowed\s+vlan\s+(.+)", line, flags=re.IGNORECASE)
+            if trunk_match:
+                info["trunk_allowed_vlans"] = trunk_match.group(1).strip()
+            nat_match = re.match(r"^ip\s+nat\s+(inside|outside)$", line, flags=re.IGNORECASE)
+            if nat_match:
+                direction = nat_match.group(1).lower()
+                info["nat"] = direction
+                key = "inside_interfaces" if direction == "inside" else "outside_interfaces"
+                if current_interface not in nat[key]:
+                    nat[key].append(current_interface)
+            if line.lower() == "shutdown":
+                info["shutdown"] = True
+            elif line.lower() == "no shutdown":
+                info["shutdown"] = False
+        elif current_vlan:
+            name_match = re.match(r"^name\s+(.+)", line, flags=re.IGNORECASE)
+            if name_match:
+                vlans.setdefault(current_vlan, {})["name"] = name_match.group(1).strip()
+        elif current_router == "rip":
+            network_match = re.match(r"^network\s+(\S+)", line, flags=re.IGNORECASE)
+            if network_match:
+                rip_networks.append(network_match.group(1))
+
+    return {
+        "interfaces": interfaces,
+        "vlans": vlans,
+        "routing": {"rip_networks": rip_networks, "static_routes": static_routes},
+        "acl_numbers": sorted(acl_numbers),
+        "nat": nat,
+    }
+
+
 def _query_summary(query: dict[str, Any]) -> dict[str, Any]:
     devices = [device for device in query.get("devices", []) if isinstance(device, dict)]
     links = [link for link in query.get("links", []) if isinstance(link, dict)]
     ip_configs: list[dict[str, Any]] = []
     ios_devices: list[dict[str, Any]] = []
     server_services: list[dict[str, Any]] = []
+    config_summaries: list[dict[str, Any]] = []
     for device in devices:
         name = str(device.get("name", ""))
         model = str(device.get("model", ""))
@@ -1065,6 +1187,9 @@ def _query_summary(query: dict[str, Any]) -> dict[str, Any]:
         command_line = device.get("command_line")
         if isinstance(command_line, dict) and command_line.get("prompt") is not None:
             ios_devices.append({"device": name, "model": model, "prompt": str(command_line.get("prompt", ""))})
+        config_text = _device_config_text(device)
+        if config_text.strip():
+            config_summaries.append({"device": name, "model": model, **_parse_ios_config_summary(config_text)})
         services = device.get("services")
         if isinstance(services, dict):
             enabled = []
@@ -1079,12 +1204,13 @@ def _query_summary(query: dict[str, Any]) -> dict[str, Any]:
             if present or enabled:
                 server_services.append({"device": name, "model": model, "present": present, "enabled": enabled})
     return {
-        "counts": {"devices": len(devices), "links": len(links), "ip_configs": len(ip_configs), "ios_devices": len(ios_devices), "server_service_devices": len(server_services)},
+        "counts": {"devices": len(devices), "links": len(links), "ip_configs": len(ip_configs), "ios_devices": len(ios_devices), "server_service_devices": len(server_services), "config_summaries": len(config_summaries)},
         "devices": [{"name": str(device.get("name", "")), "model": str(device.get("model", "")), "type": str(device.get("type", ""))} for device in devices],
         "links": links,
         "ip_configs": ip_configs,
         "ios_devices": ios_devices,
         "server_services": server_services,
+        "config_summaries": config_summaries,
     }
 
 
