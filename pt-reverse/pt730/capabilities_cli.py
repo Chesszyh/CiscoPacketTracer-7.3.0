@@ -80,6 +80,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-models manifest",
             "pt-reverse/bin/pt730-models queue",
             "pt-reverse/bin/pt730-models validate-batch --dry-run --limit 2",
+            "pt-reverse/bin/pt730-models validate-batch --live --limit 2 --record-failures risky",
             "pt-reverse/bin/pt730-models record <model> --status risky --reason <reason> --evidence <path-or-note>",
             "pt-reverse/bin/pt730-ios-template render <ios-template.json> --topology-json",
             "pt-reverse/bin/pt730-topo apply --batch-size 1 <plan.json>",

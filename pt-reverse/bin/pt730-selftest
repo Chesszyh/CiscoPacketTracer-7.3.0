@@ -97,6 +97,8 @@ expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientPr
 "$BIN/pt730-models" probe-plan 1841 >/dev/null
 "$BIN/pt730-models" validate 1841 --dry-run >/dev/null
 "$BIN/pt730-models" validate-batch --dry-run --limit 2 >/dev/null
+expect_fail auto-record-failure env PT730_MODEL_VALIDATIONS="$tmp/auto-record-validations.json" "$BIN/pt730-models" validate 1841 --live --bridge http://127.0.0.1:1 --timeout 0.1 --record-failure-status risky
+PT730_MODEL_VALIDATIONS="$tmp/auto-record-validations.json" "$BIN/pt730-models" manifest | python3 -m json.tool >/dev/null
 PT730_MODEL_VALIDATIONS="$tmp/model-validations.json" "$BIN/pt730-models" record 1841 --status risky --reason "selftest crash record" --evidence "synthetic" >/dev/null
 printf '%s' '{"devices":[{"name":"R1","category":"router","model":"1841"}]}' >"$tmp/risky-overlay-plan.json"
 if PT730_MODEL_VALIDATIONS="$tmp/model-validations.json" "$BIN/pt730-safety" plan "$tmp/risky-overlay-plan.json" >/dev/null; then

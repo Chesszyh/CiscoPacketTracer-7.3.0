@@ -126,6 +126,53 @@ class ModelsCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("save/reopen", result.stderr)
 
+    def test_validate_live_can_record_failure_as_risky(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
+            result = self.run_cmd(
+                "validate",
+                "1841",
+                "--live",
+                "--bridge",
+                "http://127.0.0.1:1",
+                "--timeout",
+                "0.1",
+                "--record-failure-status",
+                "risky",
+                env=env,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["recorded_failure"]["status"], "risky")
+            manifest = self.run_cmd("manifest", env=env)
+            self.assertEqual(manifest.returncode, 0, manifest.stderr)
+        manifest_data = json.loads(manifest.stdout)
+        self.assertIn("1841", manifest_data["risky"])
+
+    def test_validate_batch_live_can_record_failure_as_risky(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
+            result = self.run_cmd(
+                "validate-batch",
+                "--live",
+                "--limit",
+                "1",
+                "--bridge",
+                "http://127.0.0.1:1",
+                "--timeout",
+                "0.1",
+                "--record-failures",
+                "risky",
+                env=env,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["results"][0]["recorded_failure"]["status"], "risky")
+            manifest = self.run_cmd("manifest", env=env)
+            self.assertEqual(manifest.returncode, 0, manifest.stderr)
+        manifest_data = json.loads(manifest.stdout)
+        self.assertIn("1841", manifest_data["risky"])
+
 
 if __name__ == "__main__":
     unittest.main()

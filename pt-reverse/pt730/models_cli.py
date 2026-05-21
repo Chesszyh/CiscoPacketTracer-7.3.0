@@ -214,7 +214,32 @@ def validate_model(model: str, *, dry_run: bool, live: bool, allow_risky: bool, 
         Path(plan_path).unlink(missing_ok=True)
 
 
-def validate_batch(*, dry_run: bool, live: bool, limit: int, include_risky: bool, include_blocked: bool, bridge: str, timeout: float, stop_on_failure: bool) -> tuple[dict[str, Any], int]:
+def _failure_evidence(result: dict[str, Any]) -> list[str]:
+    evidence: list[str] = []
+    apply_result = result.get("apply")
+    if isinstance(apply_result, dict):
+        evidence.append(f"apply.returncode={apply_result.get('returncode')}")
+        stderr = str(apply_result.get("stderr", "")).strip()
+        if stderr:
+            evidence.append(f"apply.stderr={stderr[:500]}")
+    query_result = result.get("query_summary")
+    if isinstance(query_result, dict):
+        evidence.append(f"query.returncode={query_result.get('returncode')}")
+        stderr = str(query_result.get("stderr", "")).strip()
+        if stderr:
+            evidence.append(f"query.stderr={stderr[:500]}")
+    return evidence or ["validation failed without structured subprocess evidence"]
+
+
+def _record_failed_result(model: str, result: dict[str, Any], status: str) -> dict[str, Any]:
+    reason = f"auto-recorded failed validation: {result.get('next_step', 'validation failed')}"
+    data, code = record_validation(model, status=status, reason=reason, evidence=_failure_evidence(result), save_reopen=False)
+    if code:
+        return {"status": "record_failed", "error": data.get("error", "unknown record failure")}
+    return {"status": status, "record": data.get("record"), "store": data.get("store")}
+
+
+def validate_batch(*, dry_run: bool, live: bool, limit: int, include_risky: bool, include_blocked: bool, bridge: str, timeout: float, stop_on_failure: bool, record_failures: str | None) -> tuple[dict[str, Any], int]:
     plan = validation_batch_plan(limit=limit, include_risky=include_risky, include_blocked=include_blocked)
     if dry_run:
         return {"dry_run": True, "count": len(plan), "items": plan}, 0
@@ -225,6 +250,8 @@ def validate_batch(*, dry_run: bool, live: bool, limit: int, include_risky: bool
     for item in plan:
         model = str(item["model"])
         result, code = validate_model(model, dry_run=False, live=True, allow_risky=include_risky, allow_blocked=include_blocked, bridge=bridge, timeout=timeout)
+        if code and record_failures:
+            result["recorded_failure"] = _record_failed_result(model, result, record_failures)
         results.append(result)
         if code:
             ok = False
@@ -253,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     validate_p.add_argument("--allow-blocked", action="store_true")
     validate_p.add_argument("--bridge", default="http://127.0.0.1:54321")
     validate_p.add_argument("--timeout", type=float, default=20.0)
+    validate_p.add_argument("--record-failure-status", choices=["risky", "blocked"], help="record a failed live validation with this status")
     batch_p = sub.add_parser("validate-batch", help="validate queued models one at a time")
     batch_p.add_argument("--dry-run", action="store_true")
     batch_p.add_argument("--live", action="store_true", help="contact Packet Tracer through pt730-topo")
@@ -262,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     batch_p.add_argument("--bridge", default="http://127.0.0.1:54321")
     batch_p.add_argument("--timeout", type=float, default=20.0)
     batch_p.add_argument("--keep-going", action="store_true", help="continue after a live validation failure")
+    batch_p.add_argument("--record-failures", choices=["risky", "blocked"], help="record failed live validations with this status")
     record_p = sub.add_parser("record", help="record one model validation result in the local overlay")
     record_p.add_argument("model")
     record_p.add_argument("--status", choices=sorted(VALID_STATUSES), required=True)
@@ -285,6 +314,8 @@ def main(argv: list[str] | None = None) -> int:
         return code
     if args.cmd == "validate":
         data, code = validate_model(args.model, dry_run=args.dry_run, live=args.live, allow_risky=args.allow_risky, allow_blocked=args.allow_blocked, bridge=args.bridge, timeout=args.timeout)
+        if code and args.record_failure_status and "model" in data:
+            data["recorded_failure"] = _record_failed_result(str(data["model"]), data, args.record_failure_status)
         if code and "error" in data:
             print(f"pt730-models: {data['error']}", file=sys.stderr)
         else:
@@ -300,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
             bridge=args.bridge,
             timeout=args.timeout,
             stop_on_failure=not args.keep_going,
+            record_failures=args.record_failures,
         )
         if code and "error" in data:
             print(f"pt730-models: {data['error']}", file=sys.stderr)

@@ -129,6 +129,7 @@ pt-reverse/bin/pt730-models manifest
 pt-reverse/bin/pt730-models queue
 pt-reverse/bin/pt730-models probe-plan 1841
 pt-reverse/bin/pt730-models validate 1841 --dry-run
+pt-reverse/bin/pt730-models validate 1841 --live --record-failure-status risky
 pt-reverse/bin/pt730-models validate-batch --dry-run --limit 2
 pt-reverse/bin/pt730-models record 1841 --status risky --reason 'Packet Tracer crashed' --evidence './bin/1.dmp'
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
@@ -289,8 +290,9 @@ pt-reverse/bin/pt730-models queue
 pt-reverse/bin/pt730-models probe-plan 1841
 pt-reverse/bin/pt730-models validate 1841 --dry-run
 pt-reverse/bin/pt730-models validate 1841 --live
+pt-reverse/bin/pt730-models validate 1841 --live --record-failure-status risky
 pt-reverse/bin/pt730-models validate-batch --dry-run --limit 2
-pt-reverse/bin/pt730-models validate-batch --live --limit 2
+pt-reverse/bin/pt730-models validate-batch --live --limit 2 --record-failures risky
 pt-reverse/bin/pt730-models record 1841 --status risky --reason 'Packet Tracer crashed' --evidence './bin/1.dmp'
 pt-reverse/bin/pt730-models record 1841 --status safe --reason 'create/query/save/reopen passed' --save-reopen
 pt-reverse/bin/pt730-models probe-plan 3560-24PS --allow-risky
@@ -303,9 +305,12 @@ after create/query/save/reopen works on this exact PT 7.3.0 setup.
 `validate --dry-run` prints the guarded live-check steps without contacting PT.
 `validate --live` actually creates just the candidate model and runs
 `pt730-topo query --summary`; use it one model at a time after saving the
-current workspace.  `validate-batch --dry-run` prints the ordered one-at-a-time
-validation sequence from the queue; `validate-batch --live` runs it in order and
-stops on the first failure unless `--keep-going` is set.  `record` writes local validation evidence to
+current workspace.  Add `--record-failure-status risky` or `blocked` to
+automatically record a failed live validation.  `validate-batch --dry-run`
+prints the ordered one-at-a-time validation sequence from the queue;
+`validate-batch --live` runs it in order and stops on the first failure unless
+`--keep-going` is set; add `--record-failures risky` or `blocked` to
+automatically persist each failed model.  `record` writes local validation evidence to
 `pt-reverse/pt730/model_validations.json`; the overlay immediately affects
 `manifest`, `queue`, `probe-plan`, `pt730-safety`, and `pt730-topo apply`.
 Promoting to `safe` requires `--save-reopen`.
