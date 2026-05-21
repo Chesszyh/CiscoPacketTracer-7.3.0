@@ -188,6 +188,55 @@ class TopologyCliTest(unittest.TestCase):
             self.assertEqual(json.loads(raw_path.read_text(encoding="utf-8"))["devices"][0]["name"], "R1")
             self.assertEqual(json.loads(summary_path.read_text(encoding="utf-8"))["counts"]["devices"], 1)
 
+    def test_export_from_saved_query_can_write_markdown_summary(self) -> None:
+        query = {
+            "devices": [
+                {
+                    "name": "R1",
+                    "model": "2911",
+                    "type": "0",
+                    "ports": [{"name": "GigabitEthernet0/0", "linked": True, "ip": "10.0.0.1", "mask": "255.255.255.0"}],
+                    "command_line": {
+                        "prompt": "R1#",
+                        "output_tail": "interface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip access-group 10 in\n",
+                    },
+                }
+            ],
+            "links": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            query_path = Path(tmpdir) / "query.json"
+            raw_path = Path(tmpdir) / "raw.json"
+            summary_path = Path(tmpdir) / "summary.json"
+            markdown_path = Path(tmpdir) / "summary.md"
+            query_path.write_text(json.dumps(query), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    str(TOPO),
+                    "export",
+                    "--from-query",
+                    str(query_path),
+                    "--raw-out",
+                    str(raw_path),
+                    "--summary-out",
+                    str(summary_path),
+                    "--markdown-out",
+                    str(markdown_path),
+                ],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            markdown = markdown_path.read_text(encoding="utf-8")
+            self.assertIn("# Packet Tracer Canvas Summary", markdown)
+            self.assertIn("R1", markdown)
+            self.assertIn("10.0.0.1", markdown)
+            self.assertIn("GigabitEthernet0/0 -> ACL 10 in", markdown)
+
 
 if __name__ == "__main__":
     unittest.main()

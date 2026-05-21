@@ -88,6 +88,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-topo apply --batch-size 1 <plan.json>",
             "pt-reverse/bin/pt730-topo query --summary",
             "pt-reverse/bin/pt730-topo export --raw-out <query.json> --summary-out <summary.json>",
+            "pt-reverse/bin/pt730-topo export --raw-out <query.json> --summary-out <summary.json> --markdown-out <summary.md>",
             "pt-reverse/bin/pt730-topo summarize-query <query.json>",
             "pt-reverse/bin/pt730-pc static <PC> --ip <ip> --mask <mask> --gateway <gw> --dns <dns>",
             "pt-reverse/bin/pt730-term <PC> --cmd 'ping <target>' --wait 8 --expect 'Lost = 0 \\\\(0% loss\\\\)'",

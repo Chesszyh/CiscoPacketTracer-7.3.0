@@ -344,6 +344,7 @@ query result offline:
 pt-reverse/bin/pt730-topo query --summary
 pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
 pt-reverse/bin/pt730-topo export --raw-out pt-reverse/course-design/current-query.json --summary-out pt-reverse/course-design/current-summary.json
+pt-reverse/bin/pt730-topo export --raw-out pt-reverse/course-design/current-query.json --summary-out pt-reverse/course-design/current-summary.json --markdown-out pt-reverse/course-design/current-summary.md
 ```
 
 ## Application-level CLI helpers

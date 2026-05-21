@@ -1238,6 +1238,94 @@ def _write_json(path: Path, value: Any) -> None:
         f.write("\n")
 
 
+def _query_summary_markdown(summary: dict[str, Any]) -> str:
+    lines = ["# Packet Tracer Canvas Summary", ""]
+    counts = summary.get("counts", {})
+    if isinstance(counts, dict):
+        lines.extend(
+            [
+                "## Counts",
+                "",
+                f"- Devices: {counts.get('devices', 0)}",
+                f"- Links: {counts.get('links', 0)}",
+                f"- IP configs: {counts.get('ip_configs', 0)}",
+                f"- IOS config summaries: {counts.get('config_summaries', 0)}",
+                "",
+            ]
+        )
+    devices = summary.get("devices", [])
+    if isinstance(devices, list) and devices:
+        lines.extend(["## Devices", "", "| Name | Model | Type |", "| --- | --- | --- |"])
+        for device in devices:
+            if isinstance(device, dict):
+                lines.append(f"| {device.get('name', '')} | {device.get('model', '')} | {device.get('type', '')} |")
+        lines.append("")
+    links = summary.get("links", [])
+    if isinstance(links, list) and links:
+        lines.extend(["## Links", ""])
+        for link in links:
+            if isinstance(link, dict):
+                lines.append(f"- {link.get('a', '')}:{link.get('pa', '')} <-> {link.get('b', '')}:{link.get('pb', '')} ({link.get('cable', '')})")
+        lines.append("")
+    ip_configs = summary.get("ip_configs", [])
+    if isinstance(ip_configs, list) and ip_configs:
+        lines.extend(["## IP Configs", "", "| Device | Port | IP | Mask | Gateway | DNS |", "| --- | --- | --- | --- | --- | --- |"])
+        for config in ip_configs:
+            if isinstance(config, dict):
+                lines.append(f"| {config.get('device', '')} | {config.get('port', '')} | {config.get('ip', '')} | {config.get('mask', '')} | {config.get('gateway', '')} | {config.get('dns', '')} |")
+        lines.append("")
+    config_summaries = summary.get("config_summaries", [])
+    if isinstance(config_summaries, list) and config_summaries:
+        lines.extend(["## IOS Config Summaries", ""])
+        for config in config_summaries:
+            if not isinstance(config, dict):
+                continue
+            lines.append(f"### {config.get('device', '')}")
+            interfaces = config.get("interfaces", {})
+            if isinstance(interfaces, dict) and interfaces:
+                lines.append("")
+                lines.append("Interfaces:")
+                for name, details in sorted(interfaces.items()):
+                    if isinstance(details, dict):
+                        ip = f" {details.get('ip', '')}/{details.get('mask', '')}".rstrip("/")
+                        lines.append(f"- {name}{ip}")
+            acl_applications = config.get("acl_applications", [])
+            if isinstance(acl_applications, list) and acl_applications:
+                lines.append("")
+                lines.append("ACL applications:")
+                for acl in acl_applications:
+                    if isinstance(acl, dict):
+                        lines.append(f"- {acl.get('interface', '')} -> ACL {acl.get('acl', '')} {acl.get('direction', '')}")
+            routing = config.get("routing", {})
+            if isinstance(routing, dict):
+                rip_networks = routing.get("rip_networks", [])
+                static_routes = routing.get("static_routes", [])
+                if rip_networks:
+                    lines.append("")
+                    lines.append("RIP networks: " + ", ".join(str(item) for item in rip_networks))
+                if static_routes:
+                    lines.append("")
+                    lines.append("Static routes:")
+                    for route in static_routes:
+                        if isinstance(route, dict):
+                            lines.append(f"- {route.get('destination', '')} {route.get('mask', '')} via {route.get('next_hop', '')}")
+            lines.append("")
+    server_services = summary.get("server_services", [])
+    if isinstance(server_services, list) and server_services:
+        lines.extend(["## Server Services", ""])
+        for service in server_services:
+            if isinstance(service, dict):
+                enabled = ", ".join(str(item) for item in service.get("enabled", []))
+                lines.append(f"- {service.get('device', '')}: {enabled}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def _chunks(items: list[Any], size: int) -> list[list[Any]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
@@ -1326,6 +1414,7 @@ def main(argv: list[str] | None = None) -> int:
     export_p.add_argument("--from-query", type=Path, help="use a saved query JSON instead of contacting Packet Tracer")
     export_p.add_argument("--raw-out", type=Path, required=True)
     export_p.add_argument("--summary-out", type=Path, required=True)
+    export_p.add_argument("--markdown-out", type=Path, help="also write a human-readable Markdown summary")
 
     args = parser.parse_args(argv)
     try:
@@ -1359,7 +1448,9 @@ def main(argv: list[str] | None = None) -> int:
             summary = _query_summary(raw_query)
             _write_json(args.raw_out, raw_query)
             _write_json(args.summary_out, summary)
-            _print_json_obj({"raw_out": str(args.raw_out), "summary_out": str(args.summary_out), "counts": summary["counts"]})
+            if args.markdown_out:
+                _write_text(args.markdown_out, _query_summary_markdown(summary))
+            _print_json_obj({"raw_out": str(args.raw_out), "summary_out": str(args.summary_out), "markdown_out": str(args.markdown_out) if args.markdown_out else "", "counts": summary["counts"]})
             return 0
     except (OSError, ValueError, RuntimeError, TimeoutError, urllib.error.URLError) as exc:
         print(f"pt730-topo: {exc}", file=sys.stderr)

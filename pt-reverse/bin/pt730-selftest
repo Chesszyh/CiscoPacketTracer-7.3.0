@@ -113,6 +113,7 @@ printf '%s' '{"devices":[{"device":"R1","hostname":"R1","rip":{"version":2,"netw
 printf '%s' '{"devices":[{"name":"R1","model":"2911","command_line":{"prompt":"R1#","output_tail":"interface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip access-group 10 in\nrouter rip\n network 10.0.0.0\n"}}],"links":[]}' >"$tmp/query.json"
 "$BIN/pt730-topo" summarize-query "$tmp/query.json" >/dev/null
 "$BIN/pt730-topo" export --from-query "$tmp/query.json" --raw-out "$tmp/query-raw.json" --summary-out "$tmp/query-summary.json" >/dev/null
+"$BIN/pt730-topo" export --from-query "$tmp/query.json" --raw-out "$tmp/query-raw2.json" --summary-out "$tmp/query-summary2.json" --markdown-out "$tmp/query-summary.md" >/dev/null
 "$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" --output "$tmp/simple-lan.md"
 test -s "$tmp/simple-lan.md"
 ok "safety policy checks"
