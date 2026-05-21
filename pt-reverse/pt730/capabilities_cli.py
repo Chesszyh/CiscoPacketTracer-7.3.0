@@ -79,6 +79,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.audit.json",
             "pt-reverse/bin/pt730-models manifest",
             "pt-reverse/bin/pt730-models queue",
+            "pt-reverse/bin/pt730-models record <model> --status risky --reason <reason> --evidence <path-or-note>",
             "pt-reverse/bin/pt730-ios-template render <ios-template.json> --topology-json",
             "pt-reverse/bin/pt730-topo apply --batch-size 1 <plan.json>",
             "pt-reverse/bin/pt730-topo query --summary",

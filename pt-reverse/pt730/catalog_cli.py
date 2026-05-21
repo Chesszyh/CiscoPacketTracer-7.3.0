@@ -29,22 +29,13 @@ except ImportError as exc:  # pragma: no cover - should only happen if upstream 
     raise SystemExit(f"pt730-catalog: cannot import bundled upstream catalog: {exc}") from exc
 
 from topology_cli import CABLE_CODES, DEVICE_TYPES
+from model_registry import risky_model_notes, safe_model_notes
 
 
 SOURCE_NOTE = "upstream MCP-Packet-Tracer catalog plus local PT 7.3.0 safety overlay"
 
-SAFE_MODELS: dict[str, str] = {
-    "2911": "live verified with GigabitEthernet0/0-0/2 and HWIC-2T serial module",
-    "2960-24TT": "live verified as stable L2 switch",
-    "PC-PT": "live verified with FastEthernet0 and pc_configs",
-    "Server-PT": "live verified with FastEthernet0 and pc_configs",
-}
-
-RISKY_MODELS: dict[str, str] = {
-    "3560-24PS": "known PT 7.3.0 crash risk when created by automation; avoid unattended runs",
-    "3650-24PS": "likely same PT 7.3.0 crash class as 3560; avoid unattended runs",
-    "Power Distribution Device": "auto-created physical/power objects can destabilize automated sessions",
-}
+SAFE_MODELS: dict[str, str] = safe_model_notes()
+RISKY_MODELS: dict[str, str] = risky_model_notes()
 
 VERIFIED_MODULES: dict[str, str] = {
     "HWIC-2T": "live verified on 2911 slot 0/0; adds Serial0/0/0 and Serial0/0/1",

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -14,10 +16,14 @@ MODELS = ROOT / "bin" / "pt730-models"
 
 
 class ModelsCliTest(unittest.TestCase):
-    def run_cmd(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_cmd(self, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        proc_env = os.environ.copy()
+        if env:
+            proc_env.update(env)
         return subprocess.run(
             [str(MODELS), *args],
             cwd=ROOT.parent,
+            env=proc_env,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -79,6 +85,27 @@ class ModelsCliTest(unittest.TestCase):
         self.assertEqual(data["items"][0]["status"], "unverified")
         self.assertIn("--dry-run", data["items"][0]["dry_run_command"])
         self.assertIn("--live", data["items"][0]["live_command"])
+
+    def test_record_failed_validation_marks_model_risky_with_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
+            recorded = self.run_cmd("record", "1841", "--status", "risky", "--reason", "Packet Tracer crashed", "--evidence", "dump=1.dmp", env=env)
+            self.assertEqual(recorded.returncode, 0, recorded.stderr)
+            manifest = self.run_cmd("manifest", env=env)
+            self.assertEqual(manifest.returncode, 0, manifest.stderr)
+        data = json.loads(manifest.stdout)
+        self.assertIn("1841", data["risky"])
+        self.assertNotIn("1841", data["unverified"])
+        record = next(item for item in data["records"]["risky"] if item["model"] == "1841")
+        self.assertIn("Packet Tracer crashed", record["note"])
+        self.assertEqual(record["validation"]["evidence"], ["dump=1.dmp"])
+
+    def test_record_rejects_safe_without_save_reopen_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
+            result = self.run_cmd("record", "1841", "--status", "safe", "--reason", "query worked", env=env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("save/reopen", result.stderr)
 
 
 if __name__ == "__main__":

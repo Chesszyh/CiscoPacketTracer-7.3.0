@@ -16,6 +16,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from model_registry import risky_model_notes, safe_model_names
+
 
 DEFAULT_BRIDGE = "http://127.0.0.1:54321"
 
@@ -74,12 +76,8 @@ MODULE_TYPES = {
 }
 
 
-PT730_SAFE_MODELS = {"2911", "2960-24TT", "PC-PT", "Server-PT"}
-PT730_RISKY_MODELS = {
-    "3560-24PS": "known PT 7.3.0 crash risk when created by automation",
-    "3650-24PS": "likely same PT 7.3.0 crash class as 3560",
-    "Power Distribution Device": "auto-created physical/power objects can destabilize automated sessions",
-}
+PT730_SAFE_MODELS = safe_model_names()
+PT730_RISKY_MODELS = risky_model_notes()
 PT730_VERIFIED_MODULES = {"HWIC-2T"}
 PT730_VERIFIED_CABLES = {8100, 8101, 8106}
 PT730_MODEL_PORTS = {

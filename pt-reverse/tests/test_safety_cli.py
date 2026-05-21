@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -15,14 +16,18 @@ SAFETY = ROOT / "bin" / "pt730-safety"
 
 
 class SafetyCliTest(unittest.TestCase):
-    def run_plan(self, plan: dict) -> subprocess.CompletedProcess[str]:
+    def run_plan(self, plan: dict, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
             json.dump(plan, f)
             path = f.name
+        proc_env = os.environ.copy()
+        if env:
+            proc_env.update(env)
         try:
             return subprocess.run(
                 [str(SAFETY), "plan", path],
                 cwd=ROOT.parent,
+                env=proc_env,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -76,6 +81,20 @@ class SafetyCliTest(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown port", result.stdout)
+
+    def test_model_marked_risky_by_validation_overlay_fails_offline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            validation_path = Path(tmpdir) / "model-validations.json"
+            validation_path.write_text(
+                json.dumps({"version": 1, "validations": {"1841": {"status": "risky", "note": "crashed during local validation"}}}),
+                encoding="utf-8",
+            )
+            result = self.run_plan(
+                {"devices": [{"name": "R1", "category": "router", "model": "1841"}]},
+                env={"PT730_MODEL_VALIDATIONS": str(validation_path)},
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crashed during local validation", result.stdout)
 
     def test_verified_module_ports_are_accepted(self) -> None:
         result = self.run_plan(

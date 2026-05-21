@@ -66,7 +66,10 @@ server and PC address spaces.
 contact Packet Tracer.  `queue` is the common-device validation backlog;
 `validate --live` is a supervised one-model experiment: save the current
 workspace first, validate one model, and record crashes/refusals as `risky` or
-`blocked` instead of retrying blindly.
+`blocked` instead of retrying blindly.  `pt730-models record` stores this
+evidence in `pt-reverse/pt730/model_validations.json`; that overlay feeds both
+the offline safety checker and the live topology safety gate.  A model can be
+promoted to `safe` only with explicit save/reopen evidence.
 
 `pt730-topo apply` also runs this safety gate before contacting Packet Tracer.
 Known risky models fail by default.  Warnings are printed to stderr; use

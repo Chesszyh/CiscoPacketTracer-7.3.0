@@ -8,10 +8,20 @@ import json
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from model_registry import MODEL_REGISTRY, models_by_status, record_to_dict, status_notes
+from model_registry import (
+    VALID_STATUSES,
+    effective_registry,
+    load_validation_store,
+    models_by_status,
+    record_to_dict,
+    save_validation_store,
+    status_notes,
+    validation_store_path,
+)
 
 
 def print_json(value: Any) -> None:
@@ -57,9 +67,10 @@ def validation_queue(*, include_risky: bool, include_blocked: bool) -> dict[str,
 
 
 def probe_plan(model: str, *, allow_risky: bool, allow_blocked: bool) -> tuple[dict[str, Any], int]:
-    record = MODEL_REGISTRY.get(model)
+    registry = effective_registry()
+    record = registry.get(model)
     if record is None:
-        record = MODEL_REGISTRY.get(model.upper()) or MODEL_REGISTRY.get(model.lower())
+        record = registry.get(model.upper()) or registry.get(model.lower())
     if record is None:
         return {"error": f"unknown model in PT 7.3 registry: {model}"}, 1
     if record.status == "blocked" and not allow_blocked:
@@ -94,6 +105,39 @@ def probe_plan(model: str, *, allow_risky: bool, allow_blocked: bool) -> tuple[d
         **record_to_dict(record),
         "plan": plan,
         "recommended_command": f"pt-reverse/bin/pt730-topo apply --replace --batch-size 1 <this-plan.json>",
+    }, 0
+
+
+def record_validation(model: str, *, status: str, reason: str, evidence: list[str], save_reopen: bool) -> tuple[dict[str, Any], int]:
+    if status not in VALID_STATUSES:
+        return {"error": f"invalid status: {status}"}, 1
+    registry = effective_registry()
+    record = registry.get(model)
+    if record is None:
+        record = registry.get(model.upper()) or registry.get(model.lower())
+    if record is None:
+        return {"error": f"unknown model in PT 7.3 registry: {model}"}, 1
+    if status == "safe" and not save_reopen:
+        return {"error": "safe status requires save/reopen evidence via --save-reopen; create/query alone is not enough"}, 1
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    note = reason or f"recorded as {status} on {now}"
+    store = load_validation_store()
+    validations = store.setdefault("validations", {})
+    validations[record.model] = {
+        "status": status,
+        "note": note,
+        "reason": reason,
+        "evidence": evidence,
+        "save_reopen": save_reopen,
+        "updated_at": now,
+    }
+    save_validation_store(store)
+    updated = effective_registry().get(record.model)
+    return {
+        "model": record.model,
+        "status": status,
+        "store": str(validation_store_path()),
+        "record": record_to_dict(updated or record),
     }, 0
 
 
@@ -168,6 +212,12 @@ def main(argv: list[str] | None = None) -> int:
     validate_p.add_argument("--allow-blocked", action="store_true")
     validate_p.add_argument("--bridge", default="http://127.0.0.1:54321")
     validate_p.add_argument("--timeout", type=float, default=20.0)
+    record_p = sub.add_parser("record", help="record one model validation result in the local overlay")
+    record_p.add_argument("model")
+    record_p.add_argument("--status", choices=sorted(VALID_STATUSES), required=True)
+    record_p.add_argument("--reason", default="")
+    record_p.add_argument("--evidence", action="append", default=[])
+    record_p.add_argument("--save-reopen", action="store_true", help="required before promoting a model to safe")
 
     args = parser.parse_args(argv)
     if args.cmd == "manifest":
@@ -185,6 +235,13 @@ def main(argv: list[str] | None = None) -> int:
         return code
     if args.cmd == "validate":
         data, code = validate_model(args.model, dry_run=args.dry_run, live=args.live, allow_risky=args.allow_risky, allow_blocked=args.allow_blocked, bridge=args.bridge, timeout=args.timeout)
+        if code and "error" in data:
+            print(f"pt730-models: {data['error']}", file=sys.stderr)
+        else:
+            print_json(data)
+        return code
+    if args.cmd == "record":
+        data, code = record_validation(args.model, status=args.status, reason=args.reason, evidence=args.evidence, save_reopen=args.save_reopen)
         if code and "error" in data:
             print(f"pt730-models: {data['error']}", file=sys.stderr)
         else:

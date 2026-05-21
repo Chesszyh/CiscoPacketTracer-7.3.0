@@ -7,7 +7,11 @@ manual probing before they can be promoted to safe automation defaults.
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -17,6 +21,7 @@ class ModelRecord:
     status: str
     note: str
     type_id: int | None = None
+    validation: dict[str, Any] | None = None
 
     @property
     def unattended_safe(self) -> bool:
@@ -50,17 +55,80 @@ COMMON_MODELS: tuple[ModelRecord, ...] = (
 
 
 MODEL_REGISTRY: dict[str, ModelRecord] = {record.model: record for record in COMMON_MODELS}
+VALID_STATUSES = {"safe", "unverified", "risky", "blocked"}
 
 
-def models_by_status() -> dict[str, list[dict[str, object]]]:
+def validation_store_path() -> Path:
+    override = os.environ.get("PT730_MODEL_VALIDATIONS")
+    if override:
+        return Path(override)
+    return Path(__file__).with_name("model_validations.json")
+
+
+def load_validation_store(path: Path | None = None) -> dict[str, Any]:
+    store_path = path or validation_store_path()
+    if not store_path.exists():
+        return {"version": 1, "validations": {}}
+    with store_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("model validation store must be a JSON object")
+    validations = data.setdefault("validations", {})
+    if not isinstance(validations, dict):
+        raise ValueError("model validation store validations must be an object")
+    data.setdefault("version", 1)
+    return data
+
+
+def save_validation_store(data: dict[str, Any], path: Path | None = None) -> None:
+    store_path = path or validation_store_path()
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    with store_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
+        f.write("\n")
+
+
+def _apply_validation(record: ModelRecord, validation: dict[str, Any] | None) -> ModelRecord:
+    if not isinstance(validation, dict):
+        return record
+    status = str(validation.get("status", record.status))
+    if status not in VALID_STATUSES:
+        return record
+    note = str(validation.get("note", validation.get("reason", record.note)))
+    return ModelRecord(record.model, record.category, status, note, record.type_id, validation)
+
+
+def effective_records(path: Path | None = None) -> tuple[ModelRecord, ...]:
+    store = load_validation_store(path)
+    validations = store.get("validations", {})
+    return tuple(_apply_validation(record, validations.get(record.model)) for record in COMMON_MODELS)
+
+
+def effective_registry(path: Path | None = None) -> dict[str, ModelRecord]:
+    return {record.model: record for record in effective_records(path)}
+
+
+def safe_model_names(path: Path | None = None) -> set[str]:
+    return {record.model for record in effective_records(path) if record.status == "safe"}
+
+
+def safe_model_notes(path: Path | None = None) -> dict[str, str]:
+    return {record.model: record.note for record in effective_records(path) if record.status == "safe"}
+
+
+def risky_model_notes(path: Path | None = None) -> dict[str, str]:
+    return {record.model: record.note for record in effective_records(path) if record.status in {"risky", "blocked"}}
+
+
+def models_by_status(path: Path | None = None) -> dict[str, list[dict[str, object]]]:
     grouped: dict[str, list[dict[str, object]]] = {"safe": [], "unverified": [], "risky": [], "blocked": []}
-    for record in COMMON_MODELS:
+    for record in effective_records(path):
         grouped.setdefault(record.status, []).append(record_to_dict(record))
     return grouped
 
 
 def record_to_dict(record: ModelRecord) -> dict[str, object]:
-    return {
+    data: dict[str, object] = {
         "model": record.model,
         "category": record.category,
         "status": record.status,
@@ -68,6 +136,9 @@ def record_to_dict(record: ModelRecord) -> dict[str, object]:
         "type_id": record.type_id,
         "unattended_safe": record.unattended_safe,
     }
+    if record.validation:
+        data["validation"] = record.validation
+    return data
 
 
 def status_notes(status: str) -> str:

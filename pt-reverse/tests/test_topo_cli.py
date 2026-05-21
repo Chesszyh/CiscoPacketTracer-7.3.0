@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -74,6 +75,30 @@ class TopologyCliTest(unittest.TestCase):
             Path(path).unlink(missing_ok=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown IOS interface", result.stderr)
+
+    def test_apply_dry_run_rejects_model_marked_risky_by_validation_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            validation_path = Path(tmpdir) / "model-validations.json"
+            validation_path.write_text(
+                json.dumps({"version": 1, "validations": {"1841": {"status": "risky", "note": "crashed during local validation"}}}),
+                encoding="utf-8",
+            )
+            plan_path = Path(tmpdir) / "plan.json"
+            plan_path.write_text(json.dumps({"devices": [{"name": "R1", "category": "router", "model": "1841"}]}), encoding="utf-8")
+            env = os.environ.copy()
+            env["PT730_MODEL_VALIDATIONS"] = str(validation_path)
+            result = subprocess.run(
+                [str(TOPO), "--timeout", "1", "apply", "--dry-run", str(plan_path)],
+                cwd=ROOT.parent,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crashed during local validation", result.stderr)
 
     def test_summarize_query_extracts_links_ip_and_services(self) -> None:
         query = {

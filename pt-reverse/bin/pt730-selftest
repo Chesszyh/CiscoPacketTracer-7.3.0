@@ -76,6 +76,7 @@ ok "python modules compile"
 while IFS= read -r json_file; do
   python3 -m json.tool "$json_file" >/dev/null
 done < <(find "$ROOT/pt-reverse/examples" "$ROOT/pt-reverse/course-design" -maxdepth 1 -type f -name '*.json' | sort)
+python3 -m json.tool "$ROOT/pt-reverse/pt730/model_validations.json" >/dev/null
 ok "json files parse"
 
 "$BIN/pt730-safety" plan "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
@@ -95,6 +96,12 @@ expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientPr
 "$BIN/pt730-models" queue >/dev/null
 "$BIN/pt730-models" probe-plan 1841 >/dev/null
 "$BIN/pt730-models" validate 1841 --dry-run >/dev/null
+PT730_MODEL_VALIDATIONS="$tmp/model-validations.json" "$BIN/pt730-models" record 1841 --status risky --reason "selftest crash record" --evidence "synthetic" >/dev/null
+printf '%s' '{"devices":[{"name":"R1","category":"router","model":"1841"}]}' >"$tmp/risky-overlay-plan.json"
+if PT730_MODEL_VALIDATIONS="$tmp/model-validations.json" "$BIN/pt730-safety" plan "$tmp/risky-overlay-plan.json" >/dev/null; then
+  echo "expected validation overlay to reject risky model" >&2
+  exit 1
+fi
 printf '%s' '{"device":"R1","hostname":"R1","vlans":[{"id":10}],"interfaces":[{"name":"GigabitEthernet0/0","ip":"10.0.0.1","mask":"255.255.255.0"}]}' >"$tmp/ios-template.json"
 "$BIN/pt730-ios-template" render "$tmp/ios-template.json" >/dev/null
 "$BIN/pt730-ios-template" render "$tmp/ios-template.json" --topology-json >/dev/null
