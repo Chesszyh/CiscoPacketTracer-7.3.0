@@ -43,6 +43,7 @@ For a machine-readable agent summary of safe tools and guarded operations:
 
 ```bash
 pt-reverse/bin/pt730-capabilities
+pt-reverse/bin/pt730-models manifest
 ```
 
 For an offline visual preview of a plan:
@@ -60,6 +61,10 @@ config counts.  Add `--output <path>` to write review artifacts before deciding
 whether a live apply is worth the risk.  `course-audit` is specific to the
 college-network assignment and checks required VLAN presence plus the mandated
 server and PC address spaces.
+
+`pt730-models` never contacts Packet Tracer.  It records common-model status and
+can emit one-device `probe-plan` JSON for manual validation.  Treat generated
+probe plans for `unverified` or `risky` models as supervised experiments only.
 
 `pt730-topo apply` also runs this safety gate before contacting Packet Tracer.
 Known risky models fail by default.  Warnings are printed to stderr; use

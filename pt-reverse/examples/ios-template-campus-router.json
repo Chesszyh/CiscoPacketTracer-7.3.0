@@ -1,0 +1,34 @@
+{
+  "device": "R_CAMPUS",
+  "hostname": "R_CAMPUS",
+  "vlans": [
+    {"id": 10, "name": "SERVER"},
+    {"id": 20, "name": "OFFICE"}
+  ],
+  "interfaces": [
+    {"name": "GigabitEthernet0/0", "description": "Campus LAN", "ip": "192.168.20.1", "mask": "255.255.255.0", "nat": "inside"},
+    {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
+    {"name": "GigabitEthernet0/2", "description": "WAN uplink", "ip": "203.0.113.2", "mask": "255.255.255.252", "nat": "outside"}
+  ],
+  "rip": {
+    "version": 2,
+    "no_auto_summary": true,
+    "networks": ["192.168.20.0"]
+  },
+  "static_routes": [
+    {"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "203.0.113.1"}
+  ],
+  "acls": [
+    {
+      "type": "standard",
+      "number": 10,
+      "rules": [{"action": "permit", "source": "192.168.20.0", "wildcard": "0.0.0.255"}]
+    }
+  ],
+  "nat": {
+    "inside_interfaces": ["GigabitEthernet0/0"],
+    "outside_interfaces": ["GigabitEthernet0/2"],
+    "overloads": [{"acl": 10, "interface": "GigabitEthernet0/2"}]
+  },
+  "save": false
+}

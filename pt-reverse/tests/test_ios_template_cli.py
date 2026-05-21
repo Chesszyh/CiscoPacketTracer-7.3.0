@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Tests for high-level IOS template rendering."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+TEMPLATE = ROOT / "bin" / "pt730-ios-template"
+
+
+class IosTemplateCliTest(unittest.TestCase):
+    def run_template(self, spec: dict, *args: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(spec, f)
+            path = f.name
+        try:
+            return subprocess.run(
+                [str(TEMPLATE), "render", path, *args],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_render_vlan_trunk_rip_static_route_acl_nat(self) -> None:
+        result = self.run_template(
+            {
+                "device": "R1",
+                "hostname": "R1",
+                "vlans": [{"id": 10, "name": "SERVER"}],
+                "interfaces": [
+                    {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "description": "LAN"},
+                    {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
+                    {"name": "Vlan10", "ip": "192.168.10.1", "mask": "255.255.255.0"},
+                ],
+                "rip": {"version": 2, "networks": ["10.0.0.0", "192.168.10.0"], "no_auto_summary": True},
+                "static_routes": [{"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "10.0.0.254"}],
+                "acls": [
+                    {
+                        "type": "standard",
+                        "number": 10,
+                        "rules": [{"action": "permit", "source": "192.168.10.0", "wildcard": "0.0.0.255"}],
+                    }
+                ],
+                "nat": {
+                    "inside_interfaces": ["GigabitEthernet0/0"],
+                    "outside_interfaces": ["GigabitEthernet0/2"],
+                    "overloads": [{"acl": 10, "interface": "GigabitEthernet0/2"}],
+                },
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("hostname R1", result.stdout)
+        self.assertIn("vlan 10", result.stdout)
+        self.assertIn("switchport trunk allowed vlan 10,20", result.stdout)
+        self.assertIn("router rip", result.stdout)
+        self.assertIn("ip route 0.0.0.0 0.0.0.0 10.0.0.254", result.stdout)
+        self.assertIn("access-list 10 permit 192.168.10.0 0.0.0.255", result.stdout)
+        self.assertIn("ip nat inside source list 10 interface GigabitEthernet0/2 overload", result.stdout)
+
+    def test_render_as_topology_ios_config_json(self) -> None:
+        result = self.run_template({"device": "R1", "hostname": "R1"}, "--topology-json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["ios_configs"][0]["device"], "R1")
+        self.assertIn("hostname R1", data["ios_configs"][0]["commands"])
+
+    def test_rejects_missing_acl_number(self) -> None:
+        result = self.run_template({"device": "R1", "acls": [{"rules": [{"action": "permit", "source": "any"}]}]})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("acl number", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

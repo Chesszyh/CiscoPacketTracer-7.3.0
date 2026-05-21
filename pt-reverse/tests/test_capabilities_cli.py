@@ -31,6 +31,8 @@ class CapabilitiesCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(data["packet_tracer_version"], "7.3.0")
         self.assertIn("pt730-render", data["offline_tools"])
+        self.assertIn("pt730-models", data["offline_tools"])
+        self.assertIn("pt730-ios-template", data["offline_tools"])
         self.assertIn("pt730-safety", data["offline_tools"])
         self.assertIn("pt730-topo", data["live_tools"])
         self.assertIn("dhcpRun(", data["blocked_patterns"])

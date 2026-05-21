@@ -941,6 +941,26 @@ def _query_js() -> str:
     return """
 var net = ipc.network();
 var devices = [];
+function boolValue(value) { return value ? true : false; }
+function tryString(fn, fallback) {
+  try {
+    var value = fn();
+    if (value === undefined || value === null) return fallback;
+    return String(value);
+  } catch (e) {
+    return fallback;
+  }
+}
+function serviceEnabled(device, processName, methodName) {
+  try {
+    var proc = device.getProcess(processName);
+    if (!proc) return null;
+    if (methodName && typeof proc[methodName] === "function") return boolValue(proc[methodName]());
+    if (typeof proc.isEnabled === "function") return boolValue(proc.isEnabled());
+    if (typeof proc.isEnable === "function") return boolValue(proc.isEnable());
+  } catch (e) {}
+  return null;
+}
 for (var i = 0; i < net.getDeviceCount(); i++) {
   var d = net.getDeviceAt(i);
   var ports = [];
@@ -955,17 +975,39 @@ for (var i = 0; i < net.getDeviceCount(); i++) {
         terminal: port.getTerminalTypeShortString(),
         linked: linked,
         ip: port.getIpAddress ? port.getIpAddress() : "",
-        mask: port.getSubnetMask ? port.getSubnetMask() : ""
+        mask: port.getSubnetMask ? port.getSubnetMask() : "",
+        gateway: port.getDefaultGateway ? port.getDefaultGateway() : "",
+        dns: port.getDnsServerIp ? port.getDnsServerIp() : ""
       });
     }
   } catch (e2) {}
+  var commandLine = null;
+  try {
+    var cli = d.getCommandLine ? d.getCommandLine() : null;
+    if (cli) commandLine = {prompt: cli.getPrompt ? String(cli.getPrompt()) : ""};
+  } catch (e3) {}
+  var services = {};
+  try {
+    services.http = {enabled: serviceEnabled(d, "HttpServerProcess", "isEnabled")};
+    services.dns = {enabled: serviceEnabled(d, "DnsServerProcess", "isEnabled")};
+    services.ftp = {enabled: serviceEnabled(d, "FtpServerProcess", "isEnabled")};
+    services.tftp = {enabled: serviceEnabled(d, "TftpServerProcess", "isEnabled")};
+    services.email = {
+      smtp_enabled: serviceEnabled(d, "SmtpServerProcess", "isEnabled"),
+      pop3_enabled: serviceEnabled(d, "Pop3ServerProcess", "isEnabled")
+    };
+    services.ntp = {enabled: serviceEnabled(d, "NtpServerProcess", "isEnabled")};
+    services.syslog = {enabled: serviceEnabled(d, "SyslogServerProcess", "isEnabled")};
+  } catch (e4) {}
   devices.push({
     name: d.getName(),
     model: d.getModel(),
     type: d.getType(),
     x: d.getXCoordinate ? d.getXCoordinate() : null,
     y: d.getYCoordinate ? d.getYCoordinate() : null,
-    ports: ports
+    ports: ports,
+    command_line: commandLine,
+    services: services
   });
 }
 var links = [];
@@ -985,11 +1027,76 @@ return JSON.stringify({devices: devices, links: links});
 """
 
 
+def _load_query(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("query JSON must be an object")
+    data.setdefault("devices", [])
+    data.setdefault("links", [])
+    return data
+
+
+def _query_summary(query: dict[str, Any]) -> dict[str, Any]:
+    devices = [device for device in query.get("devices", []) if isinstance(device, dict)]
+    links = [link for link in query.get("links", []) if isinstance(link, dict)]
+    ip_configs: list[dict[str, Any]] = []
+    ios_devices: list[dict[str, Any]] = []
+    server_services: list[dict[str, Any]] = []
+    for device in devices:
+        name = str(device.get("name", ""))
+        model = str(device.get("model", ""))
+        for port in device.get("ports", []):
+            if not isinstance(port, dict):
+                continue
+            if port.get("ip"):
+                ip_configs.append(
+                    {
+                        "device": name,
+                        "model": model,
+                        "port": str(port.get("name", "")),
+                        "ip": str(port.get("ip", "")),
+                        "mask": str(port.get("mask", "")),
+                        "gateway": str(port.get("gateway", "")),
+                        "dns": str(port.get("dns", "")),
+                        "linked": bool(port.get("linked", False)),
+                    }
+                )
+        command_line = device.get("command_line")
+        if isinstance(command_line, dict) and command_line.get("prompt") is not None:
+            ios_devices.append({"device": name, "model": model, "prompt": str(command_line.get("prompt", ""))})
+        services = device.get("services")
+        if isinstance(services, dict):
+            enabled = []
+            present = []
+            for service, state in sorted(services.items()):
+                if isinstance(state, dict):
+                    values = [value for value in state.values() if isinstance(value, bool)]
+                    if values:
+                        present.append(service)
+                    if any(values):
+                        enabled.append(service)
+            if present or enabled:
+                server_services.append({"device": name, "model": model, "present": present, "enabled": enabled})
+    return {
+        "counts": {"devices": len(devices), "links": len(links), "ip_configs": len(ip_configs), "ios_devices": len(ios_devices), "server_service_devices": len(server_services)},
+        "devices": [{"name": str(device.get("name", "")), "model": str(device.get("model", "")), "type": str(device.get("type", ""))} for device in devices],
+        "links": links,
+        "ip_configs": ip_configs,
+        "ios_devices": ios_devices,
+        "server_services": server_services,
+    }
+
+
 def _print_json(raw: str) -> None:
     try:
         print(json.dumps(json.loads(raw), ensure_ascii=False, indent=2))
     except json.JSONDecodeError:
         print(raw)
+
+
+def _print_json_obj(value: Any) -> None:
+    print(json.dumps(value, ensure_ascii=False, indent=2))
 
 
 def _chunks(items: list[Any], size: int) -> list[list[Any]]:
@@ -1071,7 +1178,11 @@ def main(argv: list[str] | None = None) -> int:
     apply_p.add_argument("--strict-safety", action="store_true", help="treat safety warnings as failures")
     apply_p.add_argument("--dry-run", action="store_true", help="run offline safety checks and print a plan summary without contacting Packet Tracer")
 
-    sub.add_parser("query", help="query current devices and links")
+    query_p = sub.add_parser("query", help="query current devices and links")
+    query_p.add_argument("--summary", action="store_true", help="summarize current canvas devices, links, IPs, IOS prompts, and services")
+
+    summarize_p = sub.add_parser("summarize-query", help="summarize a saved pt730-topo query JSON file")
+    summarize_p.add_argument("query_json", type=Path)
 
     args = parser.parse_args(argv)
     try:
@@ -1091,7 +1202,14 @@ def main(argv: list[str] | None = None) -> int:
                 _print_json(eval_js(_apply_js(plan, replace=args.replace), args.bridge, args.timeout))
             return 0
         if args.cmd == "query":
-            _print_json(eval_js(_query_js(), args.bridge, args.timeout))
+            raw = eval_js(_query_js(), args.bridge, args.timeout)
+            if args.summary:
+                _print_json_obj(_query_summary(_decode_result(raw)))
+            else:
+                _print_json(raw)
+            return 0
+        if args.cmd == "summarize-query":
+            _print_json_obj(_query_summary(_load_query(args.query_json)))
             return 0
     except (OSError, ValueError, RuntimeError, TimeoutError, urllib.error.URLError) as exc:
         print(f"pt730-topo: {exc}", file=sys.stderr)

@@ -75,6 +75,49 @@ class TopologyCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown IOS interface", result.stderr)
 
+    def test_summarize_query_extracts_links_ip_and_services(self) -> None:
+        query = {
+            "devices": [
+                {
+                    "name": "R1",
+                    "model": "2911",
+                    "type": "0",
+                    "ports": [{"name": "GigabitEthernet0/0", "linked": True, "ip": "10.0.0.1", "mask": "255.255.255.0"}],
+                    "command_line": {"prompt": "R1#"},
+                },
+                {
+                    "name": "SRV1",
+                    "model": "Server-PT",
+                    "type": "9",
+                    "ports": [{"name": "FastEthernet0", "linked": True, "ip": "10.0.0.10", "mask": "255.255.255.0", "gateway": "10.0.0.1", "dns": "10.0.0.10"}],
+                    "services": {"http": {"enabled": True}, "dns": {"enabled": True}},
+                },
+            ],
+            "links": [{"a": "R1", "pa": "GigabitEthernet0/0", "b": "SRV1", "pb": "FastEthernet0", "cable": "8100"}],
+        }
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(query, f)
+            path = f.name
+        try:
+            result = subprocess.run(
+                [str(TOPO), "summarize-query", path],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["counts"]["devices"], 2)
+        self.assertEqual(data["links"][0]["a"], "R1")
+        self.assertEqual(data["ip_configs"][0]["device"], "R1")
+        self.assertEqual(data["server_services"][0]["device"], "SRV1")
+        self.assertEqual(data["ios_devices"][0]["device"], "R1")
+
 
 if __name__ == "__main__":
     unittest.main()

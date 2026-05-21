@@ -16,6 +16,8 @@ pt-reverse/bin/pt730-launch status
 pt-reverse/bin/pt730-recover --notify
 pt-reverse/bin/pt730-selftest
 pt-reverse/bin/pt730-capabilities
+pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
@@ -108,6 +110,8 @@ pt-reverse/bin/pt730-eval --expr 'ipc.network().getDeviceCount()'
 printf '%s\n' '"stdin:"+ipc.network().getLinkCount()' | pt-reverse/bin/pt730-eval --expr --stdin
 pt-reverse/bin/pt730-app count
 pt-reverse/bin/pt730-topo query
+pt-reverse/bin/pt730-topo query --summary
+pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
 pt-reverse/bin/pt730-topo apply --dry-run pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-topo apply pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-topo apply --replace pt-reverse/examples/four-router-ring.json
@@ -121,6 +125,9 @@ pt-reverse/bin/pt730-term PC_DHCP --cmd 'ping dhcpdemo.local' --wait 8 --expect 
 pt-reverse/bin/pt730-ftp PC_DHCP 192.168.200.10 --username lab --password packet --cmd dir --expect 'ftp>'
 pt-reverse/bin/pt730-sim simple-pdu PC_DHCP SRV_DHCP
 pt-reverse/bin/pt730-safety plan pt-reverse/examples/server-dhcp-lan.json
+pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-models probe-plan 1841
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 pt-reverse/bin/pt730-capabilities --table
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
@@ -264,6 +271,48 @@ inspection.  Treat `pt730_status=safe` and `pt730_status=verified` as the
 unattended automation set.  `unverified` means "present in the upstream catalog,
 not yet live-tested on this exact PT 7.3.0 build"; `risky` means the model is
 known or likely to destabilize this PT 7.3.0 session.
+
+## Model validation registry
+
+`pt730-models` tracks common Packet Tracer models with PT 7.3.0-specific safety
+status.  It is deliberately conservative: only locally exercised models are
+`safe`; common but untested models are `unverified`; crash-prone models are
+`risky`; physical/power objects are `blocked`.
+
+```bash
+pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-models probe-plan 1841
+pt-reverse/bin/pt730-models probe-plan 3560-24PS --allow-risky
+```
+
+`probe-plan` produces a one-device topology plan for manual, saved-workspace
+validation.  Promote a model to `safe` only after create/query/save/reopen
+works on this exact PT 7.3.0 setup.
+
+## IOS template renderer
+
+`pt730-ios-template` turns higher-level JSON into IOS command sequences.  The
+first supported template surface covers VLANs, access/trunk interfaces, routed
+interfaces, RIPv2, static routes, standard/extended ACL lines, and NAT overload.
+
+```bash
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
+```
+
+Use `--topology-json` when you want to merge the generated commands into a
+`pt730-topo` plan under `ios_configs`.
+
+## Reverse query summaries
+
+`pt730-topo query` now asks Packet Tracer for devices, links, ports, IP fields,
+IOS prompts, and visible server-service states.  Add `--summary` for a compact
+agent/report-friendly view, or summarize a saved query result offline:
+
+```bash
+pt-reverse/bin/pt730-topo query --summary
+pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
+```
 
 ## Application-level CLI helpers
 
