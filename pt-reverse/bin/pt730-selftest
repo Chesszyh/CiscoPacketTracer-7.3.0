@@ -93,6 +93,7 @@ expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientPr
 "$BIN/pt730-render" course-audit "$ROOT/pt-reverse/course-design/college-network-topology-pt73-safe.json" >/dev/null
 "$BIN/pt730-models" manifest >/dev/null
 "$BIN/pt730-models" probe-plan 1841 >/dev/null
+"$BIN/pt730-models" validate 1841 --dry-run >/dev/null
 printf '%s' '{"device":"R1","hostname":"R1","vlans":[{"id":10}],"interfaces":[{"name":"GigabitEthernet0/0","ip":"10.0.0.1","mask":"255.255.255.0"}]}' >"$tmp/ios-template.json"
 "$BIN/pt730-ios-template" render "$tmp/ios-template.json" >/dev/null
 "$BIN/pt730-ios-template" render "$tmp/ios-template.json" --topology-json >/dev/null

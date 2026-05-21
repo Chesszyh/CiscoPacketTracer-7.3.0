@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from model_registry import MODEL_REGISTRY, models_by_status, record_to_dict, status_notes
@@ -67,6 +70,57 @@ def probe_plan(model: str, *, allow_risky: bool, allow_blocked: bool) -> tuple[d
     }, 0
 
 
+def validation_steps(model: str, plan_path: str) -> list[dict[str, str]]:
+    return [
+        {
+            "name": "apply_one_model",
+            "command": f"pt-reverse/bin/pt730-topo apply --replace --batch-size 1 {plan_path}",
+            "purpose": "create only the candidate model after the safety gate",
+        },
+        {
+            "name": "query_summary",
+            "command": "pt-reverse/bin/pt730-topo query --summary",
+            "purpose": "confirm Packet Tracer can still enumerate the canvas",
+        },
+        {
+            "name": "manual_assessment",
+            "command": "record result in pt-reverse/pt730/model_registry.py",
+            "purpose": "promote to safe only after create/query/save/reopen succeeds; demote to risky/blocked after crash/refusal",
+        },
+    ]
+
+
+def validate_model(model: str, *, dry_run: bool, live: bool, allow_risky: bool, allow_blocked: bool, bridge: str, timeout: float) -> tuple[dict[str, Any], int]:
+    data, code = probe_plan(model, allow_risky=allow_risky, allow_blocked=allow_blocked)
+    if code:
+        return data, code
+    if dry_run:
+        return {**{k: data[k] for k in ("model", "status", "note", "unattended_safe")}, "dry_run": True, "steps": validation_steps(str(data["model"]), "<probe-plan.json>"), "plan": data["plan"]}, 0
+    if not live:
+        return {"error": "live validation is guarded; pass --dry-run to inspect steps or --live to contact Packet Tracer"}, 1
+
+    root = Path(__file__).resolve().parents[2]
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+        json.dump(data["plan"], f)
+        plan_path = f.name
+    try:
+        apply_cmd = [str(root / "pt-reverse" / "bin" / "pt730-topo"), "--bridge", bridge, "--timeout", str(timeout), "apply", "--replace", "--batch-size", "1", plan_path]
+        query_cmd = [str(root / "pt-reverse" / "bin" / "pt730-topo"), "--bridge", bridge, "--timeout", str(timeout), "query", "--summary"]
+        apply_result = subprocess.run(apply_cmd, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(timeout + 10, 30), check=False)
+        query_result = subprocess.run(query_cmd, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=max(timeout + 10, 30), check=False) if apply_result.returncode == 0 else None
+        ok = apply_result.returncode == 0 and query_result is not None and query_result.returncode == 0
+        return {
+            "model": data["model"],
+            "status_before_validation": data["status"],
+            "ok": ok,
+            "apply": {"returncode": apply_result.returncode, "stdout": apply_result.stdout, "stderr": apply_result.stderr},
+            "query_summary": None if query_result is None else {"returncode": query_result.returncode, "stdout": query_result.stdout, "stderr": query_result.stderr},
+            "next_step": "promote to safe only after save/reopen also succeeds" if ok else "keep or demote to risky/blocked with failure evidence",
+        }, 0 if ok else 1
+    finally:
+        Path(plan_path).unlink(missing_ok=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -76,6 +130,15 @@ def main(argv: list[str] | None = None) -> int:
     probe_p.add_argument("--allow-risky", action="store_true")
     probe_p.add_argument("--allow-blocked", action="store_true")
 
+    validate_p = sub.add_parser("validate", help="guarded one-model validation workflow")
+    validate_p.add_argument("model")
+    validate_p.add_argument("--dry-run", action="store_true")
+    validate_p.add_argument("--live", action="store_true", help="contact Packet Tracer through pt730-topo")
+    validate_p.add_argument("--allow-risky", action="store_true")
+    validate_p.add_argument("--allow-blocked", action="store_true")
+    validate_p.add_argument("--bridge", default="http://127.0.0.1:54321")
+    validate_p.add_argument("--timeout", type=float, default=20.0)
+
     args = parser.parse_args(argv)
     if args.cmd == "manifest":
         print_json(manifest())
@@ -83,6 +146,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "probe-plan":
         data, code = probe_plan(args.model, allow_risky=args.allow_risky, allow_blocked=args.allow_blocked)
         if code:
+            print(f"pt730-models: {data['error']}", file=sys.stderr)
+        else:
+            print_json(data)
+        return code
+    if args.cmd == "validate":
+        data, code = validate_model(args.model, dry_run=args.dry_run, live=args.live, allow_risky=args.allow_risky, allow_blocked=args.allow_blocked, bridge=args.bridge, timeout=args.timeout)
+        if code and "error" in data:
             print(f"pt730-models: {data['error']}", file=sys.stderr)
         else:
             print_json(data)

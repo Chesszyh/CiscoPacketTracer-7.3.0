@@ -127,6 +127,7 @@ pt-reverse/bin/pt730-sim simple-pdu PC_DHCP SRV_DHCP
 pt-reverse/bin/pt730-safety plan pt-reverse/examples/server-dhcp-lan.json
 pt-reverse/bin/pt730-models manifest
 pt-reverse/bin/pt730-models probe-plan 1841
+pt-reverse/bin/pt730-models validate 1841 --dry-run
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 pt-reverse/bin/pt730-capabilities --table
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
@@ -282,12 +283,18 @@ status.  It is deliberately conservative: only locally exercised models are
 ```bash
 pt-reverse/bin/pt730-models manifest
 pt-reverse/bin/pt730-models probe-plan 1841
+pt-reverse/bin/pt730-models validate 1841 --dry-run
+pt-reverse/bin/pt730-models validate 1841 --live
 pt-reverse/bin/pt730-models probe-plan 3560-24PS --allow-risky
 ```
 
 `probe-plan` produces a one-device topology plan for manual, saved-workspace
 validation.  Promote a model to `safe` only after create/query/save/reopen
 works on this exact PT 7.3.0 setup.
+`validate --dry-run` prints the guarded live-check steps without contacting PT.
+`validate --live` actually creates just the candidate model and runs
+`pt730-topo query --summary`; use it one model at a time after saving the
+current workspace.
 
 ## IOS template renderer
 

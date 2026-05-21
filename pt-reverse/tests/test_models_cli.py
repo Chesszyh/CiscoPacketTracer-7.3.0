@@ -57,6 +57,20 @@ class ModelsCliTest(unittest.TestCase):
         self.assertEqual(allowed.returncode, 0, allowed.stderr)
         self.assertEqual(json.loads(allowed.stdout)["status"], "risky")
 
+    def test_validate_dry_run_prints_guarded_commands_without_live_bridge(self) -> None:
+        result = self.run_cmd("validate", "1841", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data["dry_run"])
+        self.assertEqual(data["model"], "1841")
+        self.assertIn("pt730-topo apply", data["steps"][0]["command"])
+        self.assertIn("pt730-topo query --summary", data["steps"][1]["command"])
+
+    def test_validate_refuses_live_without_explicit_flag(self) -> None:
+        result = self.run_cmd("validate", "1841")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--live", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
