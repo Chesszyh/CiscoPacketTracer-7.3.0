@@ -39,6 +39,9 @@ pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-networ
 
 Read `pt-reverse/SAFETY.md` before running live Packet Tracer operations.
 
+For a detailed Chinese workflow manual, read
+[`pt-reverse/使用手册.md`](pt-reverse/使用手册.md).
+
 ## Legal Note
 
 Cisco Packet Tracer is Cisco software.  This repository contains helper scripts,

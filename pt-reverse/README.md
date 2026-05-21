@@ -6,6 +6,8 @@ Cisco Packet Tracer 7.3.0 copy from Linux/Wine.
 Read `SAFETY.md` before adding new live probes.  PT 7.3.0 can crash when some
 internal process APIs are called through the Script Module bridge.
 
+中文完整操作说明见 [`使用手册.md`](使用手册.md)。
+
 ## Current runtime
 
 Start or check Packet Tracer:
