@@ -39,7 +39,7 @@ class IosTemplateCliTest(unittest.TestCase):
                 "hostname": "R1",
                 "vlans": [{"id": 10, "name": "SERVER"}],
                 "interfaces": [
-                    {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "description": "LAN"},
+                    {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "description": "LAN", "acl_in": 10},
                     {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
                     {"name": "Vlan10", "ip": "192.168.10.1", "mask": "255.255.255.0"},
                 ],
@@ -66,6 +66,7 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("router rip", result.stdout)
         self.assertIn("ip route 0.0.0.0 0.0.0.0 10.0.0.254", result.stdout)
         self.assertIn("access-list 10 permit 192.168.10.0 0.0.0.255", result.stdout)
+        self.assertIn("ip access-group 10 in", result.stdout)
         self.assertIn("ip nat inside source list 10 interface GigabitEthernet0/2 overload", result.stdout)
 
     def test_render_as_topology_ios_config_json(self) -> None:

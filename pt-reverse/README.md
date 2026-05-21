@@ -319,7 +319,8 @@ Promoting to `safe` requires `--save-reopen`.
 
 `pt730-ios-template` turns higher-level JSON into IOS command sequences.  The
 first supported template surface covers VLANs, access/trunk interfaces, routed
-interfaces, RIPv2, static routes, standard/extended ACL lines, and NAT overload.
+interfaces, interface ACL binding with `acl_in`/`acl_out`, RIPv2, static
+routes, standard/extended ACL lines, and NAT overload.
 
 ```bash
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
@@ -336,7 +337,8 @@ device object or a top-level `devices` array for multiple IOS devices.
 IOS prompts, terminal output tails, and visible server-service states.  Add
 `--summary` for a compact agent/report-friendly view, including parsed IOS
 configuration hints for interfaces, VLANs, RIP networks, static routes, ACL
-numbers, and NAT.  You can also summarize a saved query result offline:
+numbers, interface ACL applications, and NAT.  You can also summarize a saved
+query result offline:
 
 ```bash
 pt-reverse/bin/pt730-topo query --summary

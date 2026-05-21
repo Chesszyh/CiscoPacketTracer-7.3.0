@@ -64,6 +64,12 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
             commands.extend([" switchport mode access", f" switchport access vlan {require(interface.get('vlan'), 'access interface vlan is required')}"])
         if interface.get("ip"):
             commands.append(f" ip address {interface['ip']} {require(interface.get('mask'), 'interface mask is required')}")
+        acl_in = interface.get("acl_in", interface.get("access_group_in"))
+        acl_out = interface.get("acl_out", interface.get("access_group_out"))
+        if acl_in:
+            commands.append(f" ip access-group {acl_in} in")
+        if acl_out:
+            commands.append(f" ip access-group {acl_out} out")
         if interface.get("nat") in ("inside", "outside"):
             commands.append(f" ip nat {interface['nat']}")
         if interface.get("shutdown") is True:

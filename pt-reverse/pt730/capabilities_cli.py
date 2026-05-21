@@ -71,6 +71,8 @@ def manifest() -> dict[str, Any]:
         "safe_defaults": SAFE_DEFAULTS,
         "guarded_operations": GUARDED_OPERATIONS,
         "blocked_patterns": BLOCKED_PATTERNS,
+        "ios_template_features": ["vlans", "access_interfaces", "trunks", "ripv2", "static_routes", "standard_acls", "extended_acls", "interface_acl_bindings", "nat_overload"],
+        "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
             "pt-reverse/bin/pt730-selftest",
             "pt-reverse/bin/pt730-safety plan <plan.json>",

@@ -1070,6 +1070,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     static_routes: list[dict[str, str]] = []
     rip_networks: list[str] = []
     acl_numbers: set[str] = set()
+    acl_applications: list[dict[str, str]] = []
     nat = {"inside_interfaces": [], "outside_interfaces": [], "overload": False}
     current_interface: str | None = None
     current_vlan: str | None = None
@@ -1134,6 +1135,12 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
                 key = "inside_interfaces" if direction == "inside" else "outside_interfaces"
                 if current_interface not in nat[key]:
                     nat[key].append(current_interface)
+            acl_apply_match = re.match(r"^ip\s+access-group\s+(\S+)\s+(in|out)$", line, flags=re.IGNORECASE)
+            if acl_apply_match:
+                acl_id = acl_apply_match.group(1)
+                direction = acl_apply_match.group(2).lower()
+                info[f"acl_{direction}"] = acl_id
+                acl_applications.append({"interface": current_interface, "acl": acl_id, "direction": direction})
             if line.lower() == "shutdown":
                 info["shutdown"] = True
             elif line.lower() == "no shutdown":
@@ -1152,6 +1159,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
         "vlans": vlans,
         "routing": {"rip_networks": rip_networks, "static_routes": static_routes},
         "acl_numbers": sorted(acl_numbers),
+        "acl_applications": acl_applications,
         "nat": nat,
     }
 
