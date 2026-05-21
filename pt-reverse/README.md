@@ -103,8 +103,13 @@ pt-reverse/bin/pt730-bridge start
 pt-reverse/bin/pt730-bridge bootstrap
 ```
 
-Paste the bootstrap JavaScript into the PT-MCP Builder Code Editor and click Run.
-After that, command-line calls can drive Packet Tracer through the Script Module:
+On PT 7.3.0, install/start the Builder through
+`Extensions -> Scripting -> Configure PT Script Modules`.  Add
+`pt-reverse/upstream/MCP-Packet-Tracer/V3-MCP-BUILDER.pts`, select the new
+Builder module, click `Start`, then open its code editor (`Edit` or the Builder
+Code Editor menu if it appears).  Paste the bootstrap JavaScript there and click
+Run.  After that, command-line calls can drive Packet Tracer through the Script
+Module:
 
 ```bash
 pt-reverse/bin/pt730-eval --expr 'ipc.network().getDeviceCount()'

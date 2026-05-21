@@ -237,6 +237,42 @@ class TopologyCliTest(unittest.TestCase):
             self.assertIn("10.0.0.1", markdown)
             self.assertIn("GigabitEthernet0/0 -> ACL 10 in", markdown)
 
+    def test_export_markdown_reports_unreadable_links(self) -> None:
+        query = {
+            "devices": [{"name": "AP1", "model": "AccessPoint-PT", "type": "7"}],
+            "links": [{"index": 0, "status": "unreadable", "error": "link object does not expose getPort1/getPort2"}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            query_path = Path(tmpdir) / "query.json"
+            raw_path = Path(tmpdir) / "raw.json"
+            summary_path = Path(tmpdir) / "summary.json"
+            markdown_path = Path(tmpdir) / "summary.md"
+            query_path.write_text(json.dumps(query), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    str(TOPO),
+                    "export",
+                    "--from-query",
+                    str(query_path),
+                    "--raw-out",
+                    str(raw_path),
+                    "--summary-out",
+                    str(summary_path),
+                    "--markdown-out",
+                    str(markdown_path),
+                ],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            markdown = markdown_path.read_text(encoding="utf-8")
+            self.assertIn("link[0]: unreadable", markdown)
+            self.assertIn("getPort1/getPort2", markdown)
+
 
 if __name__ == "__main__":
     unittest.main()

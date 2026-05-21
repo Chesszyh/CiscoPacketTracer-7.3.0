@@ -36,15 +36,17 @@ class ModelsCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertIn("2911", data["safe"])
+        self.assertIn("1841", data["safe"])
         self.assertIn("3560-24PS", data["risky"])
         self.assertIn("3650-24PS", data["risky"])
-        self.assertIn("1841", data["unverified"])
         self.assertIn("Power Distribution Device", data["blocked"])
 
     def test_probe_plan_for_unverified_common_model_is_guarded(self) -> None:
-        result = self.run_cmd("probe-plan", "1841")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        data = json.loads(result.stdout)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
+            result = self.run_cmd("probe-plan", "1841", env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
         self.assertEqual(data["model"], "1841")
         self.assertEqual(data["status"], "unverified")
         self.assertFalse(data["unattended_safe"])
@@ -78,18 +80,22 @@ class ModelsCliTest(unittest.TestCase):
         self.assertIn("--live", result.stderr)
 
     def test_queue_lists_unverified_models_with_guarded_commands(self) -> None:
-        result = self.run_cmd("queue")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        data = json.loads(result.stdout)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
+            result = self.run_cmd("queue", env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
         self.assertGreater(data["counts"]["unverified"], 0)
         self.assertEqual(data["items"][0]["status"], "unverified")
         self.assertIn("--dry-run", data["items"][0]["dry_run_command"])
         self.assertIn("--live", data["items"][0]["live_command"])
 
     def test_validate_batch_dry_run_lists_one_at_a_time_steps(self) -> None:
-        result = self.run_cmd("validate-batch", "--dry-run", "--limit", "2")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        data = json.loads(result.stdout)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
+            result = self.run_cmd("validate-batch", "--dry-run", "--limit", "2", env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
         self.assertTrue(data["dry_run"])
         self.assertEqual(data["count"], 2)
         self.assertEqual(len(data["items"]), 2)

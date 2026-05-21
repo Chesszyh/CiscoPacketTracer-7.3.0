@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -20,8 +21,24 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PT_BIN = ROOT / "Cisco Packet Tracer 7.3.0" / "bin"
 EVAL_BIN = ROOT / "pt-reverse" / "bin" / "pt730-eval"
+
+
+def packet_tracer_bin() -> Path:
+    env_bin = os.environ.get("PT_BIN")
+    candidates = []
+    if env_bin:
+        candidates.append(Path(env_bin))
+    candidates.extend(
+        [
+            ROOT / "Cisco Packet Tracer 7.3.0" / "bin",
+            ROOT / "src" / "bin",
+        ]
+    )
+    for candidate in candidates:
+        if (candidate / "PacketTracer7.exe").is_file():
+            return candidate
+    raise RuntimeError("PacketTracer7.exe not found; set PT_BIN or restore the extracted PT 7.3.0 bin directory")
 
 
 def run_eval(expr: str, *, timeout: float) -> str:
@@ -75,7 +92,7 @@ def save_as(target: Path, *, timeout: float, direct: bool) -> None:
             raise RuntimeError(f"Packet Tracer fileSaveAs returned {result!r}")
     else:
         tmp_name = f"pt730-save-{uuid.uuid4().hex}.pkt"
-        tmp_path = PT_BIN / tmp_name
+        tmp_path = packet_tracer_bin() / tmp_name
         result = run_eval(f"String(ipc.appWindow().fileSaveAs({js_string(tmp_name)}))", timeout=timeout)
         if result.lower() != "true":
             raise RuntimeError(f"Packet Tracer fileSaveAs returned {result!r}")

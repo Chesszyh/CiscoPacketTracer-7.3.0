@@ -1,4 +1,183 @@
 {
-  "version": 1,
-  "validations": {}
+  "validations": {
+    "1841": {
+      "evidence": [
+        "pt730-models validate 1841 --live ok",
+        "save-as/open pt-reverse/live-exports/model-validation/verify-1841.pkt ok",
+        "reopen query saw VERIFY-1841 FastEthernet0/0 FastEthernet0/1"
+      ],
+      "note": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "reason": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "save_reopen": true,
+      "status": "safe",
+      "updated_at": "2026-05-21T09:12:14+00:00"
+    },
+    "1941": {
+      "evidence": [
+        "clean fileNew before validation ok",
+        "pt730-models validate 1941 --live ok",
+        "save-as/open pt-reverse/live-exports/model-validation/verify-1941.pkt ok",
+        "reopen query saw VERIFY-1941 GigabitEthernet0/0 GigabitEthernet0/1"
+      ],
+      "note": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "reason": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "save_reopen": true,
+      "status": "safe",
+      "updated_at": "2026-05-21T09:13:18+00:00"
+    },
+    "2901": {
+      "evidence": [
+        "clean fileNew before validation ok",
+        "pt730-models validate 2901 --live ok",
+        "save-as/open pt-reverse/live-exports/model-validation/verify-2901.pkt ok",
+        "reopen query saw VERIFY-2901 GigabitEthernet0/0 GigabitEthernet0/1"
+      ],
+      "note": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "reason": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "save_reopen": true,
+      "status": "safe",
+      "updated_at": "2026-05-21T09:14:02+00:00"
+    },
+    "2950-24": {
+      "evidence": [
+        "clean fileNew before validation ok",
+        "pt730-models validate 2950-24 --live ok",
+        "save-as/open pt-reverse/live-exports/model-validation/verify-2950-24.pkt ok",
+        "reopen query saw VERIFY-2950-24 Vlan1"
+      ],
+      "note": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "reason": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "save_reopen": true,
+      "status": "safe",
+      "updated_at": "2026-05-21T09:14:37+00:00"
+    },
+    "2950T": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: 2950T: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-2950T model=2950T"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:14:58+00:00"
+    },
+    "4321": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: 4321: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-4321 model=4321"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:15:45+00:00"
+    },
+    "4331": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: 4331: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-4331 model=4331"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:16:00+00:00"
+    },
+    "ASA5505": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: ASA5505: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-ASA5505 model=ASA5505"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:20:05+00:00"
+    },
+    "ASA5506": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: ASA5506: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-ASA5506 model=ASA5506"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:20:40+00:00"
+    },
+    "AccessPoint-PT": {
+      "evidence": [
+        "clean fileNew before validation ok",
+        "pt730-models validate AccessPoint-PT created device; original query exposed unreadable internal link",
+        "robust pt730-topo query records unreadable link instead of failing",
+        "save-as/open pt-reverse/live-exports/model-validation/verify-AccessPoint-PT.pkt ok"
+      ],
+      "note": "PT 7.3.0 live validation passed after robust query: create/query/save/reopen/query",
+      "reason": "PT 7.3.0 live validation passed after robust query: create/query/save/reopen/query",
+      "save_reopen": true,
+      "status": "safe",
+      "updated_at": "2026-05-21T09:18:17+00:00"
+    },
+    "Cloud-PT": {
+      "evidence": [
+        "clean fileNew before validation ok",
+        "pt730-models validate Cloud-PT --live ok",
+        "save-as/open pt-reverse/live-exports/model-validation/verify-Cloud-PT.pkt ok",
+        "reopen query saw VERIFY-Cloud-PT type 2"
+      ],
+      "note": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "reason": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "save_reopen": true,
+      "status": "safe",
+      "updated_at": "2026-05-21T09:19:16+00:00"
+    },
+    "IP Phone": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: IP Phone: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-IP-Phone model=IP Phone"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:19:35+00:00"
+    },
+    "Laptop-PT": {
+      "evidence": [
+        "clean fileNew before validation ok",
+        "pt730-models validate Laptop-PT --live ok",
+        "save-as/open pt-reverse/live-exports/model-validation/verify-Laptop-PT.pkt ok",
+        "reopen query saw VERIFY-Laptop-PT FastEthernet0 Bluetooth"
+      ],
+      "note": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "reason": "PT 7.3.0 live validation passed: create/query/save/reopen/query",
+      "save_reopen": true,
+      "status": "safe",
+      "updated_at": "2026-05-21T09:16:37+00:00"
+    },
+    "Printer-PT": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: Printer-PT: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-Printer-PT model=Printer-PT"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:16:56+00:00"
+    },
+    "WRT300N": {
+      "evidence": [
+        "apply.returncode=1",
+        "apply.stderr=pt730-topo: safety warning: devices[0]: WRT300N: not live-verified on this PT 7.3.0 setup\npt730-topo: Packet Tracer refused device VERIFY-WRT300N model=WRT300N"
+      ],
+      "note": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "reason": "auto-recorded failed validation: keep or demote to risky/blocked with failure evidence",
+      "save_reopen": false,
+      "status": "risky",
+      "updated_at": "2026-05-21T09:18:35+00:00"
+    }
+  },
+  "version": 1
 }

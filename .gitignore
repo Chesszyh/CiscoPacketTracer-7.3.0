@@ -24,6 +24,8 @@ pt-reverse/screenshots/
 # Runtime query/apply snapshots.
 pt-reverse/course-design/current-query.json
 pt-reverse/course-design/last-apply.json
+pt-reverse/.tmp/
+pt-reverse/live-exports/
 
 # Third-party reference checkout kept locally only.  MCP-Packet-Tracer is
 # tracked as a clean Git submodule via .gitmodules.

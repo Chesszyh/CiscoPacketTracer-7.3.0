@@ -1017,16 +1017,25 @@ for (var i = 0; i < net.getDeviceCount(); i++) {
 }
 var links = [];
 for (var l = 0; l < net.getLinkCount(); l++) {
-  var link = net.getLinkAt(l);
-  var p1 = link.getPort1();
-  var p2 = link.getPort2();
-  links.push({
-    a: p1.getOwnerDevice().getName(),
-    pa: p1.getName(),
-    b: p2.getOwnerDevice().getName(),
-    pb: p2.getName(),
-    cable: String(link.getConnectionType())
-  });
+  try {
+    var link = net.getLinkAt(l);
+    if (!link || typeof link.getPort1 !== "function" || typeof link.getPort2 !== "function") {
+      links.push({index: l, status: "unreadable", error: "link object does not expose getPort1/getPort2"});
+      continue;
+    }
+    var p1 = link.getPort1();
+    var p2 = link.getPort2();
+    links.push({
+      index: l,
+      a: p1.getOwnerDevice().getName(),
+      pa: p1.getName(),
+      b: p2.getOwnerDevice().getName(),
+      pb: p2.getName(),
+      cable: String(link.getConnectionType())
+    });
+  } catch (e5) {
+    links.push({index: l, status: "error", error: String(e5)});
+  }
 }
 return JSON.stringify({devices: devices, links: links});
 """
@@ -1265,7 +1274,10 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
         lines.extend(["## Links", ""])
         for link in links:
             if isinstance(link, dict):
-                lines.append(f"- {link.get('a', '')}:{link.get('pa', '')} <-> {link.get('b', '')}:{link.get('pb', '')} ({link.get('cable', '')})")
+                if link.get("status") in {"unreadable", "error"}:
+                    lines.append(f"- link[{link.get('index', '')}]: {link.get('status', '')} ({link.get('error', '')})")
+                else:
+                    lines.append(f"- {link.get('a', '')}:{link.get('pa', '')} <-> {link.get('b', '')}:{link.get('pb', '')} ({link.get('cable', '')})")
         lines.append("")
     ip_configs = summary.get("ip_configs", [])
     if isinstance(ip_configs, list) and ip_configs:

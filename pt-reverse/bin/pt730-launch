@@ -2,7 +2,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PT_BIN="$ROOT/Cisco Packet Tracer 7.3.0/bin"
+if [[ -n "${PT_BIN:-}" ]]; then
+  PT_BIN="$PT_BIN"
+elif [[ -f "$ROOT/Cisco Packet Tracer 7.3.0/bin/PacketTracer7.exe" ]]; then
+  PT_BIN="$ROOT/Cisco Packet Tracer 7.3.0/bin"
+elif [[ -f "$ROOT/src/bin/PacketTracer7.exe" ]]; then
+  PT_BIN="$ROOT/src/bin"
+else
+  echo "pt730-launch: PacketTracer7.exe not found; set PT_BIN or restore the extracted PT 7.3.0 bin directory" >&2
+  exit 1
+fi
 SESSION="${PT_TMUX_SESSION:-pt730}"
 IPC_PORT="${PT_IPC_PORT:-39000}"
 DEVTOOLS_PORT="${PT_DEVTOOLS_PORT:-9223}"
