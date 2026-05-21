@@ -1,0 +1,68 @@
+{
+  "devices": [
+    {"name": "SW_DHCP", "category": "switch", "model": "2960-24TT", "x": 470, "y": 240},
+    {"name": "SRV_DHCP", "category": "server", "model": "Server-PT", "x": 250, "y": 360},
+    {"name": "PC_DHCP", "category": "pc", "model": "PC-PT", "x": 690, "y": 360}
+  ],
+  "links": [
+    {"a": "SRV_DHCP", "pa": "FastEthernet0", "b": "SW_DHCP", "pb": "FastEthernet0/1", "cable": "straight"},
+    {"a": "PC_DHCP", "pa": "FastEthernet0", "b": "SW_DHCP", "pb": "FastEthernet0/2", "cable": "straight"}
+  ],
+  "pc_configs": [
+    {
+      "name": "SRV_DHCP",
+      "port": "FastEthernet0",
+      "ip": "192.168.200.10",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.200.1",
+      "dns": "192.168.200.10"
+    },
+    {"name": "PC_DHCP", "dhcp": true}
+  ],
+  "server_configs": [
+    {
+      "name": "SRV_DHCP",
+      "http": true,
+      "tftp": true,
+      "ftp": {
+        "enabled": true,
+        "accounts": [
+          {"username": "lab", "password": "packet", "permissions": "RWDNL"}
+        ]
+      },
+      "dns": {
+        "enabled": true,
+        "records": [
+          {"name": "dhcpdemo.local", "ip": "192.168.200.10"}
+        ]
+      },
+      "email": {
+        "enabled": true,
+        "domain": "college.local",
+        "accounts": [
+          {"username": "student", "password": "packet"}
+        ]
+      },
+      "ntp": {
+        "enabled": true,
+        "authentication": false,
+        "key_id": "0",
+        "md5": ""
+      },
+      "syslog": {
+        "enabled": true,
+        "port": 514
+      },
+      "dhcp": {
+        "enabled": true,
+        "network": "192.168.200.0",
+        "mask": "255.255.255.0",
+        "start": "192.168.200.100",
+        "end": "192.168.200.150",
+        "gateway": "192.168.200.1",
+        "dns": "192.168.200.10",
+        "max_users": 51
+      }
+    }
+  ]
+}

@@ -1,0 +1,135 @@
+{
+  "devices": [
+    {
+      "name": "R_SER1",
+      "model": "2911",
+      "type": 0,
+      "x": 237,
+      "y": 345,
+      "ports": [
+        {
+          "name": "Vlan1",
+          "type": 17,
+          "terminal": "Vlan",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/0",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/1",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/2",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "Serial0/0/0",
+          "type": 8,
+          "terminal": "Se",
+          "linked": true,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "Serial0/0/1",
+          "type": 8,
+          "terminal": "Se",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        }
+      ]
+    },
+    {
+      "name": "Power Distribution Device0",
+      "model": "Power Distribution Device",
+      "type": 45,
+      "x": 3834,
+      "y": 3900,
+      "ports": []
+    },
+    {
+      "name": "R_SER2",
+      "model": "2911",
+      "type": 0,
+      "x": 537,
+      "y": 345,
+      "ports": [
+        {
+          "name": "Vlan1",
+          "type": 17,
+          "terminal": "Vlan",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/0",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/1",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/2",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "Serial0/0/0",
+          "type": 8,
+          "terminal": "Se",
+          "linked": true,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "Serial0/0/1",
+          "type": 8,
+          "terminal": "Se",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "a": "R_SER1",
+      "pa": "Serial0/0/0",
+      "b": "R_SER2",
+      "pb": "Serial0/0/0",
+      "cable": "8106"
+    }
+  ]
+}

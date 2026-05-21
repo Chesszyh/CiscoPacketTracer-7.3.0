@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SESSION="${PT_BRIDGE_TMUX_SESSION:-pt730-bridge}"
+PORT="${PT_BRIDGE_PORT:-54321}"
+
+case "${1:-start}" in
+  start)
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+      echo "tmux session '$SESSION' already exists"
+      exit 0
+    fi
+    tmux new-session -d -s "$SESSION" -c "$ROOT" \
+      "PYTHONPATH='$ROOT/pt-reverse' python3 -u -c 'from pt730.bridge_server import PTCommandBridge; import time; b=PTCommandBridge(port=$PORT); b.start(); print(\"PT bridge listening on http://127.0.0.1:$PORT\", flush=True); [time.sleep(3600) for _ in iter(int, 1)]'"
+    echo "started PT bridge in tmux session '$SESSION'"
+    ;;
+  stop)
+    tmux kill-session -t "$SESSION" 2>/dev/null || true
+    echo "stopped tmux session '$SESSION'"
+    ;;
+  restart)
+    "$0" stop
+    "$0" start
+    ;;
+  status)
+    tmux ls 2>/dev/null | rg "^${SESSION}:" || true
+    ss -ltnp | rg ":${PORT}\\b" || true
+    curl -sS "http://127.0.0.1:${PORT}/status" || true
+    echo
+    ;;
+  bootstrap)
+    PYTHONPATH="$ROOT/pt-reverse" python3 - <<PY
+from pt730.bridge_server import PTCommandBridge
+print(PTCommandBridge(port=$PORT).bootstrap_script())
+PY
+    ;;
+  queue)
+    shift
+    if [ "$#" -eq 0 ]; then
+      echo "Usage: $0 queue '<javascript command>'" >&2
+      exit 2
+    fi
+    curl -sS -X POST --data-binary "$*" "http://127.0.0.1:${PORT}/queue"
+    echo
+    ;;
+  logs)
+    tmux capture-pane -pt "$SESSION" -S "${2:--80}" 2>/dev/null || true
+    ;;
+  *)
+    cat <<USAGE
+Usage: $0 [start|stop|restart|status|bootstrap|queue|logs]
+
+Examples:
+  $0 start
+  $0 bootstrap
+  $0 queue 'addDevice("R1","2911",200,200)'
+USAGE
+    exit 2
+    ;;
+esac

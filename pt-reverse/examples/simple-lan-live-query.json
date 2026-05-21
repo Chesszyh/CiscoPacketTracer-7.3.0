@@ -1,0 +1,319 @@
+{
+  "devices": [
+    {
+      "name": "R_DEMO",
+      "model": "2911",
+      "type": 0,
+      "x": 197,
+      "y": 345,
+      "ports": [
+        {
+          "name": "Vlan1",
+          "type": 17,
+          "terminal": "Vlan",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/0",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": true,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/1",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "GigabitEthernet0/2",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        }
+      ]
+    },
+    {
+      "name": "Power Distribution Device0",
+      "model": "Power Distribution Device",
+      "type": 45,
+      "x": 3834,
+      "y": 3900,
+      "ports": []
+    },
+    {
+      "name": "SW_DEMO",
+      "model": "2960-24TT",
+      "type": 1,
+      "x": 409,
+      "y": 348,
+      "ports": [
+        {
+          "name": "Vlan1",
+          "type": 17,
+          "terminal": "Vlan",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        },
+        {
+          "name": "FastEthernet0/1",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": true,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/2",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": true,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/3",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/4",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/5",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/6",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/7",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/8",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/9",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/10",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/11",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/12",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/13",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/14",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/15",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/16",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/17",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/18",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/19",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/20",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/21",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/22",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/23",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "FastEthernet0/24",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "GigabitEthernet0/1",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        },
+        {
+          "name": "GigabitEthernet0/2",
+          "type": 4,
+          "terminal": "Gig",
+          "linked": false,
+          "ip": "",
+          "mask": ""
+        }
+      ]
+    },
+    {
+      "name": "PC_DEMO",
+      "model": "PC-PT",
+      "type": 8,
+      "x": 637,
+      "y": 342,
+      "ports": [
+        {
+          "name": "FastEthernet0",
+          "type": 3,
+          "terminal": "Fa",
+          "linked": true,
+          "ip": "192.168.50.10",
+          "mask": "255.255.255.0"
+        },
+        {
+          "name": "Bluetooth",
+          "type": 47,
+          "terminal": "Bluetooth",
+          "linked": false,
+          "ip": "0.0.0.0",
+          "mask": "0.0.0.0"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "a": "R_DEMO",
+      "pa": "GigabitEthernet0/0",
+      "b": "SW_DEMO",
+      "pb": "FastEthernet0/1",
+      "cable": "8100"
+    },
+    {
+      "a": "SW_DEMO",
+      "pa": "FastEthernet0/2",
+      "b": "PC_DEMO",
+      "pb": "FastEthernet0",
+      "cable": "8100"
+    }
+  ]
+}

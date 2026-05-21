@@ -1,0 +1,187 @@
+{
+  "counts": {
+    "devices": 40,
+    "modules": 0,
+    "links": 40,
+    "pc_configs": 23,
+    "server_configs": 0,
+    "ios_configs": 0
+  },
+  "address_groups": [
+    {
+      "network": "172.16.1.0/26",
+      "gateway": "172.16.1.62",
+      "dns": "172.16.1.11",
+      "configured_hosts": 3,
+      "hosts": [
+        "WEB-SRV",
+        "DNS-SRV",
+        "DB-SRV"
+      ]
+    },
+    {
+      "network": "192.168.0.0/26",
+      "gateway": "192.168.0.62",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-OFFICE-1",
+        "PC-OFFICE-2"
+      ]
+    },
+    {
+      "network": "192.168.0.64/26",
+      "gateway": "192.168.0.126",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-TEACHING-1",
+        "PC-TEACHING-2"
+      ]
+    },
+    {
+      "network": "192.168.0.128/25",
+      "gateway": "192.168.0.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-RESEARCH-1",
+        "PC-RESEARCH-2"
+      ]
+    },
+    {
+      "network": "192.168.1.0/24",
+      "gateway": "192.168.1.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-GRADUATE-1",
+        "PC-GRADUATE-2"
+      ]
+    },
+    {
+      "network": "192.168.2.0/24",
+      "gateway": "192.168.2.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-LABA-1",
+        "PC-LABA-2"
+      ]
+    },
+    {
+      "network": "192.168.3.0/24",
+      "gateway": "192.168.3.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-LABB-1",
+        "PC-LABB-2"
+      ]
+    },
+    {
+      "network": "192.168.4.0/24",
+      "gateway": "192.168.4.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-LABC-1",
+        "PC-LABC-2"
+      ]
+    },
+    {
+      "network": "192.168.5.0/24",
+      "gateway": "192.168.5.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-LABD-1",
+        "PC-LABD-2"
+      ]
+    },
+    {
+      "network": "192.168.6.0/24",
+      "gateway": "192.168.6.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-LABE-1",
+        "PC-LABE-2"
+      ]
+    },
+    {
+      "network": "192.168.7.0/24",
+      "gateway": "192.168.7.254",
+      "dns": "172.16.1.11",
+      "configured_hosts": 2,
+      "hosts": [
+        "PC-LABF-1",
+        "PC-LABF-2"
+      ]
+    }
+  ],
+  "vlan_link_counts": {
+    "10": 4,
+    "20": 3,
+    "30": 3,
+    "40": 3,
+    "50": 3,
+    "60": 3,
+    "61": 3,
+    "62": 3,
+    "63": 3,
+    "64": 3,
+    "65": 3
+  },
+  "noted_links": [
+    {
+      "a": "MLS1",
+      "pa": "GigabitEthernet0/1",
+      "b": "MLS2",
+      "pb": "GigabitEthernet0/1",
+      "note": "10.10.12.0/30"
+    },
+    {
+      "a": "MLS2",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS3",
+      "pb": "GigabitEthernet0/1",
+      "note": "10.10.23.0/30"
+    },
+    {
+      "a": "MLS3",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS4",
+      "pb": "GigabitEthernet0/1",
+      "note": "10.10.34.0/30"
+    },
+    {
+      "a": "MLS4",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS5",
+      "pb": "GigabitEthernet0/1",
+      "note": "10.10.45.0/30"
+    },
+    {
+      "a": "MLS5",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS6",
+      "pb": "GigabitEthernet0/1",
+      "note": "10.10.56.0/30"
+    },
+    {
+      "a": "MLS6",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS1",
+      "pb": "GigabitEthernet0/2",
+      "note": "10.10.61.0/30"
+    }
+  ],
+  "server_service_counts": {
+    "dns": 0,
+    "ftp": 0,
+    "email": 0,
+    "dhcp": 0,
+    "time_logging": 0
+  }
+}

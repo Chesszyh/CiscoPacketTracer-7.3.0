@@ -1,0 +1,51 @@
+{
+  "devices": [
+    {
+      "name": "R_DEMO",
+      "category": "router",
+      "model": "2911",
+      "x": 220,
+      "y": 360
+    },
+    {
+      "name": "SW_DEMO",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 440,
+      "y": 360
+    },
+    {
+      "name": "PC_DEMO",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 660,
+      "y": 360
+    }
+  ],
+  "links": [
+    {
+      "a": "R_DEMO",
+      "pa": "GigabitEthernet0/0",
+      "b": "SW_DEMO",
+      "pb": "FastEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "a": "SW_DEMO",
+      "pa": "FastEthernet0/2",
+      "b": "PC_DEMO",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    }
+  ],
+  "pc_configs": [
+    {
+      "name": "PC_DEMO",
+      "port": "FastEthernet0",
+      "ip": "192.168.50.10",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.50.1",
+      "dns": "8.8.8.8"
+    }
+  ]
+}

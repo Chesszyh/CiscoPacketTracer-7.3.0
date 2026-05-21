@@ -1,0 +1,69 @@
+{
+  "devices": [
+    {
+      "name": "R_AUTO1",
+      "category": "router",
+      "model": "2911",
+      "x": 260,
+      "y": 360
+    },
+    {
+      "name": "R_AUTO2",
+      "category": "router",
+      "model": "2911",
+      "x": 560,
+      "y": 360
+    }
+  ],
+  "modules": [
+    {
+      "device": "R_AUTO1",
+      "slot": "0/0",
+      "model": "HWIC-2T"
+    },
+    {
+      "device": "R_AUTO2",
+      "slot": "0/0",
+      "model": "HWIC-2T"
+    }
+  ],
+  "links": [
+    {
+      "a": "R_AUTO1",
+      "pa": "Serial0/0/0",
+      "b": "R_AUTO2",
+      "pb": "Serial0/0/0",
+      "cable": "serial"
+    }
+  ],
+  "pc_configs": [],
+  "ios_configs": [
+    {
+      "device": "R_AUTO1",
+      "init_dialog": true,
+      "commands": [
+        "enable",
+        "configure terminal",
+        "hostname R_AUTO1",
+        "interface Serial0/0/0",
+        "ip address 10.10.10.1 255.255.255.252",
+        "clock rate 64000",
+        "no shutdown",
+        "end"
+      ]
+    },
+    {
+      "device": "R_AUTO2",
+      "init_dialog": true,
+      "commands": [
+        "enable",
+        "configure terminal",
+        "hostname R_AUTO2",
+        "interface Serial0/0/0",
+        "ip address 10.10.10.2 255.255.255.252",
+        "no shutdown",
+        "end"
+      ]
+    }
+  ]
+}

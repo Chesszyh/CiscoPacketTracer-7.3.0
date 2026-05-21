@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PLAN="$ROOT/pt-reverse/examples/server-dhcp-lan.json"
+SAVE_AS="$ROOT/pt-reverse/examples/server-dhcp-lan-live.pkt"
+APPLY=1
+NEW_FILE=0
+DHCP=0
+STRICT_SAFETY=0
+
+usage() {
+  cat <<'EOF'
+Usage: pt730-smoke [--new] [--dhcp] [--strict-safety] [--no-apply] [--plan PATH] [--save-as PATH]
+
+Runs the PT 7.3.0 bridge smoke test:
+  bridge status -> optional fileNew -> optional topology apply -> service inspect -> static IP
+  -> DNS ping -> FTP login/dir -> save-as.
+
+DHCP validation is deliberately opt-in because PT 7.3.0's DHCP client internals
+are unstable under Script Module automation in this Wine environment.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --new)
+      NEW_FILE=1
+      shift
+      ;;
+    --no-apply)
+      APPLY=0
+      shift
+      ;;
+    --dhcp)
+      DHCP=1
+      shift
+      ;;
+    --strict-safety)
+      STRICT_SAFETY=1
+      shift
+      ;;
+    --plan)
+      PLAN="$2"
+      shift 2
+      ;;
+    --save-as)
+      SAVE_AS="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "pt730-smoke: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "$NEW_FILE" -eq 1 && "$APPLY" -eq 0 ]]; then
+  echo "pt730-smoke: --new cannot be combined with --no-apply" >&2
+  exit 2
+fi
+
+echo "[1/7] bridge status"
+"$ROOT/pt-reverse/bin/pt730-bridge" status
+
+if [[ "$NEW_FILE" -eq 1 ]]; then
+  echo "[1b/7] new Packet Tracer file"
+  "$ROOT/pt-reverse/bin/pt730-app" --timeout 12 new
+fi
+
+echo "[2/7] app count"
+"$ROOT/pt-reverse/bin/pt730-app" --timeout 8 count
+
+if [[ "$APPLY" -eq 1 ]]; then
+  echo "[3/7] safety check and apply topology: $PLAN"
+  if [[ "$STRICT_SAFETY" -eq 1 ]]; then
+    "$ROOT/pt-reverse/bin/pt730-safety" plan "$PLAN" --strict >/dev/null
+  else
+    "$ROOT/pt-reverse/bin/pt730-safety" plan "$PLAN" >/dev/null
+  fi
+  "$ROOT/pt-reverse/bin/pt730-topo" --timeout 30 apply --replace --batch-size 1 "$PLAN" >/dev/null
+else
+  echo "[3/7] apply topology: skipped"
+fi
+
+echo "[4/7] inspect Server-PT services"
+"$ROOT/pt-reverse/bin/pt730-server" --timeout 12 inspect SRV_DHCP \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps(d["services"], indent=2, ensure_ascii=False))'
+
+if [[ "$DHCP" -eq 1 ]]; then
+  echo "[5/7] DHCP lease (experimental)"
+  "$ROOT/pt-reverse/bin/pt730-pc" dhcp PC_DHCP --renew --wait 15 --expect-network 192.168.200.0/24
+else
+  echo "[5/7] static client IP"
+  "$ROOT/pt-reverse/bin/pt730-pc" static PC_DHCP \
+    --ip 192.168.200.20 --mask 255.255.255.0 \
+    --gateway 192.168.200.1 --dns 192.168.200.10 >/dev/null
+fi
+
+echo "[6/7] DNS ping"
+"$ROOT/pt-reverse/bin/pt730-term" PC_DHCP --cmd 'ping dhcpdemo.local' --wait 8 --expect 'Lost = 0 \(0% loss\)' >/dev/null
+
+echo "[7/7] FTP login and save"
+"$ROOT/pt-reverse/bin/pt730-ftp" PC_DHCP 192.168.200.10 --username lab --password packet --cmd dir --expect 'asa842-k8.bin' >/dev/null
+"$ROOT/pt-reverse/bin/pt730-app" --timeout 20 save-as "$SAVE_AS"
+
+echo "pt730-smoke: OK"

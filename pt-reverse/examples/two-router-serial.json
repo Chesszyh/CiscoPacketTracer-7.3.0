@@ -1,0 +1,40 @@
+{
+  "devices": [
+    {
+      "name": "R_SER1",
+      "category": "router",
+      "model": "2911",
+      "x": 260,
+      "y": 360
+    },
+    {
+      "name": "R_SER2",
+      "category": "router",
+      "model": "2911",
+      "x": 560,
+      "y": 360
+    }
+  ],
+  "modules": [
+    {
+      "device": "R_SER1",
+      "slot": "0/0",
+      "model": "HWIC-2T"
+    },
+    {
+      "device": "R_SER2",
+      "slot": "0/0",
+      "model": "HWIC-2T"
+    }
+  ],
+  "links": [
+    {
+      "a": "R_SER1",
+      "pa": "Serial0/0/0",
+      "b": "R_SER2",
+      "pb": "Serial0/0/0",
+      "cable": "serial"
+    }
+  ],
+  "pc_configs": []
+}

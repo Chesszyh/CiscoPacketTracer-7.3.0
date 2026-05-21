@@ -1,0 +1,230 @@
+{
+  "devices": [
+    {
+      "name": "R1X",
+      "category": "router",
+      "model": "2911",
+      "x": 200,
+      "y": 620
+    },
+    {
+      "name": "SW1X",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 200,
+      "y": 470
+    },
+    {
+      "name": "PC11X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 155,
+      "y": 390
+    },
+    {
+      "name": "PC12X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 245,
+      "y": 390
+    },
+    {
+      "name": "R2X",
+      "category": "router",
+      "model": "2911",
+      "x": 520,
+      "y": 620
+    },
+    {
+      "name": "SW2X",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 690,
+      "y": 620
+    },
+    {
+      "name": "PC21X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 760,
+      "y": 580
+    },
+    {
+      "name": "PC22X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 760,
+      "y": 660
+    },
+    {
+      "name": "R3X",
+      "category": "router",
+      "model": "2911",
+      "x": 520,
+      "y": 900
+    },
+    {
+      "name": "SW3X",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 520,
+      "y": 1050
+    },
+    {
+      "name": "PC31X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 475,
+      "y": 1130
+    },
+    {
+      "name": "PC32X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 565,
+      "y": 1130
+    },
+    {
+      "name": "R4X",
+      "category": "router",
+      "model": "2911",
+      "x": 200,
+      "y": 900
+    },
+    {
+      "name": "SW4X",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 30,
+      "y": 900
+    },
+    {
+      "name": "PC41X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -40,
+      "y": 860
+    },
+    {
+      "name": "PC42X",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -40,
+      "y": 940
+    }
+  ],
+  "links": [
+    {
+      "a": "R1X",
+      "pa": "GigabitEthernet0/2",
+      "b": "SW1X",
+      "pb": "FastEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "a": "SW1X",
+      "pa": "FastEthernet0/2",
+      "b": "PC11X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "SW1X",
+      "pa": "FastEthernet0/3",
+      "b": "PC12X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "R2X",
+      "pa": "GigabitEthernet0/2",
+      "b": "SW2X",
+      "pb": "FastEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "a": "SW2X",
+      "pa": "FastEthernet0/2",
+      "b": "PC21X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "SW2X",
+      "pa": "FastEthernet0/3",
+      "b": "PC22X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "R3X",
+      "pa": "GigabitEthernet0/2",
+      "b": "SW3X",
+      "pb": "FastEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "a": "SW3X",
+      "pa": "FastEthernet0/2",
+      "b": "PC31X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "SW3X",
+      "pa": "FastEthernet0/3",
+      "b": "PC32X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "R4X",
+      "pa": "GigabitEthernet0/2",
+      "b": "SW4X",
+      "pb": "FastEthernet0/1",
+      "cable": "straight"
+    },
+    {
+      "a": "SW4X",
+      "pa": "FastEthernet0/2",
+      "b": "PC41X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "SW4X",
+      "pa": "FastEthernet0/3",
+      "b": "PC42X",
+      "pb": "FastEthernet0",
+      "cable": "straight"
+    },
+    {
+      "a": "R1X",
+      "pa": "GigabitEthernet0/0",
+      "b": "R2X",
+      "pb": "GigabitEthernet0/0",
+      "cable": "cross"
+    },
+    {
+      "a": "R2X",
+      "pa": "GigabitEthernet0/1",
+      "b": "R3X",
+      "pb": "GigabitEthernet0/0",
+      "cable": "cross"
+    },
+    {
+      "a": "R3X",
+      "pa": "GigabitEthernet0/1",
+      "b": "R4X",
+      "pb": "GigabitEthernet0/0",
+      "cable": "cross"
+    },
+    {
+      "a": "R4X",
+      "pa": "GigabitEthernet0/1",
+      "b": "R1X",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross"
+    }
+  ]
+}

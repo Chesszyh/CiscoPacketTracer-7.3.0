@@ -1,0 +1,792 @@
+{
+  "devices": [
+    {
+      "name": "MLS1",
+      "category": "multilayer_switch",
+      "model": "3560-24PS",
+      "x": 420,
+      "y": 230
+    },
+    {
+      "name": "MLS2",
+      "category": "multilayer_switch",
+      "model": "3560-24PS",
+      "x": 760,
+      "y": 380
+    },
+    {
+      "name": "MLS3",
+      "category": "multilayer_switch",
+      "model": "3560-24PS",
+      "x": 760,
+      "y": 720
+    },
+    {
+      "name": "MLS4",
+      "category": "multilayer_switch",
+      "model": "3560-24PS",
+      "x": 420,
+      "y": 890
+    },
+    {
+      "name": "MLS5",
+      "category": "multilayer_switch",
+      "model": "3560-24PS",
+      "x": 80,
+      "y": 720
+    },
+    {
+      "name": "MLS6",
+      "category": "multilayer_switch",
+      "model": "3560-24PS",
+      "x": 80,
+      "y": 380
+    },
+    {
+      "name": "SW-SRV",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 420,
+      "y": 70
+    },
+    {
+      "name": "WEB-SRV",
+      "category": "server",
+      "model": "Server-PT",
+      "x": 310,
+      "y": -50
+    },
+    {
+      "name": "DNS-SRV",
+      "category": "server",
+      "model": "Server-PT",
+      "x": 420,
+      "y": -50
+    },
+    {
+      "name": "DB-SRV",
+      "category": "server",
+      "model": "Server-PT",
+      "x": 530,
+      "y": -50
+    },
+    {
+      "name": "SW-OFFICE",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 650,
+      "y": 115
+    },
+    {
+      "name": "PC-OFFICE-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 605,
+      "y": 235
+    },
+    {
+      "name": "PC-OFFICE-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 700,
+      "y": 235
+    },
+    {
+      "name": "SW-TEACH",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 985,
+      "y": 300
+    },
+    {
+      "name": "PC-TEACHING-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 940,
+      "y": 420
+    },
+    {
+      "name": "PC-TEACHING-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 1035,
+      "y": 420
+    },
+    {
+      "name": "SW-RESEARCH",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 985,
+      "y": 500
+    },
+    {
+      "name": "PC-RESEARCH-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 940,
+      "y": 620
+    },
+    {
+      "name": "PC-RESEARCH-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 1035,
+      "y": 620
+    },
+    {
+      "name": "SW-GRAD",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 985,
+      "y": 780
+    },
+    {
+      "name": "PC-GRADUATE-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 940,
+      "y": 900
+    },
+    {
+      "name": "PC-GRADUATE-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 1035,
+      "y": 900
+    },
+    {
+      "name": "SW-LAB-A",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 650,
+      "y": 1040
+    },
+    {
+      "name": "PC-LABA-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 605,
+      "y": 1160
+    },
+    {
+      "name": "PC-LABA-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 700,
+      "y": 1160
+    },
+    {
+      "name": "SW-LAB-B",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 420,
+      "y": 1080
+    },
+    {
+      "name": "PC-LABB-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 375,
+      "y": 1200
+    },
+    {
+      "name": "PC-LABB-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 470,
+      "y": 1200
+    },
+    {
+      "name": "SW-LAB-C",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": -155,
+      "y": 780
+    },
+    {
+      "name": "PC-LABC-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -200,
+      "y": 900
+    },
+    {
+      "name": "PC-LABC-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -105,
+      "y": 900
+    },
+    {
+      "name": "SW-LAB-D",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": -155,
+      "y": 610
+    },
+    {
+      "name": "PC-LABD-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -200,
+      "y": 730
+    },
+    {
+      "name": "PC-LABD-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -105,
+      "y": 730
+    },
+    {
+      "name": "SW-LAB-E",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": -155,
+      "y": 300
+    },
+    {
+      "name": "PC-LABE-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -200,
+      "y": 420
+    },
+    {
+      "name": "PC-LABE-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": -105,
+      "y": 420
+    },
+    {
+      "name": "SW-LAB-F",
+      "category": "switch",
+      "model": "2960-24TT",
+      "x": 80,
+      "y": 120
+    },
+    {
+      "name": "PC-LABF-1",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 35,
+      "y": 240
+    },
+    {
+      "name": "PC-LABF-2",
+      "category": "pc",
+      "model": "PC-PT",
+      "x": 130,
+      "y": 240
+    }
+  ],
+  "links": [
+    {
+      "a": "MLS1",
+      "pa": "GigabitEthernet0/1",
+      "b": "MLS2",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "note": "10.10.12.0/30"
+    },
+    {
+      "a": "MLS2",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS3",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "note": "10.10.23.0/30"
+    },
+    {
+      "a": "MLS3",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS4",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "note": "10.10.34.0/30"
+    },
+    {
+      "a": "MLS4",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS5",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "note": "10.10.45.0/30"
+    },
+    {
+      "a": "MLS5",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS6",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "note": "10.10.56.0/30"
+    },
+    {
+      "a": "MLS6",
+      "pa": "GigabitEthernet0/2",
+      "b": "MLS1",
+      "pb": "GigabitEthernet0/2",
+      "cable": "cross",
+      "note": "10.10.61.0/30"
+    },
+    {
+      "a": "MLS1",
+      "pa": "FastEthernet0/1",
+      "b": "SW-SRV",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 10
+    },
+    {
+      "a": "SW-SRV",
+      "pa": "FastEthernet0/1",
+      "b": "WEB-SRV",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 10
+    },
+    {
+      "a": "SW-SRV",
+      "pa": "FastEthernet0/2",
+      "b": "DNS-SRV",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 10
+    },
+    {
+      "a": "SW-SRV",
+      "pa": "FastEthernet0/3",
+      "b": "DB-SRV",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 10
+    },
+    {
+      "a": "MLS1",
+      "pa": "FastEthernet0/2",
+      "b": "SW-OFFICE",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 20
+    },
+    {
+      "a": "SW-OFFICE",
+      "pa": "FastEthernet0/1",
+      "b": "PC-OFFICE-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 20
+    },
+    {
+      "a": "SW-OFFICE",
+      "pa": "FastEthernet0/2",
+      "b": "PC-OFFICE-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 20
+    },
+    {
+      "a": "MLS2",
+      "pa": "FastEthernet0/1",
+      "b": "SW-TEACH",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 30
+    },
+    {
+      "a": "SW-TEACH",
+      "pa": "FastEthernet0/1",
+      "b": "PC-TEACHING-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 30
+    },
+    {
+      "a": "SW-TEACH",
+      "pa": "FastEthernet0/2",
+      "b": "PC-TEACHING-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 30
+    },
+    {
+      "a": "MLS2",
+      "pa": "FastEthernet0/2",
+      "b": "SW-RESEARCH",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 40
+    },
+    {
+      "a": "SW-RESEARCH",
+      "pa": "FastEthernet0/1",
+      "b": "PC-RESEARCH-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 40
+    },
+    {
+      "a": "SW-RESEARCH",
+      "pa": "FastEthernet0/2",
+      "b": "PC-RESEARCH-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 40
+    },
+    {
+      "a": "MLS3",
+      "pa": "FastEthernet0/1",
+      "b": "SW-GRAD",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 50
+    },
+    {
+      "a": "SW-GRAD",
+      "pa": "FastEthernet0/1",
+      "b": "PC-GRADUATE-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 50
+    },
+    {
+      "a": "SW-GRAD",
+      "pa": "FastEthernet0/2",
+      "b": "PC-GRADUATE-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 50
+    },
+    {
+      "a": "MLS4",
+      "pa": "FastEthernet0/1",
+      "b": "SW-LAB-A",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 60
+    },
+    {
+      "a": "SW-LAB-A",
+      "pa": "FastEthernet0/1",
+      "b": "PC-LABA-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 60
+    },
+    {
+      "a": "SW-LAB-A",
+      "pa": "FastEthernet0/2",
+      "b": "PC-LABA-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 60
+    },
+    {
+      "a": "MLS4",
+      "pa": "FastEthernet0/2",
+      "b": "SW-LAB-B",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 61
+    },
+    {
+      "a": "SW-LAB-B",
+      "pa": "FastEthernet0/1",
+      "b": "PC-LABB-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 61
+    },
+    {
+      "a": "SW-LAB-B",
+      "pa": "FastEthernet0/2",
+      "b": "PC-LABB-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 61
+    },
+    {
+      "a": "MLS5",
+      "pa": "FastEthernet0/1",
+      "b": "SW-LAB-C",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 62
+    },
+    {
+      "a": "SW-LAB-C",
+      "pa": "FastEthernet0/1",
+      "b": "PC-LABC-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 62
+    },
+    {
+      "a": "SW-LAB-C",
+      "pa": "FastEthernet0/2",
+      "b": "PC-LABC-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 62
+    },
+    {
+      "a": "MLS5",
+      "pa": "FastEthernet0/2",
+      "b": "SW-LAB-D",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 63
+    },
+    {
+      "a": "SW-LAB-D",
+      "pa": "FastEthernet0/1",
+      "b": "PC-LABD-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 63
+    },
+    {
+      "a": "SW-LAB-D",
+      "pa": "FastEthernet0/2",
+      "b": "PC-LABD-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 63
+    },
+    {
+      "a": "MLS6",
+      "pa": "FastEthernet0/1",
+      "b": "SW-LAB-E",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 64
+    },
+    {
+      "a": "SW-LAB-E",
+      "pa": "FastEthernet0/1",
+      "b": "PC-LABE-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 64
+    },
+    {
+      "a": "SW-LAB-E",
+      "pa": "FastEthernet0/2",
+      "b": "PC-LABE-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 64
+    },
+    {
+      "a": "MLS6",
+      "pa": "FastEthernet0/2",
+      "b": "SW-LAB-F",
+      "pb": "GigabitEthernet0/1",
+      "cable": "cross",
+      "vlan": 65
+    },
+    {
+      "a": "SW-LAB-F",
+      "pa": "FastEthernet0/1",
+      "b": "PC-LABF-1",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 65
+    },
+    {
+      "a": "SW-LAB-F",
+      "pa": "FastEthernet0/2",
+      "b": "PC-LABF-2",
+      "pb": "FastEthernet0",
+      "cable": "straight",
+      "vlan": 65
+    }
+  ],
+  "pc_configs": [
+    {
+      "name": "WEB-SRV",
+      "port": "FastEthernet0",
+      "ip": "172.16.1.10",
+      "mask": "255.255.255.192",
+      "gateway": "172.16.1.62",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "DNS-SRV",
+      "port": "FastEthernet0",
+      "ip": "172.16.1.11",
+      "mask": "255.255.255.192",
+      "gateway": "172.16.1.62",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "DB-SRV",
+      "port": "FastEthernet0",
+      "ip": "172.16.1.12",
+      "mask": "255.255.255.192",
+      "gateway": "172.16.1.62",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-OFFICE-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.0.1",
+      "mask": "255.255.255.192",
+      "gateway": "192.168.0.62",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-OFFICE-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.0.2",
+      "mask": "255.255.255.192",
+      "gateway": "192.168.0.62",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-TEACHING-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.0.65",
+      "mask": "255.255.255.192",
+      "gateway": "192.168.0.126",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-TEACHING-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.0.66",
+      "mask": "255.255.255.192",
+      "gateway": "192.168.0.126",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-RESEARCH-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.0.129",
+      "mask": "255.255.255.128",
+      "gateway": "192.168.0.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-RESEARCH-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.0.130",
+      "mask": "255.255.255.128",
+      "gateway": "192.168.0.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-GRADUATE-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.1.1",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.1.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-GRADUATE-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.1.2",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.1.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABA-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.2.1",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.2.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABA-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.2.2",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.2.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABB-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.3.1",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.3.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABB-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.3.2",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.3.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABC-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.4.1",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.4.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABC-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.4.2",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.4.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABD-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.5.1",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.5.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABD-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.5.2",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.5.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABE-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.6.1",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.6.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABE-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.6.2",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.6.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABF-1",
+      "port": "FastEthernet0",
+      "ip": "192.168.7.1",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.7.254",
+      "dns": "172.16.1.11"
+    },
+    {
+      "name": "PC-LABF-2",
+      "port": "FastEthernet0",
+      "ip": "192.168.7.2",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.7.254",
+      "dns": "172.16.1.11"
+    }
+  ]
+}

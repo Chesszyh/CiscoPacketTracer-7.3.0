@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Send IOS CLI commands to a Packet Tracer router/switch from the terminal."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+EVAL_BIN = ROOT / "pt-reverse" / "bin" / "pt730-eval"
+
+
+def run_eval(expr: str, *, timeout: float) -> str:
+    one_line_expr = " ".join(line.strip() for line in expr.splitlines() if line.strip())
+    proc = subprocess.run(
+        [str(EVAL_BIN), "--timeout", str(timeout), "--expr", one_line_expr],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if proc.returncode != 0:
+        msg = proc.stderr.strip() or proc.stdout.strip() or f"pt730-eval exited {proc.returncode}"
+        raise RuntimeError(msg)
+    return proc.stdout
+
+
+def load_commands(args: argparse.Namespace) -> list[str]:
+    commands: list[str] = []
+    if args.file:
+        text = args.file.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not args.keep_comments and (not stripped or stripped.startswith("!")):
+                continue
+            commands.append(line.rstrip())
+    commands.extend(args.cmd or [])
+    if not commands and not args.init_dialog:
+        raise ValueError("provide --file, --cmd, or --init-dialog")
+    return commands
+
+
+def build_js(device: str, commands: list[str], *, init_dialog: bool, save: bool) -> str:
+    payload = {
+        "device": device,
+        "commands": commands,
+        "initDialog": init_dialog,
+        "save": save,
+    }
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    return f"""
+(function(){{
+  var payload = {payload_json};
+  var device = ipc.network().getDevice(String(payload.device));
+  if (!device) throw new Error("device not found: " + payload.device);
+  var cli = device.getCommandLine ? device.getCommandLine() : null;
+  if (!cli || typeof cli.enterCommand !== "function") {{
+    throw new Error("device has no script-accessible IOS command line: " + payload.device);
+  }}
+  if (payload.initDialog) {{
+    cli.enterCommand("no");
+    cli.enterCommand("");
+  }}
+  for (var i = 0; i < payload.commands.length; i++) {{
+    cli.enterCommand(String(payload.commands[i]));
+  }}
+  if (payload.save) {{
+    cli.enterCommand("end");
+    cli.enterCommand("write memory");
+  }}
+  var out = cli.getOutput ? String(cli.getOutput()) : "";
+  var prompt = cli.getPrompt ? String(cli.getPrompt()) : "";
+  return JSON.stringify({{device: String(payload.device), prompt: prompt, output: out}});
+}})()
+"""
+
+
+def print_output(raw: str, mode: str, tail_lines: int) -> None:
+    data = json.loads(raw)
+    output = str(data.get("output", ""))
+    prompt = str(data.get("prompt", ""))
+    if mode == "none":
+        print(prompt)
+        return
+    if mode == "tail":
+        lines = output.splitlines()
+        print("\n".join(lines[-tail_lines:]))
+        if prompt and (not lines or lines[-1] != prompt):
+            print(prompt)
+        return
+    print(output)
+    if prompt and not output.rstrip().endswith(prompt):
+        print(prompt)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("device", help="Packet Tracer device name, e.g. R1")
+    parser.add_argument("--timeout", type=float, default=20.0)
+    parser.add_argument("--cmd", action="append", help="IOS command to send; may be repeated")
+    parser.add_argument("--file", type=Path, help="read IOS commands from a text file")
+    parser.add_argument("--init-dialog", action="store_true", help='send "no" and Enter for a fresh router setup dialog')
+    parser.add_argument("--save", action="store_true", help='send "end" and "write memory" after commands')
+    parser.add_argument("--keep-comments", action="store_true", help="send blank/comment lines from --file instead of filtering them")
+    parser.add_argument("--output", choices=["tail", "full", "none"], default="tail")
+    parser.add_argument("--tail-lines", type=int, default=80)
+    args = parser.parse_args(argv)
+
+    try:
+        commands = load_commands(args)
+        raw = run_eval(
+            build_js(args.device, commands, init_dialog=args.init_dialog, save=args.save),
+            timeout=args.timeout,
+        )
+        print_output(raw, args.output, args.tail_lines)
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError, subprocess.SubprocessError) as exc:
+        print(f"pt730-ios: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

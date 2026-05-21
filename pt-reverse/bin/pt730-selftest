@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+BIN="$ROOT/pt-reverse/bin"
+LIVE=0
+
+usage() {
+  cat <<'EOF'
+Usage: pt730-selftest [--live]
+
+Runs the offline PT 7.3.0 automation self-test:
+  shell syntax -> Python compile -> JSON parse -> safety policy checks.
+
+By default this does not contact live Packet Tracer.  Pass --live to add the
+safe bridge status/count probe after the offline checks pass.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --live)
+      LIVE=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "pt730-selftest: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+tmp="$(mktemp -d)"
+cleanup() {
+  rm -rf "$tmp"
+  find "$ROOT/pt-reverse" -path "$ROOT/pt-reverse/upstream" -prune -o -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+  find "$ROOT/pt-reverse" -path "$ROOT/pt-reverse/upstream" -prune -o -type f -name '*.pyc' -delete 2>/dev/null || true
+}
+trap cleanup EXIT
+
+ok() {
+  printf '[ok] %s\n' "$1"
+}
+
+expect_fail() {
+  local label="$1"
+  shift
+  if "$@" >"$tmp/${label}.out" 2>"$tmp/${label}.err"; then
+    echo "pt730-selftest: expected failure but command passed: $label" >&2
+    cat "$tmp/${label}.out" "$tmp/${label}.err" >&2
+    exit 1
+  fi
+}
+
+for file in "$BIN"/pt730-*; do
+  first_line="$(head -n 1 "$file")"
+  case "$first_line" in
+    *bash*)
+      bash -n "$file"
+      ;;
+    *python*)
+      python3 -m py_compile "$file"
+      ;;
+  esac
+done
+ok "launcher syntax"
+
+python3 -m py_compile "$ROOT"/pt-reverse/pt730/*.py
+ok "python modules compile"
+
+while IFS= read -r json_file; do
+  python3 -m json.tool "$json_file" >/dev/null
+done < <(find "$ROOT/pt-reverse/examples" "$ROOT/pt-reverse/course-design" -maxdepth 1 -type f -name '*.json' | sort)
+ok "json files parse"
+
+"$BIN/pt730-safety" plan "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-safety" plan "$ROOT/pt-reverse/examples/server-dhcp-lan.json" >/dev/null
+expect_fail server-dhcp-strict "$BIN/pt730-safety" plan "$ROOT/pt-reverse/examples/server-dhcp-lan.json" --strict
+printf '%s' '{"devices":[{"name":"BAD","model":"3560-24PS"}]}' >"$tmp/risky-plan.json"
+expect_fail risky-plan "$BIN/pt730-safety" plan "$tmp/risky-plan.json"
+"$BIN/pt730-safety" js 'ipc.network().getDeviceCount()' >/dev/null
+expect_fail risky-js "$BIN/pt730-safety" js 'x.getProcess("DhcpClientProcess").dhcpRun("FastEthernet0")'
+expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientProcess").dhcpRun("FastEthernet0")'
+"$BIN/pt730-topo" --timeout 1 apply --dry-run "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" mermaid "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" summary "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" course-audit "$ROOT/pt-reverse/course-design/college-network-topology-pt73-safe.json" >/dev/null
+"$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" --output "$tmp/simple-lan.md"
+test -s "$tmp/simple-lan.md"
+ok "safety policy checks"
+
+if [[ "$LIVE" -eq 1 ]]; then
+  "$BIN/pt730-bridge" status
+  "$BIN/pt730-app" --timeout 8 count
+  ok "live bridge count"
+fi
+
+echo "pt730-selftest: OK"

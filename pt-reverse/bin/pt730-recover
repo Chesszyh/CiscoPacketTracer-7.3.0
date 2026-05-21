@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WAIT=45
+NOTIFY=0
+
+usage() {
+  cat <<'EOF'
+Usage: pt730-recover [--wait SECONDS] [--notify]
+
+Restarts the PT 7.3.0 tmux launcher and localhost bridge, then waits until the
+Script Module bridge reconnects and `pt730-app count` returns. This intentionally
+does not run topology, DHCP, simulation, or arbitrary eval probes.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --wait)
+      WAIT="$2"
+      shift 2
+      ;;
+    --notify)
+      NOTIFY=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "pt730-recover: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+"$ROOT/pt-reverse/bin/pt730-bridge" restart
+"$ROOT/pt-reverse/bin/pt730-launch" restart
+
+deadline=$((SECONDS + WAIT))
+last_status=""
+while (( SECONDS < deadline )); do
+  last_status="$("$ROOT/pt-reverse/bin/pt730-bridge" status 2>&1 || true)"
+  if grep -q '"connected": true' <<<"$last_status"; then
+    if count="$("$ROOT/pt-reverse/bin/pt730-app" --timeout 8 count 2>&1)"; then
+      echo "$last_status"
+      echo "$count"
+      if [[ "$NOTIFY" -eq 1 ]]; then
+        notify-send -u low "Packet Tracer recovered" "$count" 2>/dev/null || true
+      fi
+      exit 0
+    fi
+  fi
+  sleep 2
+done
+
+echo "$last_status"
+echo "pt730-recover: timed out waiting for Script Module bridge; run PT-MCP Builder bootstrap if connected:false persists" >&2
+if [[ "$NOTIFY" -eq 1 ]]; then
+  notify-send -u normal "Packet Tracer recovery needs bootstrap" "Run the PT-MCP Builder bootstrap in Packet Tracer." 2>/dev/null || true
+fi
+exit 1

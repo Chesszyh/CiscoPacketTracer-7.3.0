@@ -1,0 +1,97 @@
+{
+  "removed": [
+    {
+      "name": "R_AUTO2",
+      "status": "missing"
+    },
+    {
+      "name": "R_AUTO1",
+      "status": "missing"
+    }
+  ],
+  "device_batches": [
+    {
+      "devices": [
+        {
+          "name": "R_AUTO1",
+          "assigned": "Router0",
+          "model": "2911",
+          "status": "added"
+        },
+        {
+          "name": "R_AUTO2",
+          "assigned": "Router1",
+          "model": "2911",
+          "status": "added"
+        }
+      ],
+      "modules": [],
+      "links": [],
+      "pc_configs": [],
+      "ios_configs": []
+    }
+  ],
+  "module_batches": [
+    {
+      "devices": [],
+      "modules": [
+        {
+          "device": "R_AUTO1",
+          "slot": "0/0",
+          "model": "HWIC-2T",
+          "status": "added"
+        },
+        {
+          "device": "R_AUTO2",
+          "slot": "0/0",
+          "model": "HWIC-2T",
+          "status": "added"
+        }
+      ],
+      "links": [],
+      "pc_configs": [],
+      "ios_configs": []
+    }
+  ],
+  "link_batches": [
+    {
+      "devices": [],
+      "modules": [],
+      "links": [
+        {
+          "a": "R_AUTO1",
+          "pa": "Serial0/0/0",
+          "b": "R_AUTO2",
+          "pb": "Serial0/0/0",
+          "cable": "8106",
+          "status": "added"
+        }
+      ],
+      "pc_configs": [],
+      "ios_configs": []
+    }
+  ],
+  "pc_config_batches": [],
+  "ios_config_batches": [
+    {
+      "devices": [],
+      "modules": [],
+      "links": [],
+      "pc_configs": [],
+      "ios_configs": [
+        {
+          "name": "R_AUTO1",
+          "commands": 8,
+          "prompt": "R_AUTO1#",
+          "status": "configured"
+        },
+        {
+          "name": "R_AUTO2",
+          "commands": 7,
+          "prompt": "R_AUTO2#",
+          "status": "configured"
+        }
+      ]
+    }
+  ]
+}

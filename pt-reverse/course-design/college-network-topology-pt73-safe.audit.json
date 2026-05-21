@@ -1,0 +1,178 @@
+{
+  "kind": "college-network-course-audit",
+  "ok": true,
+  "errors": [],
+  "warnings": [],
+  "checks": {
+    "required_vlans": {
+      "expected": [
+        "10",
+        "20",
+        "30",
+        "40",
+        "50",
+        "60",
+        "61",
+        "62",
+        "63",
+        "64",
+        "65"
+      ],
+      "present": [
+        "10",
+        "20",
+        "30",
+        "40",
+        "50",
+        "60",
+        "61",
+        "62",
+        "63",
+        "64",
+        "65"
+      ],
+      "missing": [],
+      "link_counts": {
+        "10": 4,
+        "20": 3,
+        "30": 3,
+        "40": 3,
+        "50": 3,
+        "60": 3,
+        "61": 3,
+        "62": 3,
+        "63": 3,
+        "64": 3,
+        "65": 3
+      }
+    },
+    "server_address_space": {
+      "network": "172.16.1.0/26",
+      "gateway": "172.16.1.62",
+      "representative_groups": [
+        {
+          "network": "172.16.1.0/26",
+          "gateway": "172.16.1.62",
+          "dns": "172.16.1.11",
+          "configured_hosts": 3,
+          "hosts": [
+            "WEB-SRV",
+            "DNS-SRV",
+            "DB-SRV"
+          ]
+        }
+      ]
+    },
+    "pc_address_space": {
+      "network": "192.168.0.0/21",
+      "representative_groups": [
+        {
+          "network": "192.168.0.0/26",
+          "gateway": "192.168.0.62",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-OFFICE-1",
+            "PC-OFFICE-2"
+          ]
+        },
+        {
+          "network": "192.168.0.64/26",
+          "gateway": "192.168.0.126",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-TEACHING-1",
+            "PC-TEACHING-2"
+          ]
+        },
+        {
+          "network": "192.168.0.128/25",
+          "gateway": "192.168.0.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-RESEARCH-1",
+            "PC-RESEARCH-2"
+          ]
+        },
+        {
+          "network": "192.168.1.0/24",
+          "gateway": "192.168.1.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-GRADUATE-1",
+            "PC-GRADUATE-2"
+          ]
+        },
+        {
+          "network": "192.168.2.0/24",
+          "gateway": "192.168.2.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-LABA-1",
+            "PC-LABA-2"
+          ]
+        },
+        {
+          "network": "192.168.3.0/24",
+          "gateway": "192.168.3.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-LABB-1",
+            "PC-LABB-2"
+          ]
+        },
+        {
+          "network": "192.168.4.0/24",
+          "gateway": "192.168.4.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-LABC-1",
+            "PC-LABC-2"
+          ]
+        },
+        {
+          "network": "192.168.5.0/24",
+          "gateway": "192.168.5.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-LABD-1",
+            "PC-LABD-2"
+          ]
+        },
+        {
+          "network": "192.168.6.0/24",
+          "gateway": "192.168.6.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-LABE-1",
+            "PC-LABE-2"
+          ]
+        },
+        {
+          "network": "192.168.7.0/24",
+          "gateway": "192.168.7.254",
+          "dns": "172.16.1.11",
+          "configured_hosts": 2,
+          "hosts": [
+            "PC-LABF-1",
+            "PC-LABF-2"
+          ]
+        }
+      ]
+    },
+    "representative_hosts": {
+      "configured": 23,
+      "expected_servers": 50,
+      "expected_pcs": 1900,
+      "note": "Packet Tracer plan is representative; full capacity is documented in course-design Markdown."
+    }
+  }
+}

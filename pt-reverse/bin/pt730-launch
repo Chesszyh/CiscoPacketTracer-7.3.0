@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PT_BIN="$ROOT/Cisco Packet Tracer 7.3.0/bin"
+SESSION="${PT_TMUX_SESSION:-pt730}"
+IPC_PORT="${PT_IPC_PORT:-39000}"
+DEVTOOLS_PORT="${PT_DEVTOOLS_PORT:-9223}"
+TMUX_TARGET="=${SESSION}"
+
+case "${1:-start}" in
+  start)
+    if tmux has-session -t "$TMUX_TARGET" 2>/dev/null; then
+      echo "tmux session '$SESSION' already exists"
+      exit 0
+    fi
+    tmux new-session -d -s "$SESSION" -c "$PT_BIN" \
+      "env WINEDEBUG=-all QTWEBENGINE_REMOTE_DEBUGGING=$DEVTOOLS_PORT wine PacketTracer7.exe --pt-ipc-port $IPC_PORT"
+    echo "started Packet Tracer in tmux session '$SESSION'"
+    ;;
+  stop)
+    tmux kill-session -t "$TMUX_TARGET" 2>/dev/null || true
+    echo "stopped tmux session '$SESSION'"
+    ;;
+  restart)
+    "$0" stop
+    "$0" start
+    ;;
+  status)
+    tmux ls 2>/dev/null | rg "^${SESSION}:" || true
+    ss -ltnp | rg "($IPC_PORT|38000|$DEVTOOLS_PORT)" || true
+    ;;
+  logs)
+    tmux capture-pane -pt "$TMUX_TARGET" -S "${2:--120}" 2>/dev/null || true
+    ;;
+  *)
+    cat <<USAGE
+Usage: $0 [start|stop|restart|status|logs]
+
+Environment:
+  PT_TMUX_SESSION   tmux session name, default: pt730
+  PT_IPC_PORT       Packet Tracer IPC/PTMP port, default: 39000
+  PT_DEVTOOLS_PORT  QtWebEngine DevTools port, default: 9223
+USAGE
+    exit 2
+    ;;
+esac

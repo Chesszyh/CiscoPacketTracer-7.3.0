@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Run an IOS ping from a Packet Tracer device and parse the result."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+IOS_BIN = ROOT / "pt-reverse" / "bin" / "pt730-ios"
+
+
+def run_ios(device: str, args: list[str], timeout: float) -> tuple[int, str, str]:
+    proc = subprocess.run(
+        [str(IOS_BIN), device, "--timeout", str(timeout), *args],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("device")
+    parser.add_argument("target")
+    parser.add_argument("--timeout", type=float, default=15.0)
+    parser.add_argument("--wait", type=float, default=3.0, help="seconds to wait for ping output")
+    parser.add_argument("--expect", type=int, default=100, help="minimum expected success percent")
+    parser.add_argument("--tail-lines", type=int, default=30)
+    args = parser.parse_args(argv)
+
+    rc, stdout, stderr = run_ios(args.device, ["--cmd", f"ping {args.target}", "--output", "none"], args.timeout)
+    if rc != 0:
+        print(stderr.strip() or stdout.strip(), file=sys.stderr)
+        return rc
+    time.sleep(args.wait)
+    rc, stdout, stderr = run_ios(
+        args.device,
+        ["--cmd", "", "--output", "tail", "--tail-lines", str(args.tail_lines)],
+        args.timeout,
+    )
+    if rc != 0:
+        print(stderr.strip() or stdout.strip(), file=sys.stderr)
+        return rc
+    print(stdout.rstrip())
+    match = re.search(r"Success rate is\s+(\d+)\s+percent", stdout)
+    if not match:
+        print("pt730-ping: could not parse ping success rate", file=sys.stderr)
+        return 1
+    percent = int(match.group(1))
+    if percent < args.expect:
+        print(f"pt730-ping: success rate {percent}% below expected {args.expect}%", file=sys.stderr)
+        return 1
+    print(f"pt730-ping: success rate {percent}%")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

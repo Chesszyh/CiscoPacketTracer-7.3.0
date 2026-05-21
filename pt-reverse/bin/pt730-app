@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Application-level Packet Tracer 7.3.0 CLI helpers.
+
+This wraps safe appWindow operations through pt730-eval.  Path-sensitive
+operations default to an ASCII temporary filename inside Packet Tracer's own
+working directory, then copy the file on the Linux side.  That avoids the PT
+7.3.0/Wine crashes and hangs seen with non-ASCII workspace paths.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+PT_BIN = ROOT / "Cisco Packet Tracer 7.3.0" / "bin"
+EVAL_BIN = ROOT / "pt-reverse" / "bin" / "pt730-eval"
+
+
+def run_eval(expr: str, *, timeout: float) -> str:
+    proc = subprocess.run(
+        [str(EVAL_BIN), "--timeout", str(timeout), "--expr", expr],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if proc.returncode != 0:
+        msg = proc.stderr.strip() or proc.stdout.strip() or f"pt730-eval exited {proc.returncode}"
+        raise RuntimeError(msg)
+    return proc.stdout.strip()
+
+
+def wine_path(path: Path) -> str:
+    resolved = path.resolve()
+    return "Z:" + resolved.as_posix()
+
+
+def windows_path_to_linux(path: str) -> Path:
+    normalized = path.replace("\\", "/")
+    if normalized.lower().startswith("c:/"):
+        return Path.home() / ".wine" / "drive_c" / normalized[3:]
+    if normalized.lower().startswith("z:/"):
+        return Path(normalized[2:])
+    raise ValueError(f"cannot map Windows path to Linux path: {path}")
+
+
+def js_string(value: str) -> str:
+    return json.dumps(value)
+
+
+def save_current(timeout: float) -> None:
+    result = run_eval("String(ipc.appWindow().fileSave())", timeout=timeout)
+    if result.lower() != "true":
+        raise RuntimeError(f"Packet Tracer fileSave returned {result!r}")
+    print("saved current Packet Tracer file")
+
+
+def save_as(target: Path, *, timeout: float, direct: bool) -> None:
+    target = target.expanduser()
+    if not target.is_absolute():
+        target = Path.cwd() / target
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if direct:
+        result = run_eval(f"String(ipc.appWindow().fileSaveAs({js_string(wine_path(target))}))", timeout=timeout)
+        if result.lower() != "true":
+            raise RuntimeError(f"Packet Tracer fileSaveAs returned {result!r}")
+    else:
+        tmp_name = f"pt730-save-{uuid.uuid4().hex}.pkt"
+        tmp_path = PT_BIN / tmp_name
+        result = run_eval(f"String(ipc.appWindow().fileSaveAs({js_string(tmp_name)}))", timeout=timeout)
+        if result.lower() != "true":
+            raise RuntimeError(f"Packet Tracer fileSaveAs returned {result!r}")
+        deadline = time.monotonic() + 5.0
+        while not tmp_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if not tmp_path.exists():
+            raise RuntimeError(f"Packet Tracer reported success but {tmp_path} was not created")
+        shutil.copy2(tmp_path, target)
+    print(target)
+
+
+def open_file(source: Path, *, timeout: float, direct: bool) -> None:
+    source = source.expanduser()
+    if not source.is_absolute():
+        source = Path.cwd() / source
+    if not source.exists():
+        raise FileNotFoundError(source)
+
+    if direct:
+        open_path = wine_path(source)
+    else:
+        save_dir_win = run_eval("String(ipc.appWindow().getDefaultFileSaveLocation())", timeout=timeout).strip()
+        save_dir_linux = windows_path_to_linux(save_dir_win)
+        save_dir_linux.mkdir(parents=True, exist_ok=True)
+        suffix = source.suffix or ".pkt"
+        tmp_name = f"pt730-open-{uuid.uuid4().hex}{suffix}"
+        tmp_path = save_dir_linux / tmp_name
+        shutil.copy2(source, tmp_path)
+        open_path = save_dir_win.rstrip("/\\") + "/" + tmp_name
+
+    result = run_eval(f"String(ipc.appWindow().fileOpen({js_string(open_path)}))", timeout=timeout)
+    # Packet Tracer 7.3.0 returns "0" for a successful path-based open.
+    if result.lower() not in {"true", "0"}:
+        raise RuntimeError(
+            f"Packet Tracer fileOpen returned {result!r}; PT 7.3.0 Script IPC has not accepted path-based open in this environment"
+        )
+    print(source)
+
+
+def new_file(timeout: float) -> None:
+    result = run_eval("String(ipc.appWindow().fileNew(false))", timeout=timeout)
+    if result.lower() != "true":
+        raise RuntimeError(f"Packet Tracer fileNew returned {result!r}")
+    print("new Packet Tracer file")
+
+
+def count(timeout: float) -> None:
+    expr = "'devices:'+ipc.network().getDeviceCount()+',links:'+ipc.network().getLinkCount()"
+    print(run_eval(expr, timeout=timeout))
+
+
+def screenshot(target: Path) -> None:
+    target = target.expanduser()
+    if not target.is_absolute():
+        target = Path.cwd() / target
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    geom_proc = subprocess.run(
+        [
+            "sh",
+            "-c",
+            "hyprctl clients -j | jq -r '.[] | select(.title|test(\"Cisco Packet Tracer\";\"i\")) | \"\\(.at[0]),\\(.at[1]) \\(.size[0])x\\(.size[1])\"' | head -n1",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    geom = geom_proc.stdout.strip()
+    if not geom:
+        raise RuntimeError("could not find a Cisco Packet Tracer window via hyprctl")
+    proc = subprocess.run(["grim", "-g", geom, str(target)], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or f"grim exited {proc.returncode}")
+    print(target)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--timeout", type=float, default=15.0)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("count", help="print current device/link counts")
+    sub.add_parser("save", help="save the current Packet Tracer file")
+    sub.add_parser("new", help="create a new Packet Tracer file; PT may prompt if there are unsaved changes")
+
+    save_as_p = sub.add_parser("save-as", help="save current file to a Linux path")
+    save_as_p.add_argument("path", type=Path)
+    save_as_p.add_argument("--direct", action="store_true", help="let Packet Tracer write the target path directly")
+
+    open_p = sub.add_parser("open", help="experimental: try to open a Packet Tracer file from a Linux path")
+    open_p.add_argument("path", type=Path)
+    open_p.add_argument("--direct", action="store_true", help="let Packet Tracer open the source path directly")
+
+    screenshot_p = sub.add_parser("screenshot", help="capture the Packet Tracer window on Hyprland")
+    screenshot_p.add_argument("path", type=Path)
+
+    args = parser.parse_args(argv)
+    try:
+        if args.cmd == "count":
+            count(args.timeout)
+        elif args.cmd == "save":
+            save_current(args.timeout)
+        elif args.cmd == "save-as":
+            save_as(args.path, timeout=args.timeout, direct=args.direct)
+        elif args.cmd == "open":
+            open_file(args.path, timeout=args.timeout, direct=args.direct)
+        elif args.cmd == "new":
+            new_file(args.timeout)
+        elif args.cmd == "screenshot":
+            screenshot(args.path)
+        else:
+            return 2
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        print(f"pt730-app: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

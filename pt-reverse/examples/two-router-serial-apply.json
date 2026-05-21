@@ -1,0 +1,72 @@
+{
+  "removed": [
+    {
+      "name": "R_SER2",
+      "status": "missing"
+    },
+    {
+      "name": "R_SER1",
+      "status": "missing"
+    }
+  ],
+  "device_batches": [
+    {
+      "devices": [
+        {
+          "name": "R_SER1",
+          "assigned": "Router0",
+          "model": "2911",
+          "status": "added"
+        },
+        {
+          "name": "R_SER2",
+          "assigned": "Router1",
+          "model": "2911",
+          "status": "added"
+        }
+      ],
+      "modules": [],
+      "links": [],
+      "pc_configs": []
+    }
+  ],
+  "module_batches": [
+    {
+      "devices": [],
+      "modules": [
+        {
+          "device": "R_SER1",
+          "slot": "0/0",
+          "model": "HWIC-2T",
+          "status": "added"
+        },
+        {
+          "device": "R_SER2",
+          "slot": "0/0",
+          "model": "HWIC-2T",
+          "status": "added"
+        }
+      ],
+      "links": [],
+      "pc_configs": []
+    }
+  ],
+  "link_batches": [
+    {
+      "devices": [],
+      "modules": [],
+      "links": [
+        {
+          "a": "R_SER1",
+          "pa": "Serial0/0/0",
+          "b": "R_SER2",
+          "pb": "Serial0/0/0",
+          "cable": "8106",
+          "status": "added"
+        }
+      ],
+      "pc_configs": []
+    }
+  ],
+  "pc_config_batches": []
+}

@@ -1,0 +1,30 @@
+# Local Cisco Packet Tracer installation and generated crash/runtime state.
+src/
+*.dmp
+*.dmp.log
+debug.log
+
+# Generated Python caches.
+__pycache__/
+*.py[cod]
+
+# Local editor and OS noise.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Do not publish Cisco-provided documentation extracted from the application.
+pt-reverse/docs/
+
+# Large local screenshots are useful during reverse engineering but not needed
+# for the source release.
+pt-reverse/screenshots/
+
+# Runtime query/apply snapshots.
+pt-reverse/course-design/current-query.json
+pt-reverse/course-design/last-apply.json
+
+# Third-party reference checkout kept locally only.  MCP-Packet-Tracer is
+# tracked as a clean Git submodule via .gitmodules.
+pt-reverse/upstream/mcp_packet_tracer/

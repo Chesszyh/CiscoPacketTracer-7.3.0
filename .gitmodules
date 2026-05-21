@@ -1,0 +1,3 @@
+[submodule "pt-reverse/upstream/MCP-Packet-Tracer"]
+	path = pt-reverse/upstream/MCP-Packet-Tracer
+	url = https://github.com/Mats2208/MCP-Packet-Tracer

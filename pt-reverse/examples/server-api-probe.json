@@ -1,0 +1,37 @@
+{
+  "devices": [
+    {"name": "SRV_API", "category": "server", "model": "Server-PT", "x": 760, "y": 345}
+  ],
+  "pc_configs": [
+    {
+      "name": "SRV_API",
+      "port": "FastEthernet0",
+      "ip": "192.168.100.10",
+      "mask": "255.255.255.0",
+      "gateway": "192.168.100.1",
+      "dns": "192.168.100.10"
+    }
+  ],
+  "server_configs": [
+    {
+      "name": "SRV_API",
+      "http": true,
+      "dns": {
+        "enabled": true,
+        "records": [
+          {"name": "www.college.local", "ip": "192.168.100.10"}
+        ]
+      },
+      "dhcp": {
+        "enabled": true,
+        "network": "192.168.100.0",
+        "mask": "255.255.255.0",
+        "start": "192.168.100.120",
+        "end": "192.168.100.180",
+        "gateway": "192.168.100.1",
+        "dns": "192.168.100.10",
+        "max_users": 61
+      }
+    }
+  ]
+}

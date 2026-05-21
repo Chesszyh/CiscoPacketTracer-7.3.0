@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Evaluate JavaScript in Packet Tracer through the PT-MCP bridge.
+
+The Builder UI marks a command as "Executed successfully" when the JavaScript
+does not throw. This helper additionally posts the expression result or thrown
+exception back to the bridge's /result endpoint.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import socket
+import sys
+import time
+import urllib.request
+import uuid
+from pathlib import Path
+
+
+RISKY_PATTERNS = [
+    ("dhcpRun(", "DhcpClientProcess.dhcpRun() can block or crash PT 7.3.0 under Script Module automation"),
+]
+
+
+def post(url: str, body: str, timeout: float) -> int:
+    data = body.encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST")
+    req.add_header("Content-Type", "text/plain; charset=utf-8")
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return response.status
+
+
+def get(url: str, timeout: float) -> tuple[int, str]:
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        return response.status, response.read().decode("utf-8", "replace")
+
+
+def wrap(js: str, is_expr: bool, *, request_id: str, result_url: str) -> str:
+    body = f"return ({js});" if is_expr else js
+    request_id_json = json.dumps(request_id)
+    result_url_json = json.dumps(result_url)
+    return (
+        "function __ptPost(ok,v){"
+        f"var __payload=JSON.stringify({{pt730_request_id:{request_id_json},ok:!!ok,value:String(v)}});"
+        f"var __url={result_url_json};"
+        "var __inner=\"var x=new XMLHttpRequest();\"+"
+        "\"x.open('POST',\"+JSON.stringify(__url)+\",true);\"+"
+        "\"x.setRequestHeader('Content-Type','text/plain;charset=utf-8');\"+"
+        "\"x.send(\"+JSON.stringify(__payload)+\");\";"
+        "window.webview.evaluateJavaScriptAsync(__inner);"
+        "}"
+        "try{var __r=(function(){"
+        + body
+        + "})();__ptPost(true,__r === undefined ? 'undefined' : __r);}"
+        "catch(__e){__ptPost(false,__e && (__e.stack || __e.message) ? (__e.stack || __e.message) : __e);}"
+    )
+
+
+def decode_tagged_result(body: str) -> dict | None:
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict) or "pt730_request_id" not in parsed:
+        return None
+    return parsed
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bridge", default="http://127.0.0.1:54321")
+    parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument("--expr", action="store_true", help="treat code as an expression and return it")
+    parser.add_argument("--file", type=Path, help="read JavaScript code/expression from a file")
+    parser.add_argument("--stdin", action="store_true", help="read JavaScript code/expression from stdin")
+    parser.add_argument("--allow-risky", action="store_true", help="allow known crash-prone internal Packet Tracer calls")
+    parser.add_argument("code", nargs="?", help="JavaScript code or expression")
+    args = parser.parse_args()
+    sources = sum(bool(x) for x in [args.code, args.file, args.stdin])
+    if sources != 1:
+        print("provide exactly one of code, --file, or --stdin", file=sys.stderr)
+        return 2
+    if args.file:
+        code = args.file.read_text(encoding="utf-8")
+    elif args.stdin:
+        code = sys.stdin.read()
+    else:
+        code = args.code or ""
+    if not args.allow_risky:
+        compact_for_check = "".join(code.split())
+        for needle, reason in RISKY_PATTERNS:
+            if needle in compact_for_check:
+                print(f"refusing risky Packet Tracer JavaScript: {needle} ({reason})", file=sys.stderr)
+                print("pass --allow-risky only if you accept the crash risk", file=sys.stderr)
+                return 2
+    code = " ".join(line.strip() for line in code.splitlines() if line.strip())
+
+    try:
+        status, body = get(f"{args.bridge}/status", timeout=2.0)
+    except Exception as exc:
+        print(f"bridge status failed: {exc}", file=sys.stderr)
+        return 2
+    if status != 200 or '"connected": true' not in body:
+        print(f"bridge not connected: {body}", file=sys.stderr)
+        return 2
+
+    request_id = uuid.uuid4().hex
+    result_url = f"{args.bridge.rstrip('/')}/result"
+    post(f"{args.bridge}/queue", wrap(code, args.expr, request_id=request_id, result_url=result_url), timeout=3.0)
+
+    deadline = time.monotonic() + args.timeout
+    stale = 0
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            suffix = f" after discarding {stale} stale result(s)" if stale else ""
+            print(f"TIMEOUT waiting for {request_id}{suffix}", file=sys.stderr)
+            return 1
+        try:
+            status, body = get(f"{args.bridge}/result?request_id={request_id}", timeout=min(remaining, 9.5))
+        except (TimeoutError, socket.timeout):
+            continue
+        if status == 204:
+            continue
+        tagged = decode_tagged_result(body)
+        if not tagged or tagged.get("pt730_request_id") != request_id:
+            stale += 1
+            continue
+        if not tagged.get("ok", False):
+            print(tagged.get("value", ""), file=sys.stderr)
+            return 1
+        print(tagged.get("value", ""))
+        return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
