@@ -34,6 +34,51 @@ def vlan_list(value: Any) -> str:
     return str(value)
 
 
+def schema_doc() -> dict[str, Any]:
+    example = {
+        "device": "R1",
+        "hostname": "R1",
+        "vlans": [{"id": 10, "name": "SERVER"}],
+        "interfaces": [
+            {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "acl_in": 10, "nat": "inside"},
+            {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
+            {"name": "FastEthernet0/1", "mode": "access", "vlan": 10},
+        ],
+        "rip": {"version": 2, "networks": ["10.0.0.0"], "no_auto_summary": True},
+        "static_routes": [{"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "10.0.0.254"}],
+        "acls": [
+            {"type": "standard", "number": 10, "rules": [{"action": "permit", "source": "10.0.0.0", "wildcard": "0.0.0.255"}]},
+            {"type": "extended", "number": 101, "rules": [{"action": "permit", "protocol": "ip", "source": "10.0.0.0", "source_wildcard": "0.0.0.255", "destination": "any"}]},
+        ],
+        "nat": {"outside_interfaces": ["GigabitEthernet0/2"], "overloads": [{"acl": 10, "interface": "GigabitEthernet0/2"}]},
+        "save": False,
+    }
+    return {
+        "format": "pt730-ios-template",
+        "packet_tracer_version": "7.3.0",
+        "description": "High-level JSON surface rendered into IOS commands and optional pt730-topo ios_configs.",
+        "fields": {
+            "device": "Target Packet Tracer IOS device name.",
+            "hostname": "Optional IOS hostname command.",
+            "vlans": "Array of {id, name?}.",
+            "interfaces": "Array of routed, access, or trunk interface declarations.",
+            "interfaces[].mode=access": "Adds switchport mode access and switchport access vlan.",
+            "interfaces[].mode=trunk": "Adds switchport mode trunk and switchport trunk allowed vlan.",
+            "interfaces[].ip": "Adds ip address; mask is required.",
+            "interfaces[].acl_in": "Adds ip access-group <value> in.",
+            "interfaces[].acl_out": "Adds ip access-group <value> out.",
+            "interfaces[].nat": "inside or outside; adds ip nat inside/outside.",
+            "rip.networks": "RIPv2 network statements.",
+            "static_routes": "Array of {destination, mask, next_hop|interface}.",
+            "acls[].type=standard": "Numbered or named standard ACL rules.",
+            "acls[].type=extended": "Extended ACL rules with protocol/source/destination wildcards.",
+            "nat.overloads": "Array of {acl, interface} for PAT overload.",
+            "devices": "Optional top-level array of device specs for multi-device topology-json output.",
+        },
+        "example": example,
+    }
+
+
 def render_commands(spec: dict[str, Any]) -> list[str]:
     device = str(require(spec.get("device", spec.get("name", "")), "device is required"))
     commands = ["enable", "configure terminal"]
@@ -167,12 +212,16 @@ def render_records(spec: dict[str, Any]) -> list[dict[str, Any]]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("schema", help="print supported high-level IOS template JSON fields")
     render_p = sub.add_parser("render", help="render IOS commands")
     render_p.add_argument("spec", type=Path)
     render_p.add_argument("--topology-json", action="store_true", help="wrap commands in a pt730-topo ios_configs object")
 
     args = parser.parse_args(argv)
     try:
+        if args.cmd == "schema":
+            print(json.dumps(schema_doc(), ensure_ascii=False, indent=2))
+            return 0
         spec = load_json(args.spec)
         records = render_records(spec)
         if args.topology_json:

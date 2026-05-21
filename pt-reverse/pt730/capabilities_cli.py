@@ -71,7 +71,7 @@ def manifest() -> dict[str, Any]:
         "safe_defaults": SAFE_DEFAULTS,
         "guarded_operations": GUARDED_OPERATIONS,
         "blocked_patterns": BLOCKED_PATTERNS,
-        "ios_template_features": ["vlans", "access_interfaces", "trunks", "ripv2", "static_routes", "standard_acls", "extended_acls", "interface_acl_bindings", "nat_overload"],
+        "ios_template_features": ["schema", "vlans", "access_interfaces", "trunks", "ripv2", "static_routes", "standard_acls", "extended_acls", "interface_acl_bindings", "nat_overload"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
             "pt-reverse/bin/pt730-selftest",
@@ -84,6 +84,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-models validate-batch --dry-run --limit 2",
             "pt-reverse/bin/pt730-models validate-batch --live --limit 2 --record-failures risky",
             "pt-reverse/bin/pt730-models record <model> --status risky --reason <reason> --evidence <path-or-note>",
+            "pt-reverse/bin/pt730-ios-template schema",
             "pt-reverse/bin/pt730-ios-template render <ios-template.json> --topology-json",
             "pt-reverse/bin/pt730-topo apply --batch-size 1 <plan.json>",
             "pt-reverse/bin/pt730-topo query --summary",

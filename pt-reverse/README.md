@@ -17,6 +17,7 @@ pt-reverse/bin/pt730-recover --notify
 pt-reverse/bin/pt730-selftest
 pt-reverse/bin/pt730-capabilities
 pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
@@ -323,13 +324,16 @@ interfaces, interface ACL binding with `acl_in`/`acl_out`, RIPv2, static
 routes, standard/extended ACL lines, and NAT overload.
 
 ```bash
+pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 ```
 
 Use `--topology-json` when you want to merge the generated commands into a
 `pt730-topo` plan under `ios_configs`.  A template file may contain either one
-device object or a top-level `devices` array for multiple IOS devices.
+device object or a top-level `devices` array for multiple IOS devices.  Use
+`schema` for a machine-readable list of supported fields and a minimal example
+that agents can copy before rendering commands.
 
 ## Reverse query summaries
 

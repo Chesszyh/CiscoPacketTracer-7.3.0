@@ -97,6 +97,28 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("acl number", result.stderr)
 
+    def test_schema_describes_supported_json_surface(self) -> None:
+        result = subprocess.run(
+            [str(TEMPLATE), "schema"],
+            cwd=ROOT.parent,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        fields = data["fields"]
+        self.assertIn("vlans", fields)
+        self.assertIn("interfaces[].mode=trunk", fields)
+        self.assertIn("interfaces[].acl_in", fields)
+        self.assertIn("rip.networks", fields)
+        self.assertIn("static_routes", fields)
+        self.assertIn("acls[].type=extended", fields)
+        self.assertIn("nat.overloads", fields)
+        self.assertEqual(data["example"]["interfaces"][1]["mode"], "trunk")
+
 
 if __name__ == "__main__":
     unittest.main()

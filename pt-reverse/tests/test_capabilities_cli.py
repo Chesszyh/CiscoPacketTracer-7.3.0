@@ -36,6 +36,8 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("pt730-safety", data["offline_tools"])
         self.assertIn("pt730-topo", data["live_tools"])
         self.assertIn("dhcpRun(", data["blocked_patterns"])
+        self.assertIn("schema", data["ios_template_features"])
+        self.assertIn("pt-reverse/bin/pt730-ios-template schema", data["recommended_workflow"])
 
     def test_table_output_is_human_readable(self) -> None:
         result = self.run_cmd("--table")
