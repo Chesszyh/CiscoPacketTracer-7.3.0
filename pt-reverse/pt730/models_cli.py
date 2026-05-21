@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -50,20 +51,41 @@ def validation_queue(*, include_risky: bool, include_blocked: bool) -> dict[str,
     for status in statuses:
         for record in grouped.get(status, []):
             model = str(record["model"])
+            quoted_model = shlex.quote(model)
             item = dict(record)
             extra_flags = ""
             if status == "risky":
                 extra_flags = " --allow-risky"
             elif status == "blocked":
                 extra_flags = " --allow-blocked"
-            item["dry_run_command"] = f"pt-reverse/bin/pt730-models validate {model}{extra_flags} --dry-run"
-            item["live_command"] = f"pt-reverse/bin/pt730-models validate {model}{extra_flags} --live"
+            item["dry_run_command"] = f"pt-reverse/bin/pt730-models validate {quoted_model}{extra_flags} --dry-run"
+            item["live_command"] = f"pt-reverse/bin/pt730-models validate {quoted_model}{extra_flags} --live"
             item["record_rule"] = "safe only after create/query/save/reopen; risky or blocked after crash/refusal"
             items.append(item)
     return {
         "counts": {status: len(grouped.get(status, [])) for status in grouped},
         "items": items,
     }
+
+
+def validation_batch_plan(*, limit: int, include_risky: bool, include_blocked: bool) -> list[dict[str, Any]]:
+    items = validation_queue(include_risky=include_risky, include_blocked=include_blocked)["items"]
+    selected = items if limit <= 0 else items[:limit]
+    plan = []
+    for item in selected:
+        model = str(item["model"])
+        quoted_model = shlex.quote(model)
+        plan.append(
+            {
+                "model": model,
+                "status": item["status"],
+                "command": str(item["live_command"]),
+                "dry_run_command": str(item["dry_run_command"]),
+                "after_success": f"pt-reverse/bin/pt730-models record {quoted_model} --status safe --reason 'create/query/save/reopen passed' --save-reopen",
+                "after_failure": f"pt-reverse/bin/pt730-models record {quoted_model} --status risky --reason '<failure evidence>' --evidence '<path-or-note>'",
+            }
+        )
+    return plan
 
 
 def probe_plan(model: str, *, allow_risky: bool, allow_blocked: bool) -> tuple[dict[str, Any], int]:
@@ -192,6 +214,25 @@ def validate_model(model: str, *, dry_run: bool, live: bool, allow_risky: bool, 
         Path(plan_path).unlink(missing_ok=True)
 
 
+def validate_batch(*, dry_run: bool, live: bool, limit: int, include_risky: bool, include_blocked: bool, bridge: str, timeout: float, stop_on_failure: bool) -> tuple[dict[str, Any], int]:
+    plan = validation_batch_plan(limit=limit, include_risky=include_risky, include_blocked=include_blocked)
+    if dry_run:
+        return {"dry_run": True, "count": len(plan), "items": plan}, 0
+    if not live:
+        return {"error": "batch validation is guarded; pass --dry-run to inspect steps or --live to contact Packet Tracer"}, 1
+    results = []
+    ok = True
+    for item in plan:
+        model = str(item["model"])
+        result, code = validate_model(model, dry_run=False, live=True, allow_risky=include_risky, allow_blocked=include_blocked, bridge=bridge, timeout=timeout)
+        results.append(result)
+        if code:
+            ok = False
+            if stop_on_failure:
+                break
+    return {"dry_run": False, "count": len(results), "ok": ok, "results": results}, 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -212,6 +253,15 @@ def main(argv: list[str] | None = None) -> int:
     validate_p.add_argument("--allow-blocked", action="store_true")
     validate_p.add_argument("--bridge", default="http://127.0.0.1:54321")
     validate_p.add_argument("--timeout", type=float, default=20.0)
+    batch_p = sub.add_parser("validate-batch", help="validate queued models one at a time")
+    batch_p.add_argument("--dry-run", action="store_true")
+    batch_p.add_argument("--live", action="store_true", help="contact Packet Tracer through pt730-topo")
+    batch_p.add_argument("--limit", type=int, default=0, help="limit number of queued models; 0 means all")
+    batch_p.add_argument("--include-risky", action="store_true")
+    batch_p.add_argument("--include-blocked", action="store_true")
+    batch_p.add_argument("--bridge", default="http://127.0.0.1:54321")
+    batch_p.add_argument("--timeout", type=float, default=20.0)
+    batch_p.add_argument("--keep-going", action="store_true", help="continue after a live validation failure")
     record_p = sub.add_parser("record", help="record one model validation result in the local overlay")
     record_p.add_argument("model")
     record_p.add_argument("--status", choices=sorted(VALID_STATUSES), required=True)
@@ -235,6 +285,22 @@ def main(argv: list[str] | None = None) -> int:
         return code
     if args.cmd == "validate":
         data, code = validate_model(args.model, dry_run=args.dry_run, live=args.live, allow_risky=args.allow_risky, allow_blocked=args.allow_blocked, bridge=args.bridge, timeout=args.timeout)
+        if code and "error" in data:
+            print(f"pt730-models: {data['error']}", file=sys.stderr)
+        else:
+            print_json(data)
+        return code
+    if args.cmd == "validate-batch":
+        data, code = validate_batch(
+            dry_run=args.dry_run,
+            live=args.live,
+            limit=args.limit,
+            include_risky=args.include_risky,
+            include_blocked=args.include_blocked,
+            bridge=args.bridge,
+            timeout=args.timeout,
+            stop_on_failure=not args.keep_going,
+        )
         if code and "error" in data:
             print(f"pt730-models: {data['error']}", file=sys.stderr)
         else:

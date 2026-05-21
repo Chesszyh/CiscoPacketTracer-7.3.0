@@ -70,6 +70,8 @@ workspace first, validate one model, and record crashes/refusals as `risky` or
 evidence in `pt-reverse/pt730/model_validations.json`; that overlay feeds both
 the offline safety checker and the live topology safety gate.  A model can be
 promoted to `safe` only with explicit save/reopen evidence.
+`validate-batch --dry-run` is offline; `validate-batch --live` is intentionally
+sequential and stops on the first failure unless `--keep-going` is set.
 
 `pt730-topo apply` also runs this safety gate before contacting Packet Tracer.
 Known risky models fail by default.  Warnings are printed to stderr; use

@@ -152,6 +152,40 @@ class TopologyCliTest(unittest.TestCase):
         self.assertIn("10", data["config_summaries"][0]["acl_numbers"])
         self.assertTrue(data["config_summaries"][0]["nat"]["overload"])
 
+    def test_export_from_saved_query_writes_raw_and_summary_files(self) -> None:
+        query = {
+            "devices": [
+                {
+                    "name": "R1",
+                    "model": "2911",
+                    "type": "0",
+                    "ports": [{"name": "GigabitEthernet0/0", "linked": True, "ip": "10.0.0.1", "mask": "255.255.255.0"}],
+                    "command_line": {"prompt": "R1#"},
+                }
+            ],
+            "links": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            query_path = Path(tmpdir) / "query.json"
+            raw_path = Path(tmpdir) / "raw.json"
+            summary_path = Path(tmpdir) / "summary.json"
+            query_path.write_text(json.dumps(query), encoding="utf-8")
+            result = subprocess.run(
+                [str(TOPO), "export", "--from-query", str(query_path), "--raw-out", str(raw_path), "--summary-out", str(summary_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["raw_out"], str(raw_path))
+            self.assertEqual(manifest["summary_out"], str(summary_path))
+            self.assertEqual(json.loads(raw_path.read_text(encoding="utf-8"))["devices"][0]["name"], "R1")
+            self.assertEqual(json.loads(summary_path.read_text(encoding="utf-8"))["counts"]["devices"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

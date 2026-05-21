@@ -1223,6 +1223,13 @@ def _print_json_obj(value: Any) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2))
 
 
+def _write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(value, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
 def _chunks(items: list[Any], size: int) -> list[list[Any]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
@@ -1307,6 +1314,10 @@ def main(argv: list[str] | None = None) -> int:
 
     summarize_p = sub.add_parser("summarize-query", help="summarize a saved pt730-topo query JSON file")
     summarize_p.add_argument("query_json", type=Path)
+    export_p = sub.add_parser("export", help="export raw and summarized current canvas query JSON")
+    export_p.add_argument("--from-query", type=Path, help="use a saved query JSON instead of contacting Packet Tracer")
+    export_p.add_argument("--raw-out", type=Path, required=True)
+    export_p.add_argument("--summary-out", type=Path, required=True)
 
     args = parser.parse_args(argv)
     try:
@@ -1334,6 +1345,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.cmd == "summarize-query":
             _print_json_obj(_query_summary(_load_query(args.query_json)))
+            return 0
+        if args.cmd == "export":
+            raw_query = _load_query(args.from_query) if args.from_query else _decode_result(eval_js(_query_js(), args.bridge, args.timeout))
+            summary = _query_summary(raw_query)
+            _write_json(args.raw_out, raw_query)
+            _write_json(args.summary_out, summary)
+            _print_json_obj({"raw_out": str(args.raw_out), "summary_out": str(args.summary_out), "counts": summary["counts"]})
             return 0
     except (OSError, ValueError, RuntimeError, TimeoutError, urllib.error.URLError) as exc:
         print(f"pt730-topo: {exc}", file=sys.stderr)

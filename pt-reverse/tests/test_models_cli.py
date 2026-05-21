@@ -86,6 +86,25 @@ class ModelsCliTest(unittest.TestCase):
         self.assertIn("--dry-run", data["items"][0]["dry_run_command"])
         self.assertIn("--live", data["items"][0]["live_command"])
 
+    def test_validate_batch_dry_run_lists_one_at_a_time_steps(self) -> None:
+        result = self.run_cmd("validate-batch", "--dry-run", "--limit", "2")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data["dry_run"])
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(len(data["items"]), 2)
+        self.assertIn("validate", data["items"][0]["command"])
+        self.assertIn("--live", data["items"][0]["command"])
+        self.assertIn("record", data["items"][0]["after_failure"])
+
+    def test_validate_batch_quotes_blocked_model_names_when_included(self) -> None:
+        result = self.run_cmd("validate-batch", "--dry-run", "--include-blocked")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        blocked = next(item for item in data["items"] if item["model"] == "Power Distribution Device")
+        self.assertIn("'Power Distribution Device'", blocked["command"])
+        self.assertIn("--allow-blocked", blocked["command"])
+
     def test_record_failed_validation_marks_model_risky_with_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             env = {"PT730_MODEL_VALIDATIONS": str(Path(tmpdir) / "model-validations.json")}
