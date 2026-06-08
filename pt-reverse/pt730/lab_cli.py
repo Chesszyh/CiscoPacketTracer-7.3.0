@@ -555,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--output-dir", type=Path, required=True)
     plan_p.add_argument("--name", default="", help="logical lab name; defaults to the plan filename stem")
     plan_p.add_argument("--basename", default="", help="render artifact filename stem; defaults to --name or the plan filename stem")
-    plan_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit")
+    plan_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit")
     plan_p.add_argument("--direction", choices=("LR", "TD", "TB", "RL", "BT"), default="LR", help="Mermaid direction when mermaid is included")
     plan_p.add_argument("--theme", choices=RENDER_THEMES, default="light", help="diagram color theme")
     plan_p.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=True, help="hide link port/cable/VLAN labels")

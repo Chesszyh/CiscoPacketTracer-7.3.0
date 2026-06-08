@@ -25,8 +25,14 @@ COURSE_EXPECTED_SERVERS = 50
 COURSE_EXPECTED_PCS = 1900
 RENDER_THEMES = ("light", "dark", "paper")
 RENDER_GROUP_BY = ("none", "auto", "network", "vlan", "site", "category")
-BUNDLE_RENDER_FORMATS = ("mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit")
+BUNDLE_RENDER_FORMATS = ("mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit")
 BUNDLE_DEFAULT_FORMATS = ("svg", "drawio", "html", "markdown", "summary")
+DIAGRAM_AUDIT_OVERLAP_X = 120.0
+DIAGRAM_AUDIT_OVERLAP_Y = 90.0
+DIAGRAM_AUDIT_MAX_WIDTH = 1800.0
+DIAGRAM_AUDIT_MAX_HEIGHT = 1200.0
+DIAGRAM_AUDIT_GROUPING_DEVICE_COUNT = 18
+DIAGRAM_AUDIT_LABEL_LINK_COUNT = 24
 BUNDLE_EXTENSIONS = {
     "mermaid": "mmd",
     "svg": "svg",
@@ -35,6 +41,7 @@ BUNDLE_EXTENSIONS = {
     "markdown": "md",
     "summary": "summary.json",
     "course-audit": "audit.json",
+    "diagram-audit": "diagram-audit.json",
 }
 
 
@@ -1150,6 +1157,229 @@ def course_audit(plan: dict[str, Any]) -> tuple[dict[str, Any], int]:
     return report, 0 if report["ok"] else 1
 
 
+def _rounded(value: float) -> float | int:
+    rounded = round(value, 1)
+    if rounded.is_integer():
+        return int(rounded)
+    return rounded
+
+
+def _coordinate_bounds(positions: dict[str, tuple[float, float]]) -> dict[str, Any] | None:
+    if not positions:
+        return None
+    xs = [x for x, _ in positions.values()]
+    ys = [y for _, y in positions.values()]
+    min_x = min(xs)
+    min_y = min(ys)
+    max_x = max(xs)
+    max_y = max(ys)
+    return {
+        "min_x": _rounded(min_x),
+        "min_y": _rounded(min_y),
+        "max_x": _rounded(max_x),
+        "max_y": _rounded(max_y),
+        "width": _rounded(max_x - min_x),
+        "height": _rounded(max_y - min_y),
+    }
+
+
+def _link_endpoint_name(link: dict[str, Any], aliases: tuple[str, ...]) -> str:
+    return pick(link, aliases)
+
+
+def diagram_audit(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> tuple[dict[str, Any], int]:
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    advice: list[str] = []
+    explicit_devices = [device for device in plan.get("devices", []) if isinstance(device, dict)]
+    links = [link for link in plan.get("links", []) if isinstance(link, dict)]
+    devices = svg_devices(plan)
+    device_names = [pick(device, ("name", "id"), f"device_{index}") for index, device in enumerate(devices)]
+    explicit_names = {
+        pick(device, ("name", "id"), f"device_{index}")
+        for index, device in enumerate(explicit_devices)
+    }
+    implicit_names = [name for name in device_names if name not in explicit_names]
+
+    if not explicit_devices and not links:
+        errors.append({"where": "devices", "message": "empty topology has no devices or links"})
+
+    explicit_positions: dict[str, tuple[float, float]] = {}
+    missing_coordinates: list[str] = []
+    for index, device in enumerate(devices):
+        name = pick(device, ("name", "id"), f"device_{index}")
+        x = as_float(device.get("x"))
+        y = as_float(device.get("y"))
+        if x is None or y is None:
+            missing_coordinates.append(name)
+        else:
+            explicit_positions[name] = (x, y)
+
+    rendered_positions, rendered_width, rendered_height = svg_positions(devices)
+    overlaps: list[dict[str, Any]] = []
+    for left_index, left_name in enumerate(device_names):
+        if left_name not in rendered_positions:
+            continue
+        x1, y1 = rendered_positions[left_name]
+        for right_name in device_names[left_index + 1 :]:
+            if right_name not in rendered_positions:
+                continue
+            x2, y2 = rendered_positions[right_name]
+            dx = abs(x1 - x2)
+            dy = abs(y1 - y2)
+            if dx < DIAGRAM_AUDIT_OVERLAP_X and dy < DIAGRAM_AUDIT_OVERLAP_Y:
+                overlaps.append(
+                    {
+                        "a": left_name,
+                        "b": right_name,
+                        "dx": _rounded(dx),
+                        "dy": _rounded(dy),
+                        "threshold_x": int(DIAGRAM_AUDIT_OVERLAP_X),
+                        "threshold_y": int(DIAGRAM_AUDIT_OVERLAP_Y),
+                    }
+                )
+
+    malformed_links: list[dict[str, Any]] = []
+    graph: dict[str, set[str]] = {name: set() for name in device_names}
+    for index, link in enumerate(links):
+        a = _link_endpoint_name(link, ("a", "device_a", "from", "from_device"))
+        b = _link_endpoint_name(link, ("b", "device_b", "to", "to_device"))
+        if not a or not b:
+            malformed_links.append({"index": index, "a": a, "b": b})
+            continue
+        graph.setdefault(a, set()).add(b)
+        graph.setdefault(b, set()).add(a)
+
+    components: list[list[str]] = []
+    visited: set[str] = set()
+    order = {name: index for index, name in enumerate(graph)}
+    for name in graph:
+        if name in visited:
+            continue
+        stack = [name]
+        component: list[str] = []
+        visited.add(name)
+        while stack:
+            current = stack.pop()
+            component.append(current)
+            for neighbor in sorted(graph[current], key=lambda value: order.get(value, len(order))):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    stack.append(neighbor)
+        components.append(sorted(component, key=lambda value: order.get(value, len(order))))
+
+    if len(devices) > 1 and not links:
+        warnings.append({"where": "links", "message": "topology has multiple devices but no links", "devices": len(devices)})
+        advice.append("add links between devices or split the plan into separate diagrams")
+    if missing_coordinates:
+        warnings.append(
+            {
+                "where": "devices",
+                "message": "some devices have no explicit x/y coordinates; renderer will use deterministic fallback positions",
+                "missing": missing_coordinates,
+            }
+        )
+        advice.append("run pt730-layout or add x/y coordinates before final SVG/draw.io export")
+    if implicit_names:
+        warnings.append(
+            {
+                "where": "links",
+                "message": "some link endpoints are not declared as devices; renderer will create implicit placeholder devices",
+                "devices": implicit_names,
+            }
+        )
+        advice.append("declare every link endpoint in devices so models, categories, and coordinates are explicit")
+    if malformed_links:
+        errors.append({"where": "links", "message": "one or more links are missing endpoint names", "links": malformed_links})
+    if overlaps:
+        warnings.append({"where": "devices", "message": "some rendered devices are close enough to overlap visually", "pairs": overlaps})
+        advice.append("increase layout spacing or manually move overlapping devices")
+    if len(components) > 1:
+        warnings.append({"where": "links", "message": "topology has disconnected components", "components": components})
+        advice.append("verify disconnected components are intentional before recording the lab video")
+    if rendered_width > DIAGRAM_AUDIT_MAX_WIDTH or rendered_height > DIAGRAM_AUDIT_MAX_HEIGHT:
+        warnings.append(
+            {
+                "where": "canvas",
+                "message": "rendered canvas is large for report screenshots",
+                "width": _rounded(rendered_width),
+                "height": _rounded(rendered_height),
+                "max_width": int(DIAGRAM_AUDIT_MAX_WIDTH),
+                "max_height": int(DIAGRAM_AUDIT_MAX_HEIGHT),
+            }
+        )
+        advice.append("use a denser layout or split the topology into overview and detail diagrams")
+    if len(devices) > DIAGRAM_AUDIT_GROUPING_DEVICE_COUNT and options.group_by == "none":
+        warnings.append(
+            {
+                "where": "options.group_by",
+                "message": "large diagrams are easier to read with visual grouping",
+                "devices": len(devices),
+                "suggestion": "use --group-by auto, vlan, site, network, or category",
+            }
+        )
+        advice.append("render large topologies with --group-by auto or a domain-specific grouping mode")
+    if len(links) > DIAGRAM_AUDIT_LABEL_LINK_COUNT and options.link_labels:
+        warnings.append(
+            {
+                "where": "options.link_labels",
+                "message": "many link labels can clutter the diagram",
+                "links": len(links),
+                "suggestion": "use --no-link-labels for the final visual render",
+            }
+        )
+        advice.append("hide link labels in dense final diagrams and keep exact ports in Markdown/config tables")
+    if not errors and not warnings:
+        advice.append("diagram appears suitable for offline SVG/draw.io/HTML rendering")
+
+    report = {
+        "kind": "pt730-diagram-audit",
+        "ok": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "checks": {
+            "counts": {
+                "explicit_devices": len(explicit_devices),
+                "rendered_devices": len(devices),
+                "implicit_devices": len(implicit_names),
+                "links": len(links),
+            },
+            "coordinates": {
+                "with_coordinates": len(explicit_positions),
+                "missing": missing_coordinates,
+            },
+            "bounds": {
+                "coordinate_bounds": _coordinate_bounds(explicit_positions),
+                "rendered_bounds": {
+                    "min_x": 0,
+                    "min_y": 0,
+                    "max_x": _rounded(rendered_width),
+                    "max_y": _rounded(rendered_height),
+                    "width": _rounded(rendered_width),
+                    "height": _rounded(rendered_height),
+                },
+            },
+            "overlaps": overlaps,
+            "links": {
+                "malformed": malformed_links,
+                "implicit_endpoint_devices": implicit_names,
+            },
+            "components": {
+                "count": len(components),
+                "components": components,
+            },
+            "render_options": {
+                "link_labels": options.link_labels,
+                "model_labels": options.model_labels,
+                "group_by": options.group_by,
+                "theme": options.theme,
+            },
+            "render_advice": advice,
+        },
+    }
+    return report, 0 if report["ok"] else 1
+
+
 def parse_bundle_formats(value: str) -> list[str]:
     formats: list[str] = []
     for raw in value.split(","):
@@ -1184,6 +1414,9 @@ def render_format(plan: dict[str, Any], fmt: str, *, options: RenderOptions, dir
         return summary(plan), 0
     if fmt == "course-audit":
         report, code = course_audit(plan)
+        return json.dumps(report, ensure_ascii=False, indent=2) + "\n", code
+    if fmt == "diagram-audit":
+        report, code = diagram_audit(plan, options=options)
         return json.dumps(report, ensure_ascii=False, indent=2) + "\n", code
     raise ValueError(f"unsupported render format: {fmt}")
 
@@ -1247,6 +1480,13 @@ def render_bundle(
             manifest["course_audit"] = {"ok": bool(audit_data.get("ok")), "exit_code": exit_codes["course-audit"]}
         except (OSError, json.JSONDecodeError):
             manifest["course_audit"] = {"ok": False, "exit_code": exit_codes["course-audit"]}
+    if "diagram-audit" in formats:
+        audit_path = output_dir / artifacts["diagram-audit"]
+        try:
+            audit_data = json.loads(audit_path.read_text(encoding="utf-8"))
+            manifest["diagram_audit"] = {"ok": bool(audit_data.get("ok")), "exit_code": exit_codes["diagram-audit"]}
+        except (OSError, json.JSONDecodeError):
+            manifest["diagram_audit"] = {"ok": False, "exit_code": exit_codes["diagram-audit"]}
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest, max(exit_codes.values(), default=0)
 
@@ -1317,11 +1557,15 @@ def main(argv: list[str] | None = None) -> int:
     audit_p.add_argument("plan", type=Path)
     audit_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
 
+    diagram_audit_p = sub.add_parser("diagram-audit", help="audit offline diagram readability and render suitability")
+    diagram_audit_p.add_argument("plan", type=Path)
+    diagram_audit_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+
     bundle_p = sub.add_parser("bundle", help="render one plan into multiple offline review artifacts and a manifest")
     bundle_p.add_argument("plan", type=Path)
     bundle_p.add_argument("--output-dir", type=Path, required=True, help="directory for generated artifacts")
     bundle_p.add_argument("--basename", default="topology", help="artifact filename prefix")
-    bundle_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit")
+    bundle_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit")
     bundle_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"], help="Mermaid direction when mermaid is included")
     add_visual_options(bundle_p)
 
@@ -1361,6 +1605,12 @@ def main(argv: list[str] | None = None) -> int:
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             report, code = course_audit(plan)
+            emit(json.dumps(report, ensure_ascii=False, indent=2) + "\n", args.output)
+            return code
+        if args.cmd == "diagram-audit":
+            plan = _load_plan(args.plan)
+            _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
+            report, code = diagram_audit(plan)
             emit(json.dumps(report, ensure_ascii=False, indent=2) + "\n", args.output)
             return code
         if args.cmd == "bundle":

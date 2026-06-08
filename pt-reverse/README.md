@@ -52,6 +52,7 @@ pt-reverse/bin/pt730-render drawio pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render html pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
+pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```
@@ -89,7 +90,8 @@ hosts, and naming controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls
-through `pt730_render` for SVG, draw.io, HTML, and Mermaid where supported.
+through `pt730_render` for SVG, draw.io, HTML, and Mermaid where supported,
+plus JSON summary, course audit, and diagram-quality audit outputs.
 The `pt730_render_bundle` MCP tool writes a multi-format render bundle plus a
 manifest in one offline call.
 The `pt730_lab_template` MCP tool writes a complete offline lab bundle from one
@@ -240,7 +242,8 @@ pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json --output sim
 pt-reverse/bin/pt730-render drawio pt-reverse/examples/simple-lan.json --output simple-lan.drawio
 pt-reverse/bin/pt730-render html pt-reverse/examples/simple-lan.json --output simple-lan.html
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
-pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --formats svg,drawio,html,markdown,summary
+pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
+pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --formats svg,drawio,html,markdown,summary,diagram-audit
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.generated.md
 pt-reverse/bin/pt730-render summary pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.summary.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.audit.json
@@ -398,12 +401,17 @@ editable.
 For cleaner large diagrams, add `--theme light|dark|paper`,
 `--no-link-labels`, `--no-model-labels`, or `--group-by auto|network|vlan|site|category`
 to SVG/draw.io/HTML renders; Mermaid supports `--no-link-labels`.
+Use `pt730-render diagram-audit <plan.json>` before final screenshots to catch
+empty plans, missing coordinates, close device overlaps, disconnected
+components, oversized canvases, and dense-label/grouping issues without opening
+Packet Tracer.
 Use `pt730-render html <plan.json> --output <review.html>` for a self-contained
 browser review page with the SVG diagram and Markdown report text embedded.
 Use `pt730-render bundle <plan.json> --output-dir <render-dir>` to write SVG,
 draw.io, HTML, Markdown, summary JSON, and a `<basename>.manifest.json` file
 from one existing plan.  Add `--formats svg,drawio,html,markdown,summary,course-audit`
-when a bundle should include or limit specific artifacts.
+or `--formats svg,drawio,html,markdown,summary,diagram-audit` when a bundle
+should include or limit specific artifacts.
 For this course assignment, `pt730-render course-audit <plan.json>` checks the
 required VLAN links, the server address space `172.16.1.0/26`, the PC address
 space `192.168.0.0/21`, and representative host coverage.

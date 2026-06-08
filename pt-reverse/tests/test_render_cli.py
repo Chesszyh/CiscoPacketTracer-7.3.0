@@ -347,6 +347,57 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn('"address_groups"', result.stdout)
         self.assertIn('"192.168.0.0/26"', result.stdout)
 
+    def test_diagram_audit_accepts_clean_render(self) -> None:
+        result = self.run_render("diagram-audit", str(ROOT / "examples" / "simple-lan.json"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["kind"], "pt730-diagram-audit")
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["errors"], [])
+        self.assertEqual(data["warnings"], [])
+        self.assertEqual(data["checks"]["counts"]["rendered_devices"], 3)
+        self.assertEqual(data["checks"]["components"]["count"], 1)
+
+    def test_diagram_audit_reports_layout_warnings_without_failing(self) -> None:
+        plan = {
+            "devices": [
+                {"name": "R1", "category": "router", "model": "2911", "x": 100, "y": 100},
+                {"name": "SW1", "category": "switch", "model": "2960-24TT", "x": 150, "y": 130},
+                {"name": "PC1", "category": "pc", "model": "PC-PT"},
+                {"name": "SRV1", "category": "server", "model": "Server-PT", "x": 900, "y": 900},
+            ],
+            "links": [{"a": "R1", "pa": "GigabitEthernet0/0", "b": "SW1", "pb": "FastEthernet0/1", "cable": "straight"}],
+        }
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            result = self.run_render("diagram-audit", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data["ok"])
+        messages = [warning["message"] for warning in data["warnings"]]
+        self.assertIn("some devices have no explicit x/y coordinates; renderer will use deterministic fallback positions", messages)
+        self.assertIn("some rendered devices are close enough to overlap visually", messages)
+        self.assertIn("topology has disconnected components", messages)
+        self.assertEqual(data["checks"]["overlaps"][0]["a"], "R1")
+        self.assertEqual(data["checks"]["coordinates"]["missing"], ["PC1"])
+
+    def test_diagram_audit_rejects_empty_topology(self) -> None:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump({"devices": [], "links": []}, f)
+            path = f.name
+        try:
+            result = self.run_render("diagram-audit", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertNotEqual(result.returncode, 0)
+        data = json.loads(result.stdout)
+        self.assertFalse(data["ok"])
+        self.assertIn("empty topology has no devices or links", data["errors"][0]["message"])
+
     def test_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.md"
         out.unlink(missing_ok=True)
@@ -421,6 +472,27 @@ class RenderCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "small.summary.json").exists())
             self.assertTrue((out_dir / "small.md").exists())
             self.assertFalse((out_dir / "small.svg").exists())
+
+    def test_bundle_can_include_diagram_audit_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "bundle"
+            result = self.run_render(
+                "bundle",
+                str(ROOT / "examples" / "simple-lan.json"),
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "simple",
+                "--formats",
+                "summary,diagram-audit",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["formats"], ["summary", "diagram-audit"])
+            self.assertEqual(manifest["diagram_audit"], {"ok": True, "exit_code": 0})
+            self.assertEqual(manifest["artifacts"]["diagram-audit"], "simple.diagram-audit.json")
+            audit_data = json.loads((out_dir / "simple.diagram-audit.json").read_text(encoding="utf-8"))
+            self.assertEqual(audit_data["kind"], "pt730-diagram-audit")
 
     def test_course_audit_accepts_course_design_plan(self) -> None:
         result = self.run_render("course-audit", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))

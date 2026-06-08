@@ -73,13 +73,13 @@ cat > lab-spec.json <<'JSON'
     "dmz_servers": 2,
     "routing": "ospf"
   },
-  "render": {"basename": "enterprise-demo", "formats": ["svg", "drawio", "html", "markdown", "summary"], "theme": "paper", "group_by": "auto"},
+  "render": {"basename": "enterprise-demo", "formats": ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"], "theme": "paper", "group_by": "auto"},
   "export_configs": true
 }
 JSON
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_template","arguments":{"spec":"lab-spec.json","output_dir":"enterprise-demo-lab","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
-printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"serial-plan-lab","basename":"serial","formats":["svg","summary"],"group_by":"category","compact":true}}}' \
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"serial-plan-lab","basename":"serial","formats":["svg","summary","diagram-audit"],"group_by":"category","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 
@@ -106,7 +106,9 @@ Example visual render control through MCP:
 ```bash
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"svg","plan":"pt-reverse/examples/simple-lan.json","theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' \
   | pt-reverse/bin/pt730-mcp
-printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_render_bundle","arguments":{"plan":"pt-reverse/examples/simple-lan.json","output_dir":"simple-lan-render","basename":"simple-lan","formats":["svg","drawio","html","markdown","summary"],"theme":"paper","group_by":"network"}}}' \
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"diagram-audit","plan":"pt-reverse/examples/simple-lan.json"}}}' \
+  | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pt730_render_bundle","arguments":{"plan":"pt-reverse/examples/simple-lan.json","output_dir":"simple-lan-render","basename":"simple-lan","formats":["svg","drawio","html","markdown","summary","diagram-audit"],"theme":"paper","group_by":"network"}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 
@@ -185,12 +187,13 @@ pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf --output redundant-campus.json
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf --output enterprise-edge.json
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir enterprise-demo-lab
-pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary
+pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit
 pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
 pt-reverse/bin/pt730-render html lan-star.json --group-by network --output lan-star.html
-pt-reverse/bin/pt730-render bundle lan-star.json --output-dir lan-star-render --basename lan-star --formats svg,drawio,html,markdown,summary
+pt-reverse/bin/pt730-render diagram-audit lan-star.json --output lan-star.diagram-audit.json
+pt-reverse/bin/pt730-render bundle lan-star.json --output-dir lan-star-render --basename lan-star --formats svg,drawio,html,markdown,summary,diagram-audit
 ```
 
 `wireless-lan` uses verified `AccessPoint-PT` and `Laptop-PT` models and writes
@@ -238,9 +241,12 @@ should create a complete offline deliverable from one template spec. Use
 `pt730-lab plan <plan.json> --output-dir <out-dir>` for the same bundle after
 an agent has already composed or hand-authored a custom topology JSON. The
 output directory contains `topology.json`, `safety.json`,
-`render/<basename>.*`, `configs/*.cfg`, and `manifest.json`. Template specs use
-snake_case `template_options`; both paths can set render `formats`, `theme`,
-labels, and `group_by`.
+`render/<basename>.*`, `configs/*.cfg`, and `manifest.json`. Include
+`diagram-audit` in render `formats` when the agent should emit a JSON quality
+gate for empty diagrams, missing coordinates, overlaps, disconnected
+components, oversized canvases, and dense label/grouping advice. Template specs
+use snake_case `template_options`; both paths can set render `formats`,
+`theme`, labels, and `group_by`.
 
 ## Campus Pipeline
 
@@ -276,7 +282,8 @@ pt-reverse/bin/pt730-safety plan topology.layout.json
 pt-reverse/bin/pt730-render markdown topology.layout.json --output topology.md
 pt-reverse/bin/pt730-render drawio topology.layout.json --theme paper --output topology.drawio
 pt-reverse/bin/pt730-render svg topology.layout.json --theme dark --no-link-labels --output topology.clean.svg
-pt-reverse/bin/pt730-render bundle topology.layout.json --output-dir topology-render --basename topology --formats svg,drawio,html,markdown,summary --theme paper --group-by vlan
+pt-reverse/bin/pt730-render diagram-audit topology.layout.json --output topology.diagram-audit.json
+pt-reverse/bin/pt730-render bundle topology.layout.json --output-dir topology-render --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit --theme paper --group-by vlan
 pt-reverse/bin/pt730-config-plan --compact export-configs topology.configured.json --output-dir configs --source "pt730-config-plan campus"
 ```
 

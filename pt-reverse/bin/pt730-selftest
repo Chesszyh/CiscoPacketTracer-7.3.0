@@ -105,8 +105,10 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_config_plan_campus","arguments":{"plan":"pt-reverse/course-design/college-network-topology-pt73-safe.json","ios_only":true,"compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"svg","plan":"pt-reverse/examples/simple-lan.json","theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"summary","plan":"pt-reverse/examples/simple-lan.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render_bundle","arguments":{"plan":"pt-reverse/examples/simple-lan.json","output_dir":"'"$tmp"'/mcp-render-bundle","basename":"simple","formats":["svg","summary"],"theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"diagram-audit","plan":"pt-reverse/examples/simple-lan.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render_bundle","arguments":{"plan":"pt-reverse/examples/simple-lan.json","output_dir":"'"$tmp"'/mcp-render-bundle","basename":"simple","formats":["svg","summary","diagram-audit"],"theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 test -s "$tmp/mcp-render-bundle/simple.manifest.json"
+test -s "$tmp/mcp-render-bundle/simple.diagram-audit.json"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_catalog","arguments":{"action":"ports","model":"2911"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_safety_js","arguments":{"code":"ipc.network().getDeviceCount()"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_apply","arguments":{"plan":"pt-reverse/examples/simple-lan.json","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
@@ -201,7 +203,7 @@ cat >"$tmp/lab-spec.json" <<'JSON'
   },
   "render": {
     "basename": "selftest-enterprise",
-    "formats": ["svg", "summary"],
+    "formats": ["svg", "summary", "diagram-audit"],
     "group_by": "auto"
   },
   "export_configs": true
@@ -213,19 +215,22 @@ test -s "$tmp/lab/safety.json"
 test -s "$tmp/lab/manifest.json"
 test -s "$tmp/lab/render/selftest-enterprise.manifest.json"
 test -s "$tmp/lab/render/selftest-enterprise.svg"
+test -s "$tmp/lab/render/selftest-enterprise.diagram-audit.json"
 test -s "$tmp/lab/configs/R-SELF-EDGE.cfg"
-"$BIN/pt730-lab" plan "$ROOT/pt-reverse/examples/two-router-serial-configured.json" --output-dir "$tmp/plan-lab" --basename serial --formats svg,summary --group-by category >/dev/null
+"$BIN/pt730-lab" plan "$ROOT/pt-reverse/examples/two-router-serial-configured.json" --output-dir "$tmp/plan-lab" --basename serial --formats svg,summary,diagram-audit --group-by category >/dev/null
 test -s "$tmp/plan-lab/topology.json"
 test -s "$tmp/plan-lab/safety.json"
 test -s "$tmp/plan-lab/manifest.json"
 test -s "$tmp/plan-lab/render/serial.svg"
 test -s "$tmp/plan-lab/render/serial.summary.json"
+test -s "$tmp/plan-lab/render/serial.diagram-audit.json"
 test -s "$tmp/plan-lab/configs/R_AUTO1.cfg"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_template","arguments":{"spec":"'"$tmp"'/lab-spec.json","output_dir":"'"$tmp"'/mcp-lab","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 test -s "$tmp/mcp-lab/manifest.json"
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"'"$tmp"'/mcp-plan-lab","basename":"mcp-serial","formats":["svg","summary"],"group_by":"category","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"'"$tmp"'/mcp-plan-lab","basename":"mcp-serial","formats":["svg","summary","diagram-audit"],"group_by":"category","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 test -s "$tmp/mcp-plan-lab/manifest.json"
 test -s "$tmp/mcp-plan-lab/render/mcp-serial.svg"
+test -s "$tmp/mcp-plan-lab/render/mcp-serial.diagram-audit.json"
 ok "lab bundle checks"
 "$BIN/pt730-config-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-config-plan" campus "$tmp/compose-plan.json" --output "$tmp/configured-plan.json"
@@ -256,12 +261,14 @@ ok "layout checks"
 "$BIN/pt730-render" html "$ROOT/pt-reverse/examples/simple-lan.json" --group-by network >/dev/null
 "$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" summary "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
-"$BIN/pt730-render" bundle "$ROOT/pt-reverse/examples/simple-lan.json" --output-dir "$tmp/render-bundle" --basename simple --formats svg,drawio,html,markdown,summary --group-by network >/dev/null
+"$BIN/pt730-render" diagram-audit "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" bundle "$ROOT/pt-reverse/examples/simple-lan.json" --output-dir "$tmp/render-bundle" --basename simple --formats svg,drawio,html,markdown,summary,diagram-audit --group-by network >/dev/null
 test -s "$tmp/render-bundle/simple.svg"
 test -s "$tmp/render-bundle/simple.drawio"
 test -s "$tmp/render-bundle/simple.html"
 test -s "$tmp/render-bundle/simple.md"
 test -s "$tmp/render-bundle/simple.summary.json"
+test -s "$tmp/render-bundle/simple.diagram-audit.json"
 test -s "$tmp/render-bundle/simple.manifest.json"
 "$BIN/pt730-render" course-audit "$ROOT/pt-reverse/course-design/college-network-topology-pt73-safe.json" >/dev/null
 "$BIN/pt730-models" manifest >/dev/null
