@@ -170,6 +170,61 @@ def tool_safety_plan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_safety_js(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-safety")), "js"]
+    if bool_arg(args, "strict", default=False):
+        command.append("--strict")
+    file_path = str_arg(args, "file", required=False)
+    code = str_arg(args, "code", required=False)
+    if file_path and code:
+        raise ToolError("pt730_safety_js requires exactly one of code or file")
+    if file_path:
+        command.extend(["--file", file_path])
+    elif code:
+        command.append(code)
+    else:
+        raise ToolError("pt730_safety_js requires code or file")
+    return run_cli(root, command)
+
+
+def tool_safety_policy(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    return run_cli(root, [str(bin_path(root, "pt730-safety")), "policy"])
+
+
+def tool_catalog(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    action = enum_arg(args, "action", {"devices", "device", "ports", "modules", "module", "cables", "infer_cable", "aliases"})
+    command = [str(bin_path(root, "pt730-catalog")), "infer-cable" if action == "infer_cable" else action]
+    if action in {"device", "ports"}:
+        command.append(str_arg(args, "model"))
+    elif action == "module":
+        command.append(str_arg(args, "module"))
+    elif action == "infer_cable":
+        command.extend([str_arg(args, "category_a"), str_arg(args, "category_b")])
+    if action == "devices":
+        category = str_arg(args, "category", required=False)
+        if category:
+            command.extend(["--category", category])
+        status = enum_arg(args, "status", {"all", "safe", "risky", "unverified"}, default="all")
+        command.extend(["--status", status])
+        if bool_arg(args, "include_ports", default=False):
+            command.append("--include-ports")
+    elif action == "modules":
+        model = str_arg(args, "model", required=False)
+        if model:
+            command.extend(["--model", model])
+        category = str_arg(args, "category", required=False)
+        if category:
+            command.extend(["--category", category])
+        status = enum_arg(args, "status", {"all", "verified", "unverified"}, default="all")
+        command.extend(["--status", status])
+    elif action == "cables":
+        status = enum_arg(args, "status", {"all", "verified", "mapped"}, default="all")
+        command.extend(["--status", status])
+    if bool_arg(args, "table", default=False) and action != "infer_cable":
+        command.append("--table")
+    return run_cli(root, command)
+
+
 def tool_template_lan_star(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [
         str(bin_path(root, "pt730-template")),
@@ -514,6 +569,47 @@ def tool_live_recover(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_live_cli(root, args, "pt730_live_recover", command)
 
 
+def tool_live_eval(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    file_path = str_arg(args, "file", required=False)
+    code = str_arg(args, "code", required=False)
+    if file_path and code:
+        raise ToolError("pt730_live_eval requires exactly one of code or file")
+    if not file_path and not code:
+        raise ToolError("pt730_live_eval requires code or file")
+    command = [str(bin_path(root, "pt730-eval")), "--timeout", str(int_arg(args, "timeout", default=10))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    if bool_arg(args, "expr", default=False):
+        command.append("--expr")
+    if bool_arg(args, "allow_risky", default=False):
+        command.append("--allow-risky")
+    if file_path:
+        command.extend(["--file", file_path])
+    else:
+        command.append(code)
+    return run_live_cli(root, args, "pt730_live_eval", command)
+
+
+def tool_live_smoke(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-smoke"))]
+    if bool_arg(args, "new", default=False):
+        command.append("--new")
+    if bool_arg(args, "dhcp", default=False):
+        command.append("--dhcp")
+    if bool_arg(args, "strict_safety", default=False):
+        command.append("--strict-safety")
+    if bool_arg(args, "no_apply", default=False):
+        command.append("--no-apply")
+    plan = str_arg(args, "plan", required=False)
+    if plan:
+        command.extend(["--plan", plan])
+    save_as = str_arg(args, "save_as", required=False)
+    if save_as:
+        command.extend(["--save-as", save_as])
+    return run_live_cli(root, args, "pt730_live_smoke", command)
+
+
 def tool_live_ios(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     commands = list_str_arg(args, "commands", required=False)
     file_path = str_arg(args, "file", required=False)
@@ -788,6 +884,9 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean}), tool_capabilities),
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, or course-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
+        tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),
+        tool("pt730_safety_policy", "Print the current PT 7.3 automation safety policy.", schema({}), tool_safety_policy),
+        tool("pt730_catalog", "Query the offline Packet Tracer catalog with local PT 7.3 safety overlay.", schema({"action": {"type": "string", "enum": ["devices", "device", "ports", "modules", "module", "cables", "infer_cable", "aliases"]}, "model": string, "module": string, "category": string, "category_a": string, "category_b": string, "status": string, "include_ports": boolean, "table": boolean}, ["action"]), tool_catalog),
         tool("pt730_template_lan_star", "Generate a router-switch-PC/server star LAN topology JSON.", schema({"name": string, "pcs": integer, "servers": integer, "network": string, "gateway": string, "output": string}), tool_template_lan_star),
         tool("pt730_template_router_ring", "Generate a serial router ring topology JSON with RIP configs.", schema({"routers": integer, "interconnect_pool": string, "output": string}), tool_template_router_ring),
         tool("pt730_ip_plan_campus", "Plan VLSM campus subnets from a compact IP planning spec.", schema({"spec": string, "output": string}, ["spec"]), tool_ip_plan_campus),
@@ -813,6 +912,8 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_live_bridge", "Run guarded localhost bridge lifecycle helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["start", "stop", "restart", "status", "bootstrap", "logs"]}, "lines": string, "dry_run": boolean, "allow_live": boolean}, ["action"]), tool_live_bridge),
         tool("pt730_live_launch", "Run guarded Packet Tracer tmux launcher helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["start", "stop", "restart", "status", "logs"]}, "lines": string, "dry_run": boolean, "allow_live": boolean}, ["action"]), tool_live_launch),
         tool("pt730_live_recover", "Run guarded Packet Tracer bridge recovery, or return a safe dry_run command preview.", schema({"wait": integer, "notify": boolean, "dry_run": boolean, "allow_live": boolean}), tool_live_recover),
+        tool("pt730_live_eval", "Evaluate guarded JavaScript in live Packet Tracer, or return a safe dry_run command preview.", schema({"code": string, "file": string, "expr": boolean, "allow_risky": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}), tool_live_eval),
+        tool("pt730_live_smoke", "Run the PT 7.3 bridge smoke workflow, or return a safe dry_run command preview.", schema({"new": boolean, "dhcp": boolean, "strict_safety": boolean, "no_apply": boolean, "plan": string, "save_as": string, "dry_run": boolean, "allow_live": boolean}), tool_live_smoke),
         tool("pt730_live_ios", "Send IOS commands to a live router/switch, or return a safe dry_run command preview.", schema({"device": string, "commands": string_array, "file": string, "init_dialog": boolean, "save": boolean, "keep_comments": boolean, "output": {"type": "string", "enum": ["tail", "full", "none"]}, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_ios),
         tool("pt730_live_pc_inspect", "Inspect live PC/server/laptop port IP state, or return a safe dry_run command preview.", schema({"device": string, "port": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_pc_inspect),
         tool("pt730_live_pc_static", "Set a static IPv4 address on a live PC/server port, or return a safe dry_run command preview.", schema({"device": string, "port": string, "ip": string, "mask": string, "gateway": string, "dns": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "ip", "mask"]), tool_live_pc_static),

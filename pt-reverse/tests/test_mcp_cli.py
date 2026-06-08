@@ -43,10 +43,15 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
+        self.assertIn("pt730_catalog", names)
+        self.assertIn("pt730_safety_js", names)
+        self.assertIn("pt730_safety_policy", names)
         self.assertIn("pt730_live_apply", names)
         self.assertIn("pt730_live_query", names)
         self.assertIn("pt730_live_count", names)
         self.assertIn("pt730_live_save_as", names)
+        self.assertIn("pt730_live_eval", names)
+        self.assertIn("pt730_live_smoke", names)
         self.assertIn("pt730_live_ios", names)
         self.assertIn("pt730_live_pc_inspect", names)
         self.assertIn("pt730_live_pc_static", names)
@@ -489,6 +494,47 @@ class McpCliTest(unittest.TestCase):
             self.assertIn("dry_run", responses[4]["result"]["structuredContent"]["stdout"])
             self.assertIn("dry_run", responses[5]["result"]["structuredContent"]["stdout"])
 
+    def test_catalog_and_safety_js_tools_return_results(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_catalog",
+                        "arguments": {
+                            "action": "ports",
+                            "model": "2911",
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_safety_js",
+                        "arguments": {
+                            "code": "ipc.network().getDeviceCount()",
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_safety_policy", "arguments": {}},
+                },
+            ]
+        )
+        self.assertEqual(responses[0]["result"]["isError"], False)
+        self.assertIn("GigabitEthernet0/0", responses[0]["result"]["structuredContent"]["stdout"])
+        self.assertEqual(responses[1]["result"]["isError"], False)
+        self.assertIn('"ok": true', responses[1]["result"]["structuredContent"]["stdout"])
+        self.assertEqual(responses[2]["result"]["isError"], False)
+        self.assertIn("risky_js_patterns", responses[2]["result"]["structuredContent"]["stdout"])
+
     def test_models_record_requires_allow_write_or_dry_run(self) -> None:
         blocked = self.run_mcp(
             [
@@ -587,6 +633,58 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("status", launch_command)
         self.assertIn("pt730-recover", recover_command[0])
         self.assertIn("--notify", recover_command)
+
+    def test_live_eval_and_smoke_require_allow_live_or_dry_run(self) -> None:
+        blocked = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_eval", "arguments": {"code": "ipc.network().getDeviceCount()", "expr": True}},
+                }
+            ]
+        )
+        self.assertEqual(blocked[0]["error"]["code"], -32602)
+        self.assertIn("allow_live", blocked[0]["error"]["message"])
+
+        previews = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_eval",
+                        "arguments": {
+                            "code": "ipc.network().getDeviceCount()",
+                            "expr": True,
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_smoke",
+                        "arguments": {
+                            "plan": "pt-reverse/examples/server-dhcp-lan.json",
+                            "save_as": "pt-reverse/examples/server-dhcp-lan-live.pkt",
+                            "no_apply": True,
+                            "dry_run": True,
+                        },
+                    },
+                },
+            ]
+        )
+        eval_command = previews[0]["result"]["structuredContent"]["command"]
+        smoke_command = previews[1]["result"]["structuredContent"]["command"]
+        self.assertIn("pt730-eval", eval_command[0])
+        self.assertIn("--expr", eval_command)
+        self.assertIn("pt730-smoke", smoke_command[0])
+        self.assertIn("--no-apply", smoke_command)
 
     def test_live_apply_dry_run_is_allowed_without_live_bridge(self) -> None:
         responses = self.run_mcp(

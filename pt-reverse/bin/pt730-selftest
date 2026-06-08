@@ -90,6 +90,8 @@ expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientPr
 "$BIN/pt730-topo" --timeout 1 apply --dry-run "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-mcp" --list-tools | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"summary","plan":"pt-reverse/examples/simple-lan.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_catalog","arguments":{"action":"ports","model":"2911"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_safety_js","arguments":{"code":"ipc.network().getDeviceCount()"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_apply","arguments":{"plan":"pt-reverse/examples/simple-lan.json","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_ios","arguments":{"device":"R1","commands":["show ip interface brief"],"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_pc_dhcp","arguments":{"device":"PC1","renew":true,"wait":10,"expect_network":"192.168.1.0/24","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
@@ -100,6 +102,8 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_models_validate","arguments":{"model":"2911","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_models_record","arguments":{"model":"2911","status":"risky","reason":"selftest preview","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_recover","arguments":{"wait":5,"notify":true,"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_eval","arguments":{"code":"ipc.network().getDeviceCount()","expr":true,"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_smoke","arguments":{"plan":"pt-reverse/examples/server-dhcp-lan.json","no_apply":true,"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" campus "$ROOT/pt-reverse/examples/ip-plan-campus.json" --output "$tmp/ip-plan.json"
 python3 -m json.tool "$tmp/ip-plan.json" >/dev/null
