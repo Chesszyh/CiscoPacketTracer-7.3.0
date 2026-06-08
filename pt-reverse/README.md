@@ -243,6 +243,8 @@ Use `pt730-compose campus <spec.json> --segments-from-ip-plan <planned.json>
 --output <plan.json>` to expand a compact agent-friendly campus spec into
 devices, safe ports, links, static host IPs, server services, and default layout
 coordinates before touching Packet Tracer.
+Set `core.interconnect_pool` in the compose spec to assign `/30` L3 subnets to
+core switch links for later config planning.
 Use `pt730-config-plan campus <plan.json> --output <configured-plan.json>` to
 derive switch VLAN/access/trunk IOS configs from the topology link metadata.
 Add `--l3 --routing rip` to derive SVI gateways, routed switch interlinks, and

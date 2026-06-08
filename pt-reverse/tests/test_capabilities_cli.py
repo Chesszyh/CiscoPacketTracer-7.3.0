@@ -44,6 +44,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("routed_interfaces", data["ios_template_features"])
         self.assertIn("l3_svis", data["config_plan_features"])
         self.assertIn("static_routes", data["config_plan_features"])
+        self.assertIn("core_interconnect_pool", data["compose_features"])
         self.assertIn("pt-reverse/bin/pt730-layout <plan.json> --output <layout.json>", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-compose campus <campus-spec.json> --output <plan.json>", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-config-plan campus <plan.json> --output <configured-plan.json>", data["recommended_workflow"])

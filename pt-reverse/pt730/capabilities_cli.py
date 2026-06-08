@@ -78,7 +78,7 @@ def manifest() -> dict[str, Any]:
         "ios_template_features": ["schema", "ip_routing", "vlans", "access_interfaces", "trunks", "routed_interfaces", "ripv2", "static_routes", "standard_acls", "extended_acls", "interface_acl_bindings", "nat_overload"],
         "config_plan_features": ["schema", "campus", "vlan_declarations", "access_ports", "trunk_ports", "l3_svis", "routed_interlinks", "ripv2", "static_routes", "topology_ios_configs"],
         "layout_styles": ["auto", "hierarchical", "campus", "lan", "ring", "grid"],
-        "compose_features": ["schema", "campus", "core_ring", "server_block", "access_segments", "segments_from_ip_plan", "representative_hosts", "static_ip_configs", "server_services", "auto_layout"],
+        "compose_features": ["schema", "campus", "core_ring", "core_interconnect_pool", "server_block", "access_segments", "segments_from_ip_plan", "representative_hosts", "static_ip_configs", "server_services", "auto_layout"],
         "ip_plan_features": ["schema", "campus_vlsm", "gateway_reservation", "compose_segments", "unused_pool_summary"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [

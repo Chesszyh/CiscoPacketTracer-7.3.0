@@ -125,10 +125,12 @@ def _device(name: str, category: str, model: str, **extra: Any) -> dict[str, Any
     return device
 
 
-def _link(a: str, pa: str, b: str, pb: str, cable: str, *, vlan: Any = None, note: str | None = None) -> dict[str, Any]:
+def _link(a: str, pa: str, b: str, pb: str, cable: str, *, vlan: Any = None, note: str | None = None, l3_subnet: Any = None) -> dict[str, Any]:
     link = {"a": a, "pa": pa, "b": b, "pb": pb, "cable": cable}
     if vlan not in (None, ""):
         link["vlan"] = int(vlan) if str(vlan).isdigit() else str(vlan)
+    if l3_subnet not in (None, ""):
+        link["l3_subnet"] = str(l3_subnet)
     if note:
         link["note"] = note
     return link
@@ -157,15 +159,38 @@ def _core_names(core_spec: dict[str, Any]) -> list[str]:
     return [f"{prefix}{index}" for index in range(1, count + 1)]
 
 
-def _connect_core_ring(core: list[str], ports: PortAllocator, links: list[dict[str, Any]]) -> None:
+def _core_interconnect_networks(core_spec: dict[str, Any], link_count: int) -> list[ipaddress.IPv4Network]:
+    raw_pool = core_spec.get("interconnect_pool", core_spec.get("l3_pool"))
+    if raw_pool in (None, "") or link_count <= 0:
+        return []
+    try:
+        pool = ipaddress.ip_network(str(raw_pool), strict=False)
+    except ValueError as exc:
+        raise ValueError("core.interconnect_pool: invalid IPv4 network") from exc
+    prefix = _int(core_spec.get("interconnect_prefix", core_spec.get("l3_prefix")), 30, label="core.interconnect_prefix", minimum=0)
+    if prefix > 32:
+        raise ValueError("core.interconnect_prefix: must be <= 32")
+    if prefix < pool.prefixlen:
+        raise ValueError("core.interconnect_prefix: must be greater than or equal to pool prefix length")
+    networks = list(pool.subnets(new_prefix=prefix))
+    if len(networks) < link_count:
+        raise ValueError(f"core.interconnect_pool: not enough /{prefix} subnets for {link_count} core link(s)")
+    return networks[:link_count]
+
+
+def _connect_core_ring(core: list[str], ports: PortAllocator, links: list[dict[str, Any]], networks: list[ipaddress.IPv4Network]) -> None:
     if len(core) <= 1:
         return
     if len(core) == 2:
-        links.append(_link(core[0], ports.use(core[0], "GigabitEthernet0/1"), core[1], ports.use(core[1], "GigabitEthernet0/1"), "cross", note="core interconnect"))
+        l3_subnet = networks[0] if networks else None
+        note = f"core interconnect {l3_subnet}" if l3_subnet else "core interconnect"
+        links.append(_link(core[0], ports.use(core[0], "GigabitEthernet0/1"), core[1], ports.use(core[1], "GigabitEthernet0/1"), "cross", note=note, l3_subnet=l3_subnet))
         return
     for index, a in enumerate(core):
         b = core[(index + 1) % len(core)]
-        links.append(_link(a, ports.use(a, "GigabitEthernet0/1"), b, ports.use(b, "GigabitEthernet0/2"), "cross", note="core ring"))
+        l3_subnet = networks[index] if index < len(networks) else None
+        note = f"core ring {l3_subnet}" if l3_subnet else "core ring"
+        links.append(_link(a, ports.use(a, "GigabitEthernet0/1"), b, ports.use(b, "GigabitEthernet0/2"), "cross", note=note, l3_subnet=l3_subnet))
 
 
 def _pick_core(segment: dict[str, Any], core: list[str], index: int) -> str:
@@ -222,7 +247,8 @@ def compose_campus(spec: dict[str, Any], *, do_layout: bool, layout_style: str) 
                 pt_note="PT 7.3 automation-safe visual substitute for core/multilayer switch.",
             )
         )
-    _connect_core_ring(core, ports, plan["links"])
+    core_link_count = 0 if len(core) <= 1 else 1 if len(core) == 2 else len(core)
+    _connect_core_ring(core, ports, plan["links"], _core_interconnect_networks(core_spec, core_link_count))
 
     server_switch_spec = spec.get("server_switch", {})
     if server_switch_spec is None:
@@ -364,6 +390,8 @@ def schema() -> dict[str, Any]:
             "core.count",
             "core.prefix",
             "core.names",
+            "core.interconnect_pool",
+            "core.interconnect_prefix",
             "server_defaults.mask",
             "server_defaults.gateway",
             "server_defaults.dns",
@@ -383,7 +411,7 @@ def schema() -> dict[str, Any]:
         ],
         "example": {
             "name": "agent-college",
-            "core": {"count": 2, "prefix": "MLS"},
+            "core": {"count": 2, "prefix": "MLS", "interconnect_pool": "10.10.12.0/30"},
             "server_defaults": {"mask": "255.255.255.192", "gateway": "172.16.1.62", "dns": "172.16.1.11"},
             "server_switch": {"name": "SW-SRV", "vlan": 10, "core": "MLS1"},
             "servers": [

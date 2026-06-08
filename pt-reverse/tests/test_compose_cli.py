@@ -13,6 +13,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ROOT / "bin" / "pt730-compose"
+CONFIG_PLAN = ROOT / "bin" / "pt730-config-plan"
 SAFETY = ROOT / "bin" / "pt730-safety"
 RENDER = ROOT / "bin" / "pt730-render"
 
@@ -89,8 +90,10 @@ class ComposeCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertIn("campus", data["commands"])
         self.assertIn("segments[].representative_hosts", data["fields"])
+        self.assertIn("core.interconnect_pool", data["fields"])
         self.assertIn("servers[].services", data["fields"])
         self.assertEqual(data["example"]["core"]["prefix"], "MLS")
+        self.assertEqual(data["example"]["core"]["interconnect_pool"], "10.10.12.0/30")
 
     def test_campus_spec_generates_safe_layout_ready_topology(self) -> None:
         result = self.run_compose(self.campus_spec())
@@ -147,6 +150,50 @@ class ComposeCliTest(unittest.TestCase):
             self.assertEqual(summary["vlan_link_counts"]["20"], 3)
         finally:
             Path(path).unlink(missing_ok=True)
+
+    def test_core_interconnect_pool_assigns_l3_subnets_to_core_links(self) -> None:
+        spec = self.campus_spec()
+        spec["core"] = {"count": 3, "prefix": "MLS", "interconnect_pool": "10.10.0.0/28"}
+        result = self.run_compose(spec, "--no-layout")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        core_links = [
+            link
+            for link in plan["links"]
+            if link["a"].startswith("MLS") and link["b"].startswith("MLS") and "vlan" not in link
+        ]
+        self.assertEqual(len(core_links), 3)
+        self.assertEqual([link["l3_subnet"] for link in core_links], ["10.10.0.0/30", "10.10.0.4/30", "10.10.0.8/30"])
+
+    def test_composed_core_l3_subnets_feed_static_config_planning(self) -> None:
+        spec = self.campus_spec()
+        spec["core"] = {"count": 2, "prefix": "MLS", "interconnect_pool": "10.10.12.0/30"}
+        compose = self.run_compose(spec, "--no-layout")
+        self.assertEqual(compose.returncode, 0, compose.stderr)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_path = Path(tmpdir) / "topology.json"
+            configured_path = Path(tmpdir) / "configured.json"
+            plan_path.write_text(compose.stdout, encoding="utf-8")
+            result = subprocess.run(
+                [str(CONFIG_PLAN), "campus", str(plan_path), "--l3", "--routing", "static", "--output", str(configured_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            safety = subprocess.run(
+                [str(SAFETY), "plan", str(configured_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(safety.returncode, 0, safety.stdout + safety.stderr)
 
     def test_output_file_suppresses_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
