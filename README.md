@@ -67,9 +67,11 @@ pt-reverse/bin/pt730-mcp
 ```
 
 MCP live tools require `allow_live=true`; `pt730_live_apply`, IOS/terminal/ping
-tools, PC static/DHCP tools, Server-PT service tools, FTP client tools, and
-simulation/PDU tools support `dry_run=true` previews that return the underlying
-CLI command without contacting Packet Tracer.
+tools, PC static/DHCP tools, Server-PT service tools, FTP client tools,
+app/bridge/launch/recover lifecycle tools, and simulation/PDU tools support
+`dry_run=true` previews that return the underlying CLI command without
+contacting Packet Tracer. Model registry reads are exposed through MCP; model
+metadata writes require `allow_write=true` unless run as `dry_run=true`.
 
 Read `pt-reverse/SAFETY.md` before running live Packet Tracer operations.
 

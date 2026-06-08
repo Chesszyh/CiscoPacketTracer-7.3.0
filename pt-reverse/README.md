@@ -58,8 +58,10 @@ pt-reverse/bin/pt730-mcp
 The MCP wrapper exposes offline tools and guarded live tools.  Any live
 Packet Tracer contact requires `allow_live=true`; `pt730_live_apply`,
 IOS/terminal/ping tools, PC static/DHCP tools, Server-PT service tools, FTP
-client tools, and simulation/PDU tools support `dry_run=true` previews that
-return the underlying CLI command without touching Packet Tracer.
+client tools, app/bridge/launch/recover lifecycle tools, and simulation/PDU
+tools support `dry_run=true` previews that return the underlying CLI command
+without touching Packet Tracer. Model registry reads are exposed through MCP;
+model metadata writes require `allow_write=true` unless run as `dry_run=true`.
 
 The known-good launch path is:
 

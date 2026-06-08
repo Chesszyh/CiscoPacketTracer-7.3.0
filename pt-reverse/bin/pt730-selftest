@@ -96,6 +96,10 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_server_dns_add","arguments":{"device":"SRV1","hostname":"www.example.local","ip":"172.16.1.10","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_ftp","arguments":{"client":"PC1","server":"172.16.1.10","commands":["dir"],"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_sim","arguments":{"action":"simple_pdu","source":"PC1","target":"SRV1","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_topo_summarize_query","arguments":{"query_json":"pt-reverse/examples/simple-lan-live-query.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_models_validate","arguments":{"model":"2911","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_models_record","arguments":{"model":"2911","status":"risky","reason":"selftest preview","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_recover","arguments":{"wait":5,"notify":true,"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" campus "$ROOT/pt-reverse/examples/ip-plan-campus.json" --output "$tmp/ip-plan.json"
 python3 -m json.tool "$tmp/ip-plan.json" >/dev/null
