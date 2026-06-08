@@ -20,6 +20,10 @@ def _mask(network: ipaddress.IPv4Network) -> str:
     return str(network.netmask)
 
 
+def _wildcard(network: ipaddress.IPv4Network) -> str:
+    return str(network.hostmask)
+
+
 def _host(network: ipaddress.IPv4Network, offset: int) -> ipaddress.IPv4Address:
     address = ipaddress.ip_address(int(network.network_address) + offset)
     if address not in network:
@@ -43,7 +47,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "wireless-lan", "router-ring", "wan-ring", "campus"],
+        "commands": ["schema", "lan-star", "wireless-lan", "edge-security", "router-ring", "wan-ring", "campus"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -52,6 +56,10 @@ def schema() -> dict[str, Any]:
             "wireless-lan": {
                 "description": "One router, one access switch, safe AccessPoint-PT APs, Laptop-PT clients, optional HTTP/DNS servers, and static host IPs.",
                 "options": ["--name", "--aps", "--laptops", "--servers", "--network", "--gateway", "--dns", "--ssid", "--layout-style", "--no-layout"],
+            },
+            "edge-security": {
+                "description": "ISP edge router, inside LAN, DMZ servers, Internet test host, NAT overload, outside ACL, and static routes.",
+                "options": ["--name", "--inside-hosts", "--dmz-servers", "--internet-hosts", "--inside-network", "--dmz-network", "--wan-network", "--internet-network", "--domain", "--layout-style", "--no-layout"],
             },
             "router-ring": {
                 "description": "Serial WAN ring of 2911 routers with HWIC-2T modules and RIPv2 configs.",
@@ -312,6 +320,190 @@ def _host_list(network: ipaddress.IPv4Network, *, count: int, skip: set[ipaddres
     raise ValueError(f"{network}: not enough usable host addresses")
 
 
+def edge_security(
+    *,
+    name: str,
+    inside_hosts: int,
+    dmz_servers: int,
+    internet_hosts: int,
+    inside_network: str,
+    dmz_network: str,
+    wan_network: str,
+    internet_network: str,
+    domain: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if inside_hosts < 1:
+        raise ValueError("edge-security requires at least one inside host")
+    if dmz_servers < 1:
+        raise ValueError("edge-security requires at least one DMZ server")
+    if internet_hosts < 1:
+        raise ValueError("edge-security requires at least one Internet test host")
+    if inside_hosts > 23 or dmz_servers > 23 or internet_hosts > 23:
+        raise ValueError("edge-security supports up to 23 hosts per access switch")
+
+    inside_net = ipaddress.ip_network(inside_network, strict=False)
+    dmz_net = ipaddress.ip_network(dmz_network, strict=False)
+    wan_net = ipaddress.ip_network(wan_network, strict=False)
+    inet_net = ipaddress.ip_network(internet_network, strict=False)
+    if len(list(wan_net.hosts())) < 2:
+        raise ValueError(f"{wan_net}: WAN network needs at least two usable hosts")
+
+    inside_gw = _host(inside_net, 1)
+    dmz_gw = _host(dmz_net, 1)
+    isp_wan = _host(wan_net, 1)
+    edge_wan = _host(wan_net, 2)
+    inet_gw = _host(inet_net, 1)
+    inside_addresses = _host_list(inside_net, count=inside_hosts, skip={inside_gw})
+    dmz_addresses = _host_list(dmz_net, count=dmz_servers, skip={dmz_gw})
+    internet_addresses = _host_list(inet_net, count=internet_hosts, skip={inet_gw})
+
+    slug = name.upper()
+    edge = f"R-{slug}-EDGE"
+    isp = f"R-{slug}-ISP"
+    lan_switch = f"SW-{slug}-LAN"
+    dmz_switch = f"SW-{slug}-DMZ"
+    internet_switch = f"SW-{slug}-INET"
+    web_ip = dmz_addresses[0]
+    dns_ip = dmz_addresses[1] if len(dmz_addresses) > 1 else dmz_addresses[0]
+    dns_records = [
+        {"name": f"www.{domain}", "ip": str(web_ip)},
+        {"name": f"dns.{domain}", "ip": str(dns_ip)},
+    ]
+
+    edge_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {edge}",
+        "interface GigabitEthernet0/0",
+        "description INSIDE_LAN",
+        f"ip address {inside_gw} {_mask(inside_net)}",
+        "ip nat inside",
+        "no shutdown",
+        "exit",
+        "interface GigabitEthernet0/1",
+        "description DMZ",
+        f"ip address {dmz_gw} {_mask(dmz_net)}",
+        "no shutdown",
+        "exit",
+        "interface GigabitEthernet0/2",
+        "description OUTSIDE_TO_ISP",
+        f"ip address {edge_wan} {_mask(wan_net)}",
+        "ip nat outside",
+        "ip access-group 101 in",
+        "no shutdown",
+        "exit",
+        f"ip route 0.0.0.0 0.0.0.0 {isp_wan}",
+        f"access-list 10 permit {inside_net.network_address} {_wildcard(inside_net)}",
+        f"access-list 101 permit tcp any host {web_ip} eq 80",
+        f"access-list 101 permit icmp any host {web_ip}",
+        f"access-list 101 permit udp any host {dns_ip} eq 53",
+        f"access-list 101 deny ip any {inside_net.network_address} {_wildcard(inside_net)}",
+        "access-list 101 permit ip any any",
+        "ip nat inside source list 10 interface GigabitEthernet0/2 overload",
+        "end",
+    ]
+    isp_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {isp}",
+        "interface GigabitEthernet0/0",
+        "description WAN_TO_EDGE",
+        f"ip address {isp_wan} {_mask(wan_net)}",
+        "no shutdown",
+        "exit",
+        "interface GigabitEthernet0/1",
+        "description INTERNET_TEST_NET",
+        f"ip address {inet_gw} {_mask(inet_net)}",
+        "no shutdown",
+        "exit",
+        f"ip route {inside_net.network_address} {_mask(inside_net)} {edge_wan}",
+        f"ip route {dmz_net.network_address} {_mask(dmz_net)} {edge_wan}",
+        "end",
+    ]
+
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": edge, "category": "router", "model": "2911"},
+            {"name": isp, "category": "router", "model": "2911"},
+            {"name": lan_switch, "category": "switch", "model": "2960-24TT"},
+            {"name": dmz_switch, "category": "switch", "model": "2960-24TT"},
+            {"name": internet_switch, "category": "switch", "model": "2960-24TT"},
+        ],
+        "links": [
+            {"a": edge, "pa": "GigabitEthernet0/0", "b": lan_switch, "pb": "FastEthernet0/1", "cable": "straight", "note": "inside LAN"},
+            {"a": edge, "pa": "GigabitEthernet0/1", "b": dmz_switch, "pb": "FastEthernet0/1", "cable": "straight", "note": "DMZ"},
+            {"a": edge, "pa": "GigabitEthernet0/2", "b": isp, "pb": "GigabitEthernet0/0", "cable": "cross", "note": str(wan_net), "l3_subnet": str(wan_net)},
+            {"a": isp, "pa": "GigabitEthernet0/1", "b": internet_switch, "pb": "FastEthernet0/1", "cable": "straight", "note": "Internet test LAN"},
+        ],
+        "pc_configs": [],
+        "server_configs": [],
+        "security_policies": [
+            {
+                "device": edge,
+                "type": "nat_overload",
+                "interface": "GigabitEthernet0/2",
+                "acl": "10",
+                "direction": "inside-to-outside",
+                "summary": f"PAT inside {inside_net} to outside interface {edge_wan}",
+            },
+            {
+                "device": edge,
+                "type": "outside_acl",
+                "interface": "GigabitEthernet0/2",
+                "acl": "101",
+                "direction": "in",
+                "summary": f"Permit HTTP/ICMP to {web_ip}, DNS to {dns_ip}, deny inbound to {inside_net}",
+            },
+        ],
+        "ios_configs": [
+            {"device": edge, "init_dialog": True, "commands": edge_commands},
+            {"device": isp, "init_dialog": True, "commands": isp_commands},
+        ],
+        "metadata": {
+            "source": "pt730-template edge-security",
+            "name": name,
+            "inside_network": str(inside_net),
+            "dmz_network": str(dmz_net),
+            "wan_network": str(wan_net),
+            "internet_network": str(inet_net),
+            "domain": domain,
+        },
+    }
+
+    for index, address in enumerate(inside_addresses, start=1):
+        host = f"PC-{slug}-IN-{index}"
+        plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT"})
+        plan["links"].append({"a": lan_switch, "pa": f"FastEthernet0/{index + 1}", "b": host, "pb": "FastEthernet0", "cable": "straight", "note": "inside host"})
+        plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(inside_net), "gateway": str(inside_gw), "dns": str(dns_ip)})
+
+    for index, address in enumerate(dmz_addresses, start=1):
+        if index == 1:
+            server = f"SRV-{slug}-WEB"
+            services: dict[str, Any] = {"http": True}
+        elif index == 2:
+            server = f"SRV-{slug}-DNS"
+            services = {"dns": {"enabled": True, "records": dns_records}}
+        else:
+            server = f"SRV-{slug}-DMZ-{index}"
+            services = {"http": True}
+        if dmz_servers == 1:
+            services["dns"] = {"enabled": True, "records": dns_records}
+        plan["devices"].append({"name": server, "category": "server", "model": "Server-PT"})
+        plan["links"].append({"a": dmz_switch, "pa": f"FastEthernet0/{index + 1}", "b": server, "pb": "FastEthernet0", "cable": "straight", "note": "DMZ service"})
+        plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(address), "mask": _mask(dmz_net), "gateway": str(dmz_gw), "dns": str(dns_ip)})
+        plan["server_configs"].append({"name": server, **services})
+
+    for index, address in enumerate(internet_addresses, start=1):
+        host = f"PC-{slug}-INET-{index}"
+        plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT"})
+        plan["links"].append({"a": internet_switch, "pa": f"FastEthernet0/{index + 1}", "b": host, "pb": "FastEthernet0", "cable": "straight", "note": "Internet test host"})
+        plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(inet_net), "gateway": str(inet_gw), "dns": str(dns_ip)})
+
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
 def wan_ring(
     *,
     name: str,
@@ -569,6 +761,20 @@ def main(argv: list[str] | None = None) -> int:
     wifi_p.add_argument("--no-layout", action="store_true")
     wifi_p.add_argument("--output", type=Path)
 
+    edge_p = sub.add_parser("edge-security", help="generate an ISP edge NAT/ACL/DMZ security lab")
+    edge_p.add_argument("--name", default="EDGE")
+    edge_p.add_argument("--inside-hosts", type=int, default=3)
+    edge_p.add_argument("--dmz-servers", type=int, default=2)
+    edge_p.add_argument("--internet-hosts", type=int, default=1)
+    edge_p.add_argument("--inside-network", default="192.168.10.0/24")
+    edge_p.add_argument("--dmz-network", default="172.16.10.0/24")
+    edge_p.add_argument("--wan-network", default="203.0.113.0/30")
+    edge_p.add_argument("--internet-network", default="198.51.100.0/24")
+    edge_p.add_argument("--domain", default="edge.local")
+    edge_p.add_argument("--layout-style", choices=STYLES, default="hierarchical")
+    edge_p.add_argument("--no-layout", action="store_true")
+    edge_p.add_argument("--output", type=Path)
+
     ring_p = sub.add_parser("router-ring", help="generate a serial router ring with RIPv2")
     ring_p.add_argument("--name", default="RING")
     ring_p.add_argument("--routers", type=int, default=4)
@@ -641,6 +847,25 @@ def main(argv: list[str] | None = None) -> int:
                     gateway=args.gateway,
                     dns=args.dns,
                     ssid=args.ssid,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "edge-security":
+            _emit(
+                edge_security(
+                    name=args.name,
+                    inside_hosts=args.inside_hosts,
+                    dmz_servers=args.dmz_servers,
+                    internet_hosts=args.internet_hosts,
+                    inside_network=args.inside_network,
+                    dmz_network=args.dmz_network,
+                    wan_network=args.wan_network,
+                    internet_network=args.internet_network,
+                    domain=args.domain,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

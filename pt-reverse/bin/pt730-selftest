@@ -93,6 +93,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_schema","arguments":{"target":"compose","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_lan_star","arguments":{"name":"AGENT","pcs":1,"servers":1,"network":"192.168.60.0/24","gateway":"192.168.60.1","dns":"192.168.60.254","layout_style":"grid","no_layout":true,"compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_wireless_lan","arguments":{"name":"AGENT","aps":2,"laptops":3,"servers":1,"network":"192.168.80.0/24","gateway":"192.168.80.1","ssid":"PT730-LAB","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_edge_security","arguments":{"name":"AGENT","inside_hosts":2,"dmz_servers":2,"internet_hosts":1,"domain":"edge.local","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_wan_ring","arguments":{"name":"AGENT","sites":3,"hosts_per_site":1,"servers_per_site":1,"routing":"static","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_campus","arguments":{"name":"AGENT","cores":2,"segments":2,"hosts_per_segment":1,"servers":2,"l3":true,"routing":"rip","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_ip_plan_campus","arguments":{"spec":"pt-reverse/examples/ip-plan-campus.json","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
@@ -147,6 +148,9 @@ ok "pipeline checks"
 "$BIN/pt730-template" wireless-lan --name AGENT --aps 2 --laptops 3 --servers 1 --network 192.168.80.0/24 --ssid PT730-LAB --output "$tmp/wireless-lan.json"
 "$BIN/pt730-safety" plan "$tmp/wireless-lan.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/wireless-lan.json" >/dev/null
+"$BIN/pt730-template" edge-security --name AGENT --inside-hosts 2 --dmz-servers 2 --internet-hosts 1 --domain edge.local --output "$tmp/edge-security.json"
+"$BIN/pt730-safety" plan "$tmp/edge-security.json" >/dev/null
+"$BIN/pt730-render" summary "$tmp/edge-security.json" >/dev/null
 "$BIN/pt730-template" router-ring --routers 4 --interconnect-pool 10.20.0.0/28 --output "$tmp/router-ring.json"
 "$BIN/pt730-safety" plan "$tmp/router-ring.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/router-ring.json" >/dev/null

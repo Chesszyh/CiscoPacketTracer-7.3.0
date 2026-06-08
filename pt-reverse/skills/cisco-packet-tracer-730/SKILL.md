@@ -37,7 +37,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
 
 ## Common Tasks
 
-- Generate a small or representative lab topology: use `pt730-template lan-star`, `wireless-lan`, `router-ring`, `wan-ring`, or `campus`; through MCP, `pt730_template_lan_star`, `pt730_template_wireless_lan`, `pt730_template_router_ring`, `pt730_template_wan_ring`, and `pt730_template_campus` expose layout, no-layout, compact JSON, and template-specific options.
+- Generate a small or representative lab topology: use `pt730-template lan-star`, `wireless-lan`, `edge-security`, `router-ring`, `wan-ring`, or `campus`; through MCP, `pt730_template_lan_star`, `pt730_template_wireless_lan`, `pt730_template_edge_security`, `pt730_template_router_ring`, `pt730_template_wan_ring`, and `pt730_template_campus` expose layout, no-layout, compact JSON, and template-specific options.
 - Generate a campus/course design: use `pt730-ip-plan`, then `pt730-compose`, then `pt730-config-plan`, or run `pt730-pipeline campus`; through MCP, `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus` expose compact JSON and layout-style controls where applicable.
 - Refine topology placement through MCP with `pt730_layout`; use canvas width/height, spacing, margin, style, and compact options when diagrams need clearer density or framing.
 - Render outputs for review: use `pt730-render svg`, `drawio`, `html`, `markdown`, `summary`, and `course-audit`; visual renders support `--theme light|dark|paper`, `--no-link-labels`, `--no-model-labels`, and `--group-by auto|network|vlan|site|category`, exposed through MCP as `theme`, `link_labels`, `model_labels`, and `group_by`.
@@ -56,5 +56,6 @@ For exact command patterns, read `references/workflows.md` only when needed.
 - Treat live Script Module operations as crash-prone. Keep live mutations sequential and small.
 - Avoid risky/blocked models unless the user explicitly asks to validate them.
 - For unattended wireless templates, use the built-in `wireless-lan` template's verified `AccessPoint-PT` and `Laptop-PT` models; treat wireless cable code `8109` warnings as offline-only until live validation is explicitly requested.
+- For edge-security labs, prefer the built-in `edge-security` template's verified router/switch/PC/server models over ASA/firewall models that are risky in PT 7.3.0.
 - Do not use DHCP client live validation by default; prefer static IP smoke checks.
 - In this repository, prefix shell commands with `rtk` when the local `AGENTS.md`/`RTK.md` rule is active.

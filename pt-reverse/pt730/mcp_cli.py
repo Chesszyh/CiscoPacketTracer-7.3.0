@@ -347,6 +347,39 @@ def tool_template_wireless_lan(root: Path, args: dict[str, Any]) -> dict[str, An
     return run_cli(root, command)
 
 
+def tool_template_edge_security(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-template"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.append("edge-security")
+    for key, flag in (
+        ("name", "--name"),
+        ("inside_network", "--inside-network"),
+        ("dmz_network", "--dmz-network"),
+        ("wan_network", "--wan-network"),
+        ("internet_network", "--internet-network"),
+        ("domain", "--domain"),
+        ("output", "--output"),
+    ):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    for key, flag, default in (
+        ("inside_hosts", "--inside-hosts", 3),
+        ("dmz_servers", "--dmz-servers", 2),
+        ("internet_hosts", "--internet-hosts", 1),
+    ):
+        command.extend([flag, str(int_arg(args, key, default=default))])
+    layout_style = str_arg(args, "layout_style", required=False)
+    if layout_style:
+        if layout_style not in LAYOUT_STYLES:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
+        command.extend(["--layout-style", layout_style])
+    if bool_arg(args, "no_layout", default=False):
+        command.append("--no-layout")
+    return run_cli(root, command)
+
+
 def tool_template_router_ring(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-template"))]
     if bool_arg(args, "compact", default=False):
@@ -1184,6 +1217,7 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_catalog", "Query the offline Packet Tracer catalog with local PT 7.3 safety overlay.", schema({"action": {"type": "string", "enum": ["devices", "device", "ports", "modules", "module", "cables", "infer_cable", "aliases"]}, "model": string, "module": string, "category": string, "category_a": string, "category_b": string, "status": string, "include_ports": boolean, "table": boolean}, ["action"]), tool_catalog),
         tool("pt730_template_lan_star", "Generate a router-switch-PC/server star LAN topology JSON.", schema({"name": string, "pcs": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_lan_star),
         tool("pt730_template_wireless_lan", "Generate a router-switch-AP-laptop wireless LAN topology JSON with safe PT 7.3 models.", schema({"name": string, "aps": integer, "laptops": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "ssid": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_wireless_lan),
+        tool("pt730_template_edge_security", "Generate an ISP edge NAT/ACL/DMZ security lab topology JSON.", schema({"name": string, "inside_hosts": integer, "dmz_servers": integer, "internet_hosts": integer, "inside_network": string, "dmz_network": string, "wan_network": string, "internet_network": string, "domain": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_edge_security),
         tool("pt730_template_router_ring", "Generate a serial router ring topology JSON with RIP configs.", schema({"name": string, "routers": integer, "interconnect_pool": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_router_ring),
         tool("pt730_template_wan_ring", "Generate a multi-site serial WAN ring with per-site LANs, services, and optional routing configs.", schema({"name": string, "sites": integer, "hosts_per_site": integer, "servers_per_site": integer, "interconnect_pool": string, "lan_pool": string, "lan_prefix": integer, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_wan_ring),
         tool("pt730_template_campus", "Generate a representative core/access/server campus topology JSON with optional L3 configs.", schema({"name": string, "cores": integer, "segments": integer, "hosts_per_segment": integer, "access_switches_per_segment": integer, "servers": integer, "address_pool": string, "segment_prefix": integer, "server_network": string, "server_vlan": integer, "vlan_base": integer, "interconnect_pool": string, "l3": boolean, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_campus),

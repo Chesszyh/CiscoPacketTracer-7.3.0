@@ -883,6 +883,22 @@ def markdown(plan: dict[str, Any]) -> str:
         lines.extend(markdown_table(["Server", "NTP", "NTP Auth", "Syslog", "Syslog Port"], service_rows["time_logging"]))
         lines.append("")
 
+    security_rows = []
+    for policy in plan.get("security_policies", []):
+        if isinstance(policy, dict):
+            security_rows.append([
+                pick(policy, ("device", "router", "name")),
+                pick(policy, ("type", "kind")),
+                pick(policy, ("interface", "port")),
+                pick(policy, ("acl", "acl_id", "acl_number")),
+                pick(policy, ("direction",)),
+                pick(policy, ("summary", "description", "note")),
+            ])
+    if security_rows:
+        lines.extend(["## Security Policies", ""])
+        lines.extend(markdown_table(["Device", "Type", "Interface", "ACL", "Direction", "Summary"], security_rows))
+        lines.append("")
+
     ios_rows = []
     for config in plan.get("ios_configs", []):
         if isinstance(config, dict):
@@ -938,6 +954,7 @@ def summary(plan: dict[str, Any]) -> str:
             "pc_configs": len(plan.get("pc_configs", [])),
             "ap_configs": len(plan.get("ap_configs", [])),
             "server_configs": len(plan.get("server_configs", [])),
+            "security_policies": len(plan.get("security_policies", [])),
             "ios_configs": len(plan.get("ios_configs", [])),
         },
         "address_groups": [
@@ -957,6 +974,18 @@ def summary(plan: dict[str, Any]) -> str:
             "ssids": sorted({pick(config, ("ssid",)) for config in plan.get("ap_configs", []) if isinstance(config, dict) and pick(config, ("ssid",))}),
             "links": len([link for link in plan.get("links", []) if isinstance(link, dict) and is_wireless_link(link)]),
         },
+        "security_policies": [
+            {
+                "device": pick(policy, ("device", "router", "name")),
+                "type": pick(policy, ("type", "kind")),
+                "interface": pick(policy, ("interface", "port")),
+                "acl": pick(policy, ("acl", "acl_id", "acl_number")),
+                "direction": pick(policy, ("direction",)),
+                "summary": pick(policy, ("summary", "description", "note")),
+            }
+            for policy in plan.get("security_policies", [])
+            if isinstance(policy, dict)
+        ],
         "server_service_counts": {name: len(rows) for name, rows in service_rows.items()},
     }
     return json.dumps(data, ensure_ascii=False, indent=2) + "\n"

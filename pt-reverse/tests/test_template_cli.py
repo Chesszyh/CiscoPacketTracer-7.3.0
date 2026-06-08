@@ -64,9 +64,11 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("router-ring", data["commands"])
         self.assertIn("wan-ring", data["commands"])
         self.assertIn("wireless-lan", data["commands"])
+        self.assertIn("edge-security", data["commands"])
         self.assertIn("campus", data["commands"])
         self.assertIn("lan-star", data["templates"])
         self.assertIn("wireless-lan", data["templates"])
+        self.assertIn("edge-security", data["templates"])
         self.assertIn("router-ring", data["templates"])
         self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
@@ -149,6 +151,59 @@ class TemplateCliTest(unittest.TestCase):
         self.assertNotIn("WirelessEndDevice-PT", encoded)
         self.assertNotIn("SMARTPHONE-PT", encoded)
         self.assertNotIn("WRT300N", encoded)
+        self.assert_safe_and_renderable(plan)
+
+    def test_edge_security_generates_nat_acl_dmz_and_static_routes(self) -> None:
+        result = self.run_template(
+            "edge-security",
+            "--name",
+            "SEC",
+            "--inside-hosts",
+            "2",
+            "--dmz-servers",
+            "2",
+            "--internet-hosts",
+            "1",
+            "--domain",
+            "sec.local",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertEqual(
+            names,
+            {
+                "R-SEC-EDGE",
+                "R-SEC-ISP",
+                "SW-SEC-LAN",
+                "SW-SEC-DMZ",
+                "SW-SEC-INET",
+                "PC-SEC-IN-1",
+                "PC-SEC-IN-2",
+                "SRV-SEC-WEB",
+                "SRV-SEC-DNS",
+                "PC-SEC-INET-1",
+            },
+        )
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        self.assertEqual(len(plan["links"]), 9)
+        self.assertEqual(len(plan["pc_configs"]), 5)
+        self.assertEqual(len(plan["server_configs"]), 2)
+        self.assertEqual(len(plan["ios_configs"]), 2)
+        self.assertEqual(len(plan["security_policies"]), 2)
+        self.assertEqual(plan["metadata"]["source"], "pt730-template edge-security")
+        self.assertEqual(plan["metadata"]["domain"], "sec.local")
+        services = {config["name"]: config for config in plan["server_configs"]}
+        self.assertIn("http", services["SRV-SEC-WEB"])
+        self.assertIn("dns", services["SRV-SEC-DNS"])
+        self.assertEqual(services["SRV-SEC-DNS"]["dns"]["records"][0]["name"], "www.sec.local")
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ip nat inside source list 10 interface GigabitEthernet0/2 overload", joined)
+        self.assertIn("ip access-group 101 in", joined)
+        self.assertIn("access-list 101 deny ip any 192.168.10.0 0.0.0.255", joined)
+        self.assertIn("ip route 0.0.0.0 0.0.0.0 203.0.113.1", joined)
+        self.assertIn("ip route 172.16.10.0 255.255.255.0 203.0.113.2", joined)
+        self.assertNotIn("ASA5505", json.dumps(plan))
         self.assert_safe_and_renderable(plan)
 
     def test_router_ring_generates_serial_modules_links_and_rip_configs(self) -> None:

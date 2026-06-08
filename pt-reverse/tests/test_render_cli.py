@@ -241,6 +241,45 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("## DHCP Server Pools", result.stdout)
         self.assertIn("| SRV_DHCP | yes | 192.168.200.0 | 255.255.255.0 | 192.168.200.100 | 192.168.200.150 |", result.stdout)
 
+    def test_markdown_and_summary_render_security_policies(self) -> None:
+        plan = {
+            "devices": [{"name": "R-EDGE", "category": "router", "model": "2911"}],
+            "links": [],
+            "security_policies": [
+                {
+                    "device": "R-EDGE",
+                    "type": "nat_overload",
+                    "interface": "GigabitEthernet0/2",
+                    "acl": "10",
+                    "direction": "inside-to-outside",
+                    "summary": "PAT inside users to outside",
+                },
+                {
+                    "device": "R-EDGE",
+                    "type": "outside_acl",
+                    "interface": "GigabitEthernet0/2",
+                    "acl": "101",
+                    "direction": "in",
+                    "summary": "Deny inbound to inside LAN",
+                },
+            ],
+        }
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            markdown_result = self.run_render("markdown", path)
+            summary_result = self.run_render("summary", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
+        self.assertIn("## Security Policies", markdown_result.stdout)
+        self.assertIn("| R-EDGE | nat_overload | GigabitEthernet0/2 | 10 | inside-to-outside | PAT inside users to outside |", markdown_result.stdout)
+        self.assertEqual(summary_result.returncode, 0, summary_result.stderr)
+        data = json.loads(summary_result.stdout)
+        self.assertEqual(data["counts"]["security_policies"], 2)
+        self.assertEqual(data["security_policies"][1]["type"], "outside_acl")
+
     def test_summary_outputs_machine_readable_counts(self) -> None:
         result = self.run_render("summary", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))
         self.assertEqual(result.returncode, 0, result.stderr)
