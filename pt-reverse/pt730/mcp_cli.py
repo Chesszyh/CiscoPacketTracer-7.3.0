@@ -18,6 +18,7 @@ SERVER_INFO = {"name": "pt730-mcp", "version": "0.1.0"}
 LAYOUT_STYLES = {"auto", "hierarchical", "campus", "lan", "ring", "grid"}
 RENDER_THEMES = {"light", "dark", "paper"}
 VISUAL_RENDER_FORMATS = {"svg", "drawio", "html"}
+RENDER_GROUP_BY = {"none", "auto", "network", "vlan", "site", "category"}
 
 
 class ToolError(ValueError):
@@ -214,6 +215,13 @@ def tool_render(root: Path, args: dict[str, Any]) -> dict[str, Any]:
             raise ToolError("model_labels is supported only for svg, drawio, or html renders")
         if not model_labels:
             command.append("--no-model-labels")
+    group_by = str_arg(args, "group_by", required=False)
+    if group_by:
+        if fmt not in VISUAL_RENDER_FORMATS:
+            raise ToolError("group_by is supported only for svg, drawio, or html renders")
+        if group_by not in RENDER_GROUP_BY:
+            raise ToolError("group_by must be one of: auto, category, network, none, site, vlan")
+        command.extend(["--group-by", group_by])
     return run_cli(root, command)
 
 
@@ -1138,7 +1146,7 @@ def tools() -> list[dict[str, Any]]:
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
         tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
-        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, or course-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
+        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, or course-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),
         tool("pt730_safety_policy", "Print the current PT 7.3 automation safety policy.", schema({}), tool_safety_policy),

@@ -24,6 +24,7 @@ COURSE_SERVER_GATEWAY = "172.16.1.62"
 COURSE_EXPECTED_SERVERS = 50
 COURSE_EXPECTED_PCS = 1900
 RENDER_THEMES = ("light", "dark", "paper")
+RENDER_GROUP_BY = ("none", "auto", "network", "vlan", "site", "category")
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class RenderOptions:
     theme: str = "light"
     link_labels: bool = True
     model_labels: bool = True
+    group_by: str = "none"
 
 
 def render_palette(theme: str) -> dict[str, str]:
@@ -56,6 +58,8 @@ def render_palette(theme: str) -> dict[str, str]:
             "pc_stroke": "#a5b4fc",
             "device_fill": "#1f2937",
             "device_stroke": "#94a3b8",
+            "group_fill": "#1e293b",
+            "group_stroke": "#64748b",
         }
     if theme == "paper":
         return {
@@ -79,6 +83,8 @@ def render_palette(theme: str) -> dict[str, str]:
             "pc_stroke": "#4338ca",
             "device_fill": "#f1f5f9",
             "device_stroke": "#64748b",
+            "group_fill": "#fff3d7",
+            "group_stroke": "#b8975b",
         }
     return {
         "bg": "#f8fafc",
@@ -101,6 +107,8 @@ def render_palette(theme: str) -> dict[str, str]:
         "pc_stroke": "#4338ca",
         "device_fill": "#f1f5f9",
         "device_stroke": "#64748b",
+        "group_fill": "#e2e8f0",
+        "group_stroke": "#64748b",
     }
 
 
@@ -354,6 +362,118 @@ def svg_positions(devices: list[dict[str, Any]]) -> tuple[dict[str, tuple[float,
     return positions, width, height
 
 
+def link_endpoint(link: dict[str, Any], aliases: tuple[str, ...]) -> str:
+    return pick(link, aliases)
+
+
+def link_pairs(plan: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+    pairs: list[tuple[str, str, dict[str, Any]]] = []
+    for link in plan.get("links", []):
+        if not isinstance(link, dict):
+            continue
+        a = link_endpoint(link, ("a", "device_a", "from", "from_device"))
+        b = link_endpoint(link, ("b", "device_b", "to", "to_device"))
+        if a and b:
+            pairs.append((a, b, link))
+    return pairs
+
+
+def chosen_group_by(plan: dict[str, Any], group_by: str) -> str:
+    if group_by != "auto":
+        return group_by
+    if any("site " in pick(link, ("note", "description")).lower() for link in plan.get("links", []) if isinstance(link, dict)):
+        return "site"
+    if any(pick(link, ("vlan", "vlan_id")) for link in plan.get("links", []) if isinstance(link, dict)):
+        return "vlan"
+    if address_groups(plan):
+        return "network"
+    return "category"
+
+
+def visual_groups(plan: dict[str, Any], devices: list[dict[str, Any]], group_by: str) -> list[dict[str, Any]]:
+    mode = chosen_group_by(plan, group_by)
+    if mode == "none":
+        return []
+
+    known = {pick(device, ("name", "id"), f"device_{index}") for index, device in enumerate(devices)}
+    pairs = link_pairs(plan)
+    direct_neighbors: dict[str, set[str]] = {name: set() for name in known}
+    for a, b, _link in pairs:
+        if a in known and b in known:
+            direct_neighbors.setdefault(a, set()).add(b)
+            direct_neighbors.setdefault(b, set()).add(a)
+
+    groups: dict[str, set[str]] = {}
+    if mode == "network":
+        for group in address_groups(plan):
+            label_text = group["network"]
+            members = {name for name in group["hosts"] if name in known}
+            for member in list(members):
+                for neighbor in direct_neighbors.get(member, set()):
+                    neighbor_device = next((device for device in devices if pick(device, ("name", "id")) == neighbor), {})
+                    if svg_device_kind(neighbor_device) in {"switch", "router"}:
+                        members.add(neighbor)
+            if members:
+                gateway = group.get("gateway")
+                if gateway:
+                    label_text = f"{label_text} gw {gateway}"
+                groups[label_text] = members
+    elif mode == "vlan":
+        for a, b, link in pairs:
+            vlan = pick(link, ("vlan", "vlan_id"))
+            if vlan:
+                groups.setdefault(f"VLAN {vlan}", set()).update(name for name in (a, b) if name in known)
+    elif mode == "site":
+        for a, b, link in pairs:
+            note = pick(link, ("note", "description"))
+            match = re.search(r"\bsite\s+([A-Za-z0-9_-]+)", note, flags=re.IGNORECASE)
+            if match:
+                groups.setdefault(f"Site {match.group(1)}", set()).update(name for name in (a, b) if name in known)
+        if not groups:
+            for device in devices:
+                name = pick(device, ("name", "id"))
+                match = re.search(r"-(\d+)(?:-|$)", name)
+                if match:
+                    groups.setdefault(f"Site {match.group(1)}", set()).add(name)
+    elif mode == "category":
+        labels = {"router": "Routers", "switch": "Switches", "server": "Servers", "pc": "Hosts", "device": "Other Devices"}
+        for device in devices:
+            name = pick(device, ("name", "id"))
+            groups.setdefault(labels.get(svg_device_kind(device), "Other Devices"), set()).add(name)
+
+    result = []
+    for label_text, members in groups.items():
+        filtered = sorted((member for member in members if member in known), key=str.lower)
+        if len(filtered) >= 2:
+            result.append({"label": label_text, "devices": filtered})
+    return sorted(result, key=lambda item: (item["label"].lower(), item["devices"]))
+
+
+def visual_group_boxes(groups: list[dict[str, Any]], positions: dict[str, tuple[float, float]]) -> list[dict[str, Any]]:
+    boxes = []
+    for index, group in enumerate(groups):
+        points = [positions[name] for name in group["devices"] if name in positions]
+        if len(points) < 2:
+            continue
+        min_x = min(x for x, _ in points)
+        max_x = max(x for x, _ in points)
+        min_y = min(y for _, y in points)
+        max_y = max(y for _, y in points)
+        pad_x = 88.0
+        pad_y = 72.0
+        boxes.append(
+            {
+                "id": f"group-{index + 1}",
+                "label": group["label"],
+                "x": max(4.0, min_x - pad_x),
+                "y": max(18.0, min_y - pad_y),
+                "width": max(180.0, max_x - min_x + pad_x * 2),
+                "height": max(130.0, max_y - min_y + pad_y * 2),
+            }
+        )
+    return boxes
+
+
 def svg_link_label(link: dict[str, Any]) -> str:
     parts = [
         pick(link, ("pa", "port_a", "from_port")),
@@ -400,6 +520,11 @@ def svg_device_group(device: dict[str, Any], x: float, y: float, *, options: Ren
 def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> str:
     devices = svg_devices(plan)
     positions, width, height = svg_positions(devices)
+    groups = visual_groups(plan, devices, options.group_by)
+    group_boxes = visual_group_boxes(groups, positions)
+    for box in group_boxes:
+        width = max(width, box["x"] + box["width"] + 12.0)
+        height = max(height, box["y"] + box["height"] + 12.0)
     palette = render_palette(options.theme)
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -415,6 +540,8 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
         f"    .device-model {{ fill: {palette['muted']}; font-size: 10px; }}",
         "    .device rect, .device ellipse { stroke-width: 2; }",
         "    .device path { fill: none; stroke-width: 2; stroke-linecap: round; }",
+        f"    .group-box {{ fill: {palette['group_fill']}; fill-opacity: 0.22; stroke: {palette['group_stroke']}; stroke-width: 1.4; stroke-dasharray: 8 6; }}",
+        f"    .group-label {{ fill: {palette['muted']}; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }}",
         f"    .router ellipse {{ fill: {palette['router_fill']}; stroke: {palette['router_stroke']}; }} .router path {{ stroke: {palette['router_stroke']}; }}",
         f"    .switch rect {{ fill: {palette['switch_fill']}; stroke: {palette['switch_stroke']}; }} .switch path {{ stroke: {palette['switch_stroke']}; }}",
         f"    .server rect {{ fill: {palette['server_fill']}; stroke: {palette['server_stroke']}; }} .server path {{ stroke: {palette['server_stroke']}; }}",
@@ -422,6 +549,12 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
         f"    .device.device rect {{ fill: {palette['device_fill']}; stroke: {palette['device_stroke']}; }}",
         "  </style>",
     ]
+
+    for box in group_boxes:
+        lines.append(f'  <g class="visual-group" id="{svg_text(box["id"])}">')
+        lines.append(f'    <rect class="group-box" x="{box["x"]:.1f}" y="{box["y"]:.1f}" width="{box["width"]:.1f}" height="{box["height"]:.1f}" rx="14" />')
+        lines.append(f'    <text class="group-label" x="{box["x"] + 14:.1f}" y="{box["y"] + 22:.1f}">{svg_text(box["label"])}</text>')
+        lines.append("  </g>")
 
     for index, link in enumerate(plan.get("links", [])):
         if not isinstance(link, dict):
@@ -513,6 +646,11 @@ def drawio_style(kind: str, *, theme: str) -> tuple[str, float, float]:
 def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> str:
     devices = svg_devices(plan)
     positions, width, height = svg_positions(devices)
+    groups = visual_groups(plan, devices, options.group_by)
+    group_boxes = visual_group_boxes(groups, positions)
+    for box in group_boxes:
+        width = max(width, box["x"] + box["width"] + 12.0)
+        height = max(height, box["y"] + box["height"] + 12.0)
     ids = {pick(device, ("name", "id"), f"device_{index}"): f"d{index + 2}" for index, device in enumerate(devices)}
     palette = render_palette(options.theme)
     lines = [
@@ -524,6 +662,16 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
         '        <mxCell id="0" />',
         '        <mxCell id="1" parent="0" />',
     ]
+
+    for index, box in enumerate(group_boxes):
+        style = (
+            "rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor="
+            f"{palette['group_fill']};fillOpacity=18;strokeColor={palette['group_stroke']};"
+            f"fontColor={palette['muted']};fontStyle=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;"
+        )
+        lines.append(f'        <mxCell id="g{index + 2}" value="{svg_text(box["label"])}" style="{svg_text(style)}" vertex="1" parent="1">')
+        lines.append(f'          <mxGeometry x="{box["x"]:.1f}" y="{box["y"]:.1f}" width="{box["width"]:.1f}" height="{box["height"]:.1f}" as="geometry" />')
+        lines.append("        </mxCell>")
 
     for index, device in enumerate(devices):
         name = pick(device, ("name", "id"), f"device_{index}")
@@ -867,6 +1015,7 @@ def add_visual_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--theme", choices=RENDER_THEMES, default="light", help="diagram color theme")
     add_link_label_option(parser)
     parser.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=True, help="hide device model labels")
+    parser.add_argument("--group-by", choices=RENDER_GROUP_BY, default="none", help="draw visual group boxes by network, VLAN, site, category, or auto detection")
 
 
 def render_options(args: argparse.Namespace) -> RenderOptions:
@@ -874,6 +1023,7 @@ def render_options(args: argparse.Namespace) -> RenderOptions:
         theme=getattr(args, "theme", "light"),
         link_labels=getattr(args, "link_labels", True),
         model_labels=getattr(args, "model_labels", True),
+        group_by=getattr(args, "group_by", "none"),
     )
 
 

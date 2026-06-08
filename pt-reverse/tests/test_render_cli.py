@@ -74,6 +74,13 @@ class RenderCliTest(unittest.TestCase):
         self.assertNotIn("GigabitEthernet0/0", result.stdout)
         self.assertNotIn("2911", result.stdout)
 
+    def test_svg_can_render_network_group_boxes(self) -> None:
+        result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--group-by", "network")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('class="visual-group"', result.stdout)
+        self.assertIn('class="group-box"', result.stdout)
+        self.assertIn("192.168.50.0/24 gw 192.168.50.1", result.stdout)
+
     def test_svg_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.svg"
         out.unlink(missing_ok=True)
@@ -106,6 +113,13 @@ class RenderCliTest(unittest.TestCase):
         self.assertNotIn("GigabitEthernet0/0", result.stdout)
         self.assertNotIn("2911", result.stdout)
 
+    def test_drawio_can_render_network_group_boxes(self) -> None:
+        result = self.run_render("drawio", str(ROOT / "examples" / "simple-lan.json"), "--group-by", "network")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('value="192.168.50.0/24 gw 192.168.50.1"', result.stdout)
+        self.assertIn("fillOpacity=18", result.stdout)
+        self.assertIn("dashed=1", result.stdout)
+
     def test_drawio_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.drawio"
         out.unlink(missing_ok=True)
@@ -137,6 +151,12 @@ class RenderCliTest(unittest.TestCase):
         diagram = result.stdout.split("    </section>", 1)[0]
         self.assertNotIn("GigabitEthernet0/0", diagram)
         self.assertNotIn("2911", diagram)
+
+    def test_html_can_render_vlan_group_boxes(self) -> None:
+        result = self.run_render("html", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"), "--group-by", "vlan")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("VLAN 10", result.stdout)
+        self.assertIn('class="group-box"', result.stdout)
 
     def test_html_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.html"

@@ -65,7 +65,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 Example visual render control through MCP:
 
 ```bash
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"svg","plan":"pt-reverse/examples/simple-lan.json","theme":"dark","link_labels":false,"model_labels":false}}}' \
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"svg","plan":"pt-reverse/examples/simple-lan.json","theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 
@@ -123,9 +123,9 @@ pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing rip --output wan-ring.json
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip --output campus.json
 pt-reverse/bin/pt730-safety plan lan-star.json
-pt-reverse/bin/pt730-render svg lan-star.json --output lan-star.svg
-pt-reverse/bin/pt730-render drawio lan-star.json --output lan-star.drawio
-pt-reverse/bin/pt730-render html lan-star.json --output lan-star.html
+pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
+pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
+pt-reverse/bin/pt730-render html lan-star.json --group-by network --output lan-star.html
 ```
 
 ## Campus Pipeline

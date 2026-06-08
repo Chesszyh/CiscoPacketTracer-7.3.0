@@ -87,6 +87,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_live_recover", names)
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
+        self.assertIn("group_by", render["inputSchema"]["properties"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
         self.assertIn("allow_live", live_count["inputSchema"]["required"])
 
@@ -184,6 +185,7 @@ class McpCliTest(unittest.TestCase):
                             "theme": "dark",
                             "link_labels": False,
                             "model_labels": False,
+                            "group_by": "network",
                         },
                     },
                 },
@@ -210,7 +212,10 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("dark", svg_command)
         self.assertIn("--no-link-labels", svg_command)
         self.assertIn("--no-model-labels", svg_command)
+        self.assertIn("--group-by", svg_command)
+        self.assertIn("network", svg_command)
         self.assertIn("background: #0f172a", svg_result["structuredContent"]["stdout"])
+        self.assertIn("192.168.50.0/24 gw 192.168.50.1", svg_result["structuredContent"]["stdout"])
         self.assertNotIn("GigabitEthernet0/0", svg_result["structuredContent"]["stdout"])
         self.assertNotIn("2911", svg_result["structuredContent"]["stdout"])
         self.assertEqual(mermaid_result["isError"], False)
@@ -238,6 +243,27 @@ class McpCliTest(unittest.TestCase):
         )
         self.assertEqual(responses[0]["error"]["code"], -32602)
         self.assertIn("theme is supported only", responses[0]["error"]["message"])
+
+    def test_render_tool_rejects_group_by_for_non_visual_formats(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "summary",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "group_by": "network",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("group_by is supported only", responses[0]["error"]["message"])
 
     def test_tools_call_pipeline_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
