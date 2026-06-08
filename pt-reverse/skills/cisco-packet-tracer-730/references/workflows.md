@@ -24,7 +24,14 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
-The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks.
+The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Device-level live wrappers also support safe command previews with `dry_run=true`: `pt730_live_ios`, `pt730_live_pc_static`, `pt730_live_term`, `pt730_live_ping`, and `pt730_live_server_inspect`.
+
+Example device preview:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_ios","arguments":{"device":"R1","commands":["show ip interface brief"],"dry_run":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
 
 ## Built-In Templates
 

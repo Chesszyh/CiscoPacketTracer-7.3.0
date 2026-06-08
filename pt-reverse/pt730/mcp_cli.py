@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 from collections.abc import Callable
@@ -63,6 +64,17 @@ def enum_arg(args: dict[str, Any], name: str, allowed: set[str], *, default: str
     return value
 
 
+def list_str_arg(args: dict[str, Any], name: str, *, required: bool = True) -> list[str]:
+    value = args.get(name, [])
+    if value is None:
+        value = []
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ToolError(f"{name} must be an array of strings")
+    if required and not value:
+        raise ToolError(f"missing required argument: {name}")
+    return value
+
+
 def run_cli(root: Path, command: list[str]) -> dict[str, Any]:
     result = subprocess.run(
         command,
@@ -81,9 +93,27 @@ def run_cli(root: Path, command: list[str]) -> dict[str, Any]:
     }
 
 
+def dry_run_result(command: list[str]) -> dict[str, Any]:
+    command_strings = [str(part) for part in command]
+    return {
+        "command": command_strings,
+        "exitCode": 0,
+        "stdout": "dry-run command preview:\n" + shlex.join(command_strings) + "\n",
+        "stderr": "",
+        "dryRun": True,
+    }
+
+
 def require_live(args: dict[str, Any], tool_name: str) -> None:
     if not bool_arg(args, "allow_live", default=False):
         raise ToolError(f"{tool_name} requires allow_live=true because it can contact live Packet Tracer")
+
+
+def run_live_cli(root: Path, args: dict[str, Any], tool_name: str, command: list[str]) -> dict[str, Any]:
+    if bool_arg(args, "dry_run", default=False):
+        return dry_run_result(command)
+    require_live(args, tool_name)
+    return run_cli(root, command)
 
 
 def content_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -296,6 +326,116 @@ def tool_live_save_as(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_live_ios(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    commands = list_str_arg(args, "commands", required=False)
+    file_path = str_arg(args, "file", required=False)
+    init_dialog = bool_arg(args, "init_dialog", default=False)
+    if not commands and not file_path and not init_dialog:
+        raise ToolError("pt730_live_ios requires commands, file, or init_dialog")
+    command = [str(bin_path(root, "pt730-ios")), str_arg(args, "device"), "--timeout", str(int_arg(args, "timeout", default=20))]
+    for item in commands:
+        command.extend(["--cmd", item])
+    if file_path:
+        command.extend(["--file", file_path])
+    if init_dialog:
+        command.append("--init-dialog")
+    if bool_arg(args, "save", default=False):
+        command.append("--save")
+    if bool_arg(args, "keep_comments", default=False):
+        command.append("--keep-comments")
+    command.extend(["--output", enum_arg(args, "output", {"tail", "full", "none"}, default="tail")])
+    command.extend(["--tail-lines", str(int_arg(args, "tail_lines", default=80))])
+    return run_live_cli(root, args, "pt730_live_ios", command)
+
+
+def tool_live_pc_static(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [
+        str(bin_path(root, "pt730-pc")),
+        "--timeout",
+        str(int_arg(args, "timeout", default=10)),
+    ]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(
+        [
+            "static",
+            str_arg(args, "device"),
+            "--port",
+            str_arg(args, "port", required=False, default="FastEthernet0"),
+            "--ip",
+            str_arg(args, "ip"),
+            "--mask",
+            str_arg(args, "mask"),
+        ]
+    )
+    gateway = str_arg(args, "gateway", required=False)
+    if gateway:
+        command.extend(["--gateway", gateway])
+    dns = str_arg(args, "dns", required=False)
+    if dns:
+        command.extend(["--dns", dns])
+    return run_live_cli(root, args, "pt730_live_pc_static", command)
+
+
+def tool_live_term(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    commands = list_str_arg(args, "commands", required=False)
+    file_path = str_arg(args, "file", required=False)
+    if not commands and not file_path:
+        raise ToolError("pt730_live_term requires commands or file")
+    command = [str(bin_path(root, "pt730-term")), str_arg(args, "device"), "--timeout", str(int_arg(args, "timeout", default=10))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    for item in commands:
+        command.extend(["--cmd", item])
+    if file_path:
+        command.extend(["--file", file_path])
+    if bool_arg(args, "keep_blank", default=False):
+        command.append("--keep-blank")
+    wait = int_arg(args, "wait", default=0)
+    if wait:
+        command.extend(["--wait", str(wait)])
+    expect = str_arg(args, "expect", required=False)
+    if expect:
+        command.extend(["--expect", expect])
+    command.extend(["--output", enum_arg(args, "output", {"tail", "full", "none"}, default="tail")])
+    command.extend(["--tail-lines", str(int_arg(args, "tail_lines", default=80))])
+    if bool_arg(args, "all_output", default=False):
+        command.append("--all-output")
+    return run_live_cli(root, args, "pt730_live_term", command)
+
+
+def tool_live_ping(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [
+        str(bin_path(root, "pt730-ping")),
+        str_arg(args, "device"),
+        str_arg(args, "target"),
+        "--timeout",
+        str(int_arg(args, "timeout", default=15)),
+        "--wait",
+        str(int_arg(args, "wait", default=3)),
+        "--expect",
+        str(int_arg(args, "expect", default=100)),
+        "--tail-lines",
+        str(int_arg(args, "tail_lines", default=30)),
+    ]
+    return run_live_cli(root, args, "pt730_live_ping", command)
+
+
+def tool_live_server_inspect(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [
+        str(bin_path(root, "pt730-server")),
+        "--timeout",
+        str(int_arg(args, "timeout", default=15)),
+    ]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["inspect", str_arg(args, "device"), "--port", str_arg(args, "port", required=False, default="FastEthernet0")])
+    return run_live_cli(root, args, "pt730_live_server_inspect", command)
+
+
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required or [], "additionalProperties": False}
 
@@ -306,6 +446,7 @@ def tool(name: str, description: str, input_schema: dict[str, Any], handler: Cal
 
 def tools() -> list[dict[str, Any]]:
     string = {"type": "string"}
+    string_array = {"type": "array", "items": string}
     boolean = {"type": "boolean"}
     integer = {"type": "integer", "minimum": 0}
     return [
@@ -325,6 +466,11 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_live_query", "Query the live Packet Tracer canvas. Requires allow_live=true.", schema({"allow_live": boolean, "summary": boolean, "timeout": integer}, ["allow_live"]), tool_live_query),
         tool("pt730_live_apply", "Apply a topology plan to live Packet Tracer, or run offline dry_run without live access.", schema({"plan": string, "dry_run": boolean, "allow_live": boolean, "replace": boolean, "batch_size": integer, "allow_risky": boolean, "strict_safety": boolean, "timeout": integer}, ["plan"]), tool_live_apply),
         tool("pt730_live_save_as", "Save the current live Packet Tracer file to a Linux path. Requires allow_live=true.", schema({"allow_live": boolean, "path": string, "direct": boolean, "timeout": integer}, ["allow_live", "path"]), tool_live_save_as),
+        tool("pt730_live_ios", "Send IOS commands to a live router/switch, or return a safe dry_run command preview.", schema({"device": string, "commands": string_array, "file": string, "init_dialog": boolean, "save": boolean, "keep_comments": boolean, "output": {"type": "string", "enum": ["tail", "full", "none"]}, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_ios),
+        tool("pt730_live_pc_static", "Set a static IPv4 address on a live PC/server port, or return a safe dry_run command preview.", schema({"device": string, "port": string, "ip": string, "mask": string, "gateway": string, "dns": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "ip", "mask"]), tool_live_pc_static),
+        tool("pt730_live_term", "Send generic terminal commands to a live device, optionally waiting for expected output, or return a safe dry_run command preview.", schema({"device": string, "commands": string_array, "file": string, "keep_blank": boolean, "wait": integer, "expect": string, "output": {"type": "string", "enum": ["tail", "full", "none"]}, "tail_lines": integer, "all_output": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_term),
+        tool("pt730_live_ping", "Run an IOS ping from a live router/switch, or return a safe dry_run command preview.", schema({"device": string, "target": string, "wait": integer, "expect": integer, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "target"]), tool_live_ping),
+        tool("pt730_live_server_inspect", "Inspect live Server-PT service state, or return a safe dry_run command preview.", schema({"device": string, "port": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_server_inspect),
     ]
 
 

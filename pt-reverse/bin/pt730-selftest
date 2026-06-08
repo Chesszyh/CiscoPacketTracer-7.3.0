@@ -91,6 +91,7 @@ expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientPr
 "$BIN/pt730-mcp" --list-tools | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"summary","plan":"pt-reverse/examples/simple-lan.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_apply","arguments":{"plan":"pt-reverse/examples/simple-lan.json","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_ios","arguments":{"device":"R1","commands":["show ip interface brief"],"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" campus "$ROOT/pt-reverse/examples/ip-plan-campus.json" --output "$tmp/ip-plan.json"
 python3 -m json.tool "$tmp/ip-plan.json" >/dev/null

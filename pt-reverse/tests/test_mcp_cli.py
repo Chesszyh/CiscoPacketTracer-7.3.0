@@ -47,6 +47,11 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_live_query", names)
         self.assertIn("pt730_live_count", names)
         self.assertIn("pt730_live_save_as", names)
+        self.assertIn("pt730_live_ios", names)
+        self.assertIn("pt730_live_pc_static", names)
+        self.assertIn("pt730_live_term", names)
+        self.assertIn("pt730_live_ping", names)
+        self.assertIn("pt730_live_server_inspect", names)
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
@@ -116,6 +121,127 @@ class McpCliTest(unittest.TestCase):
         )
         self.assertEqual(responses[0]["error"]["code"], -32602)
         self.assertIn("allow_live", responses[0]["error"]["message"])
+
+    def test_live_device_tool_without_allow_live_or_dry_run_returns_error(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_ios",
+                        "arguments": {"device": "R1", "commands": ["show ip interface brief"]},
+                    },
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("allow_live", responses[0]["error"]["message"])
+
+    def test_live_device_tool_dry_run_returns_command_preview(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_ios",
+                        "arguments": {
+                            "device": "R1",
+                            "commands": ["show ip interface brief"],
+                            "dry_run": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        self.assertIn("pt730-ios", result["content"][0]["text"])
+        self.assertIn("--cmd", result["structuredContent"]["command"])
+        self.assertEqual(result["structuredContent"]["dryRun"], True)
+
+    def test_live_pc_static_dry_run_returns_command_preview(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_pc_static",
+                        "arguments": {
+                            "device": "PC1",
+                            "ip": "192.168.1.10",
+                            "mask": "255.255.255.0",
+                            "gateway": "192.168.1.1",
+                            "dry_run": True,
+                        },
+                    },
+                }
+            ]
+        )
+        command = responses[0]["result"]["structuredContent"]["command"]
+        self.assertIn("pt730-pc", command[0])
+        self.assertIn("static", command)
+        self.assertIn("192.168.1.10", command)
+
+    def test_live_terminal_ping_and_server_dry_run_return_command_previews(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_term",
+                        "arguments": {
+                            "device": "PC1",
+                            "commands": ["ping 192.168.1.1"],
+                            "wait": 8,
+                            "expect": "Lost = 0",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_ping",
+                        "arguments": {
+                            "device": "R1",
+                            "target": "10.0.0.2",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_inspect",
+                        "arguments": {
+                            "device": "SRV1",
+                            "dry_run": True,
+                        },
+                    },
+                },
+            ]
+        )
+        term_command = responses[0]["result"]["structuredContent"]["command"]
+        ping_command = responses[1]["result"]["structuredContent"]["command"]
+        server_command = responses[2]["result"]["structuredContent"]["command"]
+        self.assertIn("pt730-term", term_command[0])
+        self.assertIn("--expect", term_command)
+        self.assertIn("pt730-ping", ping_command[0])
+        self.assertIn("10.0.0.2", ping_command)
+        self.assertIn("pt730-server", server_command[0])
+        self.assertIn("inspect", server_command)
 
     def test_live_apply_dry_run_is_allowed_without_live_bridge(self) -> None:
         responses = self.run_mcp(
