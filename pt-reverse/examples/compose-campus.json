@@ -1,0 +1,61 @@
+{
+  "name": "agent-college",
+  "core": {
+    "count": 2,
+    "prefix": "MLS"
+  },
+  "server_defaults": {
+    "mask": "255.255.255.192",
+    "gateway": "172.16.1.62",
+    "dns": "172.16.1.11"
+  },
+  "server_switch": {
+    "name": "SW-SRV",
+    "vlan": 10,
+    "core": "MLS1"
+  },
+  "servers": [
+    {
+      "name": "WEB-SRV",
+      "ip": "172.16.1.10",
+      "services": {
+        "http": true
+      }
+    },
+    {
+      "name": "DNS-SRV",
+      "ip": "172.16.1.11",
+      "services": {
+        "dns": {
+          "enabled": true,
+          "records": [
+            {
+              "name": "www.college.local",
+              "ip": "172.16.1.10"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "segments": [
+    {
+      "name": "OFFICE",
+      "vlan": 20,
+      "subnet": "192.168.0.0/26",
+      "gateway": "192.168.0.62",
+      "dns": "172.16.1.11",
+      "representative_hosts": 2,
+      "core": "MLS1"
+    },
+    {
+      "name": "TEACH",
+      "vlan": 30,
+      "subnet": "192.168.0.64/26",
+      "gateway": "192.168.0.126",
+      "dns": "172.16.1.11",
+      "representative_hosts": 2,
+      "core": "MLS2"
+    }
+  ]
+}

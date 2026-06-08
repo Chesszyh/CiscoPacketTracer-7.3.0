@@ -88,6 +88,11 @@ expect_fail risky-plan "$BIN/pt730-safety" plan "$tmp/risky-plan.json"
 expect_fail risky-js "$BIN/pt730-safety" js 'x.getProcess("DhcpClientProcess").dhcpRun("FastEthernet0")'
 expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientProcess").dhcpRun("FastEthernet0")'
 "$BIN/pt730-topo" --timeout 1 apply --dry-run "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-compose" schema | python3 -m json.tool >/dev/null
+"$BIN/pt730-compose" campus "$ROOT/pt-reverse/examples/compose-campus.json" --output "$tmp/compose-plan.json"
+"$BIN/pt730-safety" plan "$tmp/compose-plan.json" >/dev/null
+"$BIN/pt730-render" summary "$tmp/compose-plan.json" >/dev/null
+ok "compose checks"
 printf '%s' '{"devices":[{"name":"R1","category":"router","model":"2911"},{"name":"SW1","category":"switch","model":"2960-24TT"},{"name":"PC1","category":"pc","model":"PC-PT"}],"links":[{"a":"R1","pa":"GigabitEthernet0/0","b":"SW1","pb":"FastEthernet0/1","cable":"straight"},{"a":"SW1","pa":"FastEthernet0/2","b":"PC1","pb":"FastEthernet0","cable":"straight"}]}' >"$tmp/layout-input.json"
 "$BIN/pt730-layout" "$tmp/layout-input.json" --style lan --output "$tmp/layout-output.json"
 "$BIN/pt730-safety" plan "$tmp/layout-output.json" >/dev/null

@@ -13,6 +13,7 @@ from catalog_cli import RISKY_MODELS, SAFE_MODELS, VERIFIED_CABLE_CODES, VERIFIE
 OFFLINE_TOOLS = [
     "pt730-capabilities",
     "pt730-catalog",
+    "pt730-compose",
     "pt730-ios-template",
     "pt730-layout",
     "pt730-models",
@@ -74,9 +75,12 @@ def manifest() -> dict[str, Any]:
         "blocked_patterns": BLOCKED_PATTERNS,
         "ios_template_features": ["schema", "vlans", "access_interfaces", "trunks", "ripv2", "static_routes", "standard_acls", "extended_acls", "interface_acl_bindings", "nat_overload"],
         "layout_styles": ["auto", "hierarchical", "campus", "lan", "ring", "grid"],
+        "compose_features": ["schema", "campus", "core_ring", "server_block", "access_segments", "representative_hosts", "static_ip_configs", "server_services", "auto_layout"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
             "pt-reverse/bin/pt730-selftest",
+            "pt-reverse/bin/pt730-compose schema",
+            "pt-reverse/bin/pt730-compose campus <campus-spec.json> --output <plan.json>",
             "pt-reverse/bin/pt730-layout <plan.json> --output <layout.json>",
             "pt-reverse/bin/pt730-layout <plan.json> --style campus --preserve-existing --output <layout.json>",
             "pt-reverse/bin/pt730-safety plan <plan.json>",

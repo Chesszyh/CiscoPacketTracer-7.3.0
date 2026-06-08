@@ -19,6 +19,8 @@ pt-reverse/bin/pt730-recover --notify
 pt-reverse/bin/pt730-selftest
 pt-reverse/bin/pt730-capabilities
 pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-compose schema
+pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json
 pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan
@@ -121,6 +123,7 @@ pt-reverse/bin/pt730-app count
 pt-reverse/bin/pt730-topo query
 pt-reverse/bin/pt730-topo query --summary
 pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
+pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --output compose-campus.layout.json
 pt-reverse/bin/pt730-topo apply --dry-run pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan --output simple-lan.layout.json
 pt-reverse/bin/pt730-topo apply pt-reverse/examples/simple-lan.json
@@ -228,6 +231,9 @@ configured interfaces that omit `no shutdown`, and serial links where neither
 endpoint config includes a `clock rate`.
 Use `pt730-topo apply --dry-run <plan.json>` to run those checks and print a
 plan summary without contacting Packet Tracer.
+Use `pt730-compose campus <spec.json> --output <plan.json>` to expand a compact
+agent-friendly campus spec into devices, safe ports, links, static host IPs,
+server services, and default layout coordinates before touching Packet Tracer.
 Use `pt730-layout <plan.json> --output <layout.json>` to assign deterministic
 coordinates before safety checks, rendering, or live apply.  Supported styles
 are `auto`, `hierarchical`, `campus`, `lan`, `ring`, and `grid`; use
