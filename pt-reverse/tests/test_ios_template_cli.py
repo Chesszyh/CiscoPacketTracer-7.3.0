@@ -106,6 +106,67 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("ip access-group 10 in", result.stdout)
         self.assertIn("ip nat inside source list 10 interface GigabitEthernet0/2 overload", result.stdout)
 
+    def test_render_fhrp_dhcp_relay_and_infrastructure_services(self) -> None:
+        result = self.run_template(
+            {
+                "device": "CORE-A",
+                "hostname": "CORE-A",
+                "interfaces": [
+                    {
+                        "name": "Vlan20",
+                        "ip": "192.168.20.2",
+                        "mask": "255.255.255.0",
+                        "helper_addresses": ["172.16.1.10"],
+                        "hsrp": {
+                            "group": 20,
+                            "version": 2,
+                            "ip": "192.168.20.1",
+                            "priority": 110,
+                            "preempt": True,
+                            "timers": {"hello": 1, "hold": 3},
+                            "track": [{"interface": "GigabitEthernet0/2", "decrement": 20}],
+                        },
+                    }
+                ],
+                "dhcp": {
+                    "excluded_addresses": [{"start": "192.168.20.1", "end": "192.168.20.20"}],
+                    "pools": [
+                        {
+                            "name": "VLAN20",
+                            "network": "192.168.20.0",
+                            "mask": "255.255.255.0",
+                            "default_router": "192.168.20.1",
+                            "dns_server": ["172.16.1.10", "172.16.1.11"],
+                            "domain_name": "campus.local",
+                        }
+                    ],
+                },
+                "ntp": {"servers": [{"address": "172.16.1.20", "prefer": True}], "source_interface": "Vlan20"},
+                "logging": {"hosts": ["172.16.1.30"], "trap": "informational", "source_interface": "Vlan20", "timestamps_log": True},
+                "snmp": {"communities": [{"name": "campusRO", "mode": "RO", "acl": 10}], "location": "Core Room"},
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ip helper-address 172.16.1.10", result.stdout)
+        self.assertIn("standby version 2", result.stdout)
+        self.assertIn("standby 20 ip 192.168.20.1", result.stdout)
+        self.assertIn("standby 20 priority 110", result.stdout)
+        self.assertIn("standby 20 preempt", result.stdout)
+        self.assertIn("standby 20 timers 1 3", result.stdout)
+        self.assertIn("standby 20 track GigabitEthernet0/2 20", result.stdout)
+        self.assertIn("ip dhcp excluded-address 192.168.20.1 192.168.20.20", result.stdout)
+        self.assertIn("ip dhcp pool VLAN20", result.stdout)
+        self.assertIn("default-router 192.168.20.1", result.stdout)
+        self.assertIn("dns-server 172.16.1.10 172.16.1.11", result.stdout)
+        self.assertIn("ntp source Vlan20", result.stdout)
+        self.assertIn("ntp server 172.16.1.20 prefer", result.stdout)
+        self.assertIn("service timestamps log datetime msec", result.stdout)
+        self.assertIn("logging source-interface Vlan20", result.stdout)
+        self.assertIn("logging trap informational", result.stdout)
+        self.assertIn("logging host 172.16.1.30", result.stdout)
+        self.assertIn("snmp-server community campusRO RO 10", result.stdout)
+        self.assertIn("snmp-server location Core Room", result.stdout)
+
     def test_render_as_topology_ios_config_json(self) -> None:
         result = self.run_template({"device": "R1", "hostname": "R1"}, "--topology-json")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -154,10 +215,16 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("ip_routing", fields)
         self.assertIn("spanning_tree", fields)
         self.assertIn("etherchannels", fields)
+        self.assertIn("interfaces[].helper_addresses", fields)
+        self.assertIn("interfaces[].hsrp", fields)
         self.assertIn("rip.networks", fields)
         self.assertIn("ospf.networks", fields)
         self.assertIn("ospf.passive_interfaces", fields)
         self.assertIn("static_routes", fields)
+        self.assertIn("dhcp.pools", fields)
+        self.assertIn("ntp.servers", fields)
+        self.assertIn("logging.hosts", fields)
+        self.assertIn("snmp.communities", fields)
         self.assertIn("acls[].type=extended", fields)
         self.assertIn("nat.overloads", fields)
         self.assertEqual(data["example"]["interfaces"][1]["mode"], "trunk")

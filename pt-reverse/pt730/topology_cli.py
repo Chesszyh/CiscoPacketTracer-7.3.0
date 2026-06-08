@@ -1088,22 +1088,34 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     rip_networks: list[str] = []
     ospf: dict[str, Any] = {"process_id": "", "router_id": "", "passive_interfaces": [], "networks": []}
     spanning_tree: dict[str, Any] = {"mode": "", "roots": [], "priorities": [], "portfast_default": False, "bpduguard_default": False}
+    dhcp: dict[str, Any] = {"excluded_addresses": [], "pools": {}}
+    ntp: dict[str, Any] = {"servers": [], "authentication_keys": [], "authenticate": False, "trusted_keys": [], "source": ""}
+    logging_cfg: dict[str, Any] = {"hosts": [], "trap": "", "source_interface": "", "timestamps_log": False, "console_disabled": False}
+    snmp: dict[str, Any] = {"communities": [], "hosts": [], "location": "", "contact": ""}
     acl_numbers: set[str] = set()
     acl_applications: list[dict[str, str]] = []
     nat = {"inside_interfaces": [], "outside_interfaces": [], "overload": False}
     current_interface: str | None = None
     current_vlan: str | None = None
     current_router: str | None = None
+    current_dhcp_pool: str | None = None
 
     for raw_line in text.replace("\r\n", "\n").splitlines():
         line = raw_line.strip()
-        if not line or line == "!" or line.startswith("--More--"):
+        if not line or line.startswith("--More--"):
+            continue
+        if line == "!" or line.lower() == "exit":
+            current_interface = None
+            current_vlan = None
+            current_router = None
+            current_dhcp_pool = None
             continue
         interface_match = re.match(r"^interface\s+(.+)$", line, flags=re.IGNORECASE)
         if interface_match:
             current_interface = interface_match.group(1).strip()
             current_vlan = None
             current_router = None
+            current_dhcp_pool = None
             interfaces.setdefault(current_interface, {})
             continue
         vlan_match = re.match(r"^vlan\s+(\S+)$", line, flags=re.IGNORECASE)
@@ -1111,6 +1123,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_vlan = vlan_match.group(1)
             current_interface = None
             current_router = None
+            current_dhcp_pool = None
             vlans.setdefault(current_vlan, {})
             continue
         router_match = re.match(r"^router\s+(\S+)(?:\s+(\S+))?", line, flags=re.IGNORECASE)
@@ -1120,13 +1133,88 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
                 ospf["process_id"] = router_match.group(2) or ""
             current_interface = None
             current_vlan = None
+            current_dhcp_pool = None
+            continue
+        dhcp_pool_match = re.match(r"^ip\s+dhcp\s+pool\s+(.+)$", line, flags=re.IGNORECASE)
+        if dhcp_pool_match:
+            current_dhcp_pool = dhcp_pool_match.group(1).strip()
+            current_interface = None
+            current_vlan = None
+            current_router = None
+            dhcp["pools"].setdefault(current_dhcp_pool, {})
             continue
         route_match = re.match(r"^ip\s+route\s+(\S+)\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
         if route_match:
             current_interface = None
             current_vlan = None
             current_router = None
+            current_dhcp_pool = None
             static_routes.append({"destination": route_match.group(1), "mask": route_match.group(2), "next_hop": route_match.group(3)})
+            continue
+        excluded_match = re.match(r"^ip\s+dhcp\s+excluded-address\s+(\S+)(?:\s+(\S+))?", line, flags=re.IGNORECASE)
+        if excluded_match:
+            entry = {"start": excluded_match.group(1)}
+            if excluded_match.group(2):
+                entry["end"] = excluded_match.group(2)
+            dhcp["excluded_addresses"].append(entry)
+            continue
+        ntp_server_match = re.match(r"^ntp\s+server\s+(\S+)(.*)$", line, flags=re.IGNORECASE)
+        if ntp_server_match:
+            server = {"address": ntp_server_match.group(1), "options": ntp_server_match.group(2).strip()}
+            server["prefer"] = "prefer" in server["options"].split()
+            ntp["servers"].append(server)
+            continue
+        ntp_key_match = re.match(r"^ntp\s+authentication-key\s+(\S+)\s+md5\s+(.+)$", line, flags=re.IGNORECASE)
+        if ntp_key_match:
+            ntp["authentication_keys"].append({"id": ntp_key_match.group(1), "md5": ntp_key_match.group(2).strip()})
+            continue
+        if re.match(r"^ntp\s+authenticate$", line, flags=re.IGNORECASE):
+            ntp["authenticate"] = True
+            continue
+        ntp_trusted_match = re.match(r"^ntp\s+trusted-key\s+(\S+)", line, flags=re.IGNORECASE)
+        if ntp_trusted_match:
+            ntp["trusted_keys"].append(ntp_trusted_match.group(1))
+            continue
+        ntp_source_match = re.match(r"^ntp\s+source\s+(.+)$", line, flags=re.IGNORECASE)
+        if ntp_source_match:
+            ntp["source"] = ntp_source_match.group(1).strip()
+            continue
+        logging_host_match = re.match(r"^logging\s+host\s+(\S+)(.*)$", line, flags=re.IGNORECASE)
+        if logging_host_match:
+            logging_cfg["hosts"].append({"address": logging_host_match.group(1), "options": logging_host_match.group(2).strip()})
+            continue
+        logging_trap_match = re.match(r"^logging\s+trap\s+(.+)$", line, flags=re.IGNORECASE)
+        if logging_trap_match:
+            logging_cfg["trap"] = logging_trap_match.group(1).strip()
+            continue
+        logging_source_match = re.match(r"^logging\s+source-interface\s+(.+)$", line, flags=re.IGNORECASE)
+        if logging_source_match:
+            logging_cfg["source_interface"] = logging_source_match.group(1).strip()
+            continue
+        if re.match(r"^service\s+timestamps\s+log\s+", line, flags=re.IGNORECASE):
+            logging_cfg["timestamps_log"] = True
+            continue
+        if re.match(r"^no\s+logging\s+console$", line, flags=re.IGNORECASE):
+            logging_cfg["console_disabled"] = True
+            continue
+        snmp_community_match = re.match(r"^snmp-server\s+community\s+(\S+)(?:\s+(\S+))?(?:\s+(\S+))?", line, flags=re.IGNORECASE)
+        if snmp_community_match:
+            entry = {"name": snmp_community_match.group(1), "mode": snmp_community_match.group(2) or ""}
+            if snmp_community_match.group(3):
+                entry["acl"] = snmp_community_match.group(3)
+            snmp["communities"].append(entry)
+            continue
+        snmp_location_match = re.match(r"^snmp-server\s+location\s+(.+)$", line, flags=re.IGNORECASE)
+        if snmp_location_match:
+            snmp["location"] = snmp_location_match.group(1).strip()
+            continue
+        snmp_contact_match = re.match(r"^snmp-server\s+contact\s+(.+)$", line, flags=re.IGNORECASE)
+        if snmp_contact_match:
+            snmp["contact"] = snmp_contact_match.group(1).strip()
+            continue
+        snmp_host_match = re.match(r"^snmp-server\s+host\s+(\S+)(.*)$", line, flags=re.IGNORECASE)
+        if snmp_host_match:
+            snmp["hosts"].append({"address": snmp_host_match.group(1), "options": snmp_host_match.group(2).strip()})
             continue
         acl_match = re.match(r"^access-list\s+(\S+)\s+", line, flags=re.IGNORECASE)
         if acl_match:
@@ -1166,6 +1254,39 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             if channel_match:
                 info["channel_group"] = channel_match.group(1)
                 info["channel_mode"] = channel_match.group(2)
+            helper_match = re.match(r"^ip\s+helper-address\s+(\S+)", line, flags=re.IGNORECASE)
+            if helper_match:
+                info.setdefault("helper_addresses", []).append(helper_match.group(1))
+            standby_version_match = re.match(r"^standby\s+version\s+(\S+)", line, flags=re.IGNORECASE)
+            if standby_version_match:
+                info["standby_version"] = standby_version_match.group(1)
+            standby_match = re.match(r"^standby\s+(\S+)\s+(ip|priority|preempt|name|authentication|timers|track)(?:\s+(.+))?$", line, flags=re.IGNORECASE)
+            if standby_match:
+                group = standby_match.group(1)
+                action = standby_match.group(2).lower()
+                value = (standby_match.group(3) or "").strip()
+                group_info = info.setdefault("hsrp", {}).setdefault(group, {"group": group})
+                if action == "ip":
+                    group_info["ip"] = value
+                elif action == "priority":
+                    group_info["priority"] = value
+                elif action == "preempt":
+                    group_info["preempt"] = True
+                elif action == "name":
+                    group_info["name"] = value
+                elif action == "authentication":
+                    group_info["authentication"] = value
+                elif action == "timers":
+                    parts = value.split()
+                    if len(parts) >= 2:
+                        group_info["timers"] = {"hello": parts[0], "hold": parts[1]}
+                elif action == "track":
+                    parts = value.split()
+                    if parts:
+                        track = {"target": parts[0]}
+                        if len(parts) >= 2:
+                            track["decrement"] = parts[1]
+                        group_info.setdefault("track", []).append(track)
             nat_match = re.match(r"^ip\s+nat\s+(inside|outside)$", line, flags=re.IGNORECASE)
             if nat_match:
                 direction = nat_match.group(1).lower()
@@ -1201,12 +1322,34 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             network_match = re.match(r"^network\s+(\S+)\s+(\S+)\s+area\s+(\S+)", line, flags=re.IGNORECASE)
             if network_match:
                 ospf["networks"].append({"network": network_match.group(1), "wildcard": network_match.group(2), "area": network_match.group(3)})
+        elif current_dhcp_pool:
+            pool = dhcp["pools"].setdefault(current_dhcp_pool, {})
+            network_match = re.match(r"^network\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
+            if network_match:
+                pool["network"] = network_match.group(1)
+                pool["mask"] = network_match.group(2)
+            default_router_match = re.match(r"^default-router\s+(.+)$", line, flags=re.IGNORECASE)
+            if default_router_match:
+                pool["default_router"] = default_router_match.group(1).strip().split()
+            dns_match = re.match(r"^dns-server\s+(.+)$", line, flags=re.IGNORECASE)
+            if dns_match:
+                pool["dns_server"] = dns_match.group(1).strip().split()
+            domain_match = re.match(r"^domain-name\s+(.+)$", line, flags=re.IGNORECASE)
+            if domain_match:
+                pool["domain_name"] = domain_match.group(1).strip()
+            lease_match = re.match(r"^lease\s+(.+)$", line, flags=re.IGNORECASE)
+            if lease_match:
+                pool["lease"] = lease_match.group(1).strip()
 
     return {
         "interfaces": interfaces,
         "vlans": vlans,
         "routing": {"rip_networks": rip_networks, "ospf": ospf, "static_routes": static_routes},
         "spanning_tree": spanning_tree,
+        "dhcp": dhcp,
+        "ntp": ntp,
+        "logging": logging_cfg,
+        "snmp": snmp,
         "acl_numbers": sorted(acl_numbers),
         "acl_applications": acl_applications,
         "nat": nat,
@@ -1340,7 +1483,19 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                 for name, details in sorted(interfaces.items()):
                     if isinstance(details, dict):
                         ip = f" {details.get('ip', '')}/{details.get('mask', '')}".rstrip("/")
-                        lines.append(f"- {name}{ip}")
+                        extra = []
+                        if details.get("helper_addresses"):
+                            extra.append("helpers " + ", ".join(str(item) for item in details.get("helper_addresses", [])))
+                        hsrp = details.get("hsrp", {})
+                        if isinstance(hsrp, dict) and hsrp:
+                            groups = []
+                            for group, group_details in sorted(hsrp.items()):
+                                if isinstance(group_details, dict):
+                                    groups.append(f"{group}:{group_details.get('ip', '')}".rstrip(":"))
+                            if groups:
+                                extra.append("HSRP " + ", ".join(groups))
+                        suffix = f" ({'; '.join(extra)})" if extra else ""
+                        lines.append(f"- {name}{ip}{suffix}")
             acl_applications = config.get("acl_applications", [])
             if isinstance(acl_applications, list) and acl_applications:
                 lines.append("")
@@ -1371,6 +1526,47 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                     defaults.append("bpduguard default")
                 if defaults:
                     lines.append("STP defaults: " + ", ".join(defaults))
+            dhcp = config.get("dhcp", {})
+            if isinstance(dhcp, dict) and (dhcp.get("excluded_addresses") or dhcp.get("pools")):
+                lines.append("")
+                lines.append("IOS DHCP:")
+                for excluded in dhcp.get("excluded_addresses", []):
+                    if isinstance(excluded, dict):
+                        end = f" {excluded.get('end', '')}" if excluded.get("end") else ""
+                        lines.append(f"- excluded {excluded.get('start', '')}{end}")
+                pools = dhcp.get("pools", {})
+                if isinstance(pools, dict):
+                    for pool_name, pool in sorted(pools.items()):
+                        if isinstance(pool, dict):
+                            lines.append(f"- pool {pool_name}: {pool.get('network', '')} {pool.get('mask', '')}".rstrip())
+            ntp = config.get("ntp", {})
+            if isinstance(ntp, dict) and (ntp.get("servers") or ntp.get("source")):
+                lines.append("")
+                servers = []
+                for server in ntp.get("servers", []):
+                    if isinstance(server, dict):
+                        servers.append(str(server.get("address", "")))
+                lines.append("NTP servers: " + ", ".join(servers))
+                if ntp.get("source"):
+                    lines.append(f"NTP source: {ntp.get('source', '')}")
+            logging_cfg = config.get("logging", {})
+            if isinstance(logging_cfg, dict) and (logging_cfg.get("hosts") or logging_cfg.get("trap")):
+                lines.append("")
+                hosts = []
+                for host in logging_cfg.get("hosts", []):
+                    if isinstance(host, dict):
+                        hosts.append(str(host.get("address", "")))
+                lines.append("Syslog hosts: " + ", ".join(hosts))
+                if logging_cfg.get("trap"):
+                    lines.append(f"Syslog trap: {logging_cfg.get('trap', '')}")
+            snmp = config.get("snmp", {})
+            if isinstance(snmp, dict) and (snmp.get("communities") or snmp.get("hosts")):
+                lines.append("")
+                communities = []
+                for community in snmp.get("communities", []):
+                    if isinstance(community, dict):
+                        communities.append(str(community.get("name", "")))
+                lines.append("SNMP communities: " + ", ".join(communities))
             routing = config.get("routing", {})
             if isinstance(routing, dict):
                 rip_networks = routing.get("rip_networks", [])

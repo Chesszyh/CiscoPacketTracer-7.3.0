@@ -1,0 +1,62 @@
+{
+  "devices": [
+    {
+      "device": "CORE-A",
+      "hostname": "CORE-A",
+      "ip_routing": true,
+      "interfaces": [
+        {
+          "name": "Vlan20",
+          "description": "OFFICE_GATEWAY_PRIMARY",
+          "ip": "192.168.20.2",
+          "mask": "255.255.255.0",
+          "helper_addresses": ["172.16.1.10"],
+          "hsrp": {
+            "group": 20,
+            "version": 2,
+            "ip": "192.168.20.1",
+            "priority": 110,
+            "preempt": true,
+            "track": [{"interface": "GigabitEthernet0/2", "decrement": 20}]
+          }
+        }
+      ],
+      "dhcp": {
+        "excluded_addresses": [{"start": "192.168.20.1", "end": "192.168.20.20"}],
+        "pools": [
+          {
+            "name": "VLAN20",
+            "network": "192.168.20.0",
+            "mask": "255.255.255.0",
+            "default_router": "192.168.20.1",
+            "dns_server": ["172.16.1.10", "172.16.1.11"],
+            "domain_name": "campus.local"
+          }
+        ]
+      },
+      "ntp": {"servers": [{"address": "172.16.1.20", "prefer": true}], "source_interface": "Vlan20"},
+      "logging": {"hosts": ["172.16.1.30"], "trap": "informational", "source_interface": "Vlan20", "timestamps_log": true},
+      "snmp": {"communities": [{"name": "campusRO", "mode": "RO", "acl": 10}], "location": "Core Room A"},
+      "save": false
+    },
+    {
+      "device": "CORE-B",
+      "hostname": "CORE-B",
+      "ip_routing": true,
+      "interfaces": [
+        {
+          "name": "Vlan20",
+          "description": "OFFICE_GATEWAY_SECONDARY",
+          "ip": "192.168.20.3",
+          "mask": "255.255.255.0",
+          "helper_addresses": ["172.16.1.10"],
+          "hsrp": {"group": 20, "version": 2, "ip": "192.168.20.1", "priority": 100, "preempt": true}
+        }
+      ],
+      "ntp": {"servers": ["172.16.1.20"], "source_interface": "Vlan20"},
+      "logging": {"hosts": ["172.16.1.30"], "trap": "informational", "source_interface": "Vlan20"},
+      "snmp": {"communities": [{"name": "campusRO", "mode": "RO", "acl": 10}], "location": "Core Room B"},
+      "save": false
+    }
+  ]
+}

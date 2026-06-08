@@ -44,7 +44,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
 - Refine topology placement through MCP with `pt730_layout`; use canvas width/height, spacing, margin, style, and compact options when diagrams need clearer density or framing.
 - Render outputs for review: use `pt730-render svg`, `drawio`, `html`, `markdown`, `summary`, and `course-audit`; visual renders support `--theme light|dark|paper`, `--no-link-labels`, `--no-model-labels`, and `--group-by auto|network|vlan|site|category`, exposed through MCP as `theme`, `link_labels`, `model_labels`, and `group_by`.
 - Plan and export IOS configs: use `pt730-config-plan campus` and `pt730-config-plan export-configs`; through MCP, `pt730_config_plan_campus` exposes `ios_only`/`compact` plus `none|rip|ospf|static` routing, and `pt730_export_configs` exposes `source`/`compact`.
-- Render high-level IOS snippets with `pt730-ios-template`; use it for STP, EtherChannel/Port-channel, VLAN/trunk/access/routed interfaces, RIP/OSPF/static routes, ACLs, and NAT when a template or config-plan output needs extra switch/router features.
+- Render high-level IOS snippets with `pt730-ios-template`; use it for STP, EtherChannel/Port-channel, DHCP relay, HSRP/standby, IOS DHCP pools, NTP/Syslog/SNMP, VLAN/trunk/access/routed interfaces, RIP/OSPF/static routes, ACLs, and NAT when a template or config-plan output needs extra switch/router features.
 - Query input schemas through MCP with `pt730_schema` before generating unfamiliar template/IP-plan/compose/config/pipeline/IOS-template specs.
 - Query catalog and JavaScript safety through MCP with `pt730_catalog`, `pt730_safety_js`, and `pt730_safety_policy`.
 - Preview live IOS/PC DHCP/server service/account/config/FTP/simulation/lifecycle MCP calls with `dry_run=true` before any `allow_live=true` execution.
@@ -61,6 +61,7 @@ For exact command patterns, read `references/workflows.md` only when needed.
 - For unattended wireless templates, use the built-in `wireless-lan` template's verified `AccessPoint-PT` and `Laptop-PT` models; treat wireless cable code `8109` warnings as offline-only until live validation is explicitly requested.
 - For VLAN/trunk labs, prefer the built-in `vlan-router-on-stick` template; it uses verified models and emits router 802.1Q subinterfaces, switch trunk/access ports, VLAN metadata, static hosts, and optional per-VLAN servers.
 - For STP/EtherChannel labs, prefer `pt730-ios-template` offline and merge rendered `ios_configs` into a safe topology plan; keep live paste/apply small because model support varies by IOS device.
+- For HSRP, IOS DHCP, NTP/Syslog/SNMP, and DHCP relay labs, prefer `pt730-ios-template` offline first; treat live support as IOS-model-dependent and paste in small batches.
 - For DHCP VLAN labs, use `vlan-router-on-stick --client-addressing dhcp` offline; live DHCP lease validation remains guarded, so keep dry-run previews before any live test.
 - For WAN dynamic-routing labs, prefer the built-in `wan-ring` template with `--routing ospf`, `rip`, `static`, or `none` instead of hand-writing router serial modules and configs.
 - For campus dynamic-routing labs, prefer `campus --l3 --routing ospf` or `pt730-pipeline campus --routing ospf` when the lab needs multi-core L3 routing; use RIP/static only when the assignment requires them.

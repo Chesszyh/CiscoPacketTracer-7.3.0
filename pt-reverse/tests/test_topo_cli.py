@@ -144,7 +144,7 @@ class TopologyCliTest(unittest.TestCase):
                     "ports": [{"name": "GigabitEthernet0/0", "linked": True, "ip": "10.0.0.1", "mask": "255.255.255.0"}],
                     "command_line": {
                         "prompt": "R1#",
-                        "output_tail": "\nshow running-config\nspanning-tree mode rapid-pvst\nspanning-tree vlan 10 root primary\nspanning-tree vlan 20 priority 4096\nspanning-tree portfast default\nspanning-tree bpduguard default\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip nat inside\n ip access-group 10 in\n channel-group 1 mode active\n no shutdown\ninterface Port-channel1\n switchport mode trunk\n switchport trunk allowed vlan 10,20\n no shutdown\nrouter rip\n version 2\n network 10.0.0.0\nrouter ospf 1\n router-id 10.255.0.1\n passive-interface GigabitEthernet0/0\n network 10.0.0.0 0.0.0.255 area 0\nip route 0.0.0.0 0.0.0.0 10.0.0.254\naccess-list 10 permit 10.0.0.0 0.0.0.255\nip nat inside source list 10 interface GigabitEthernet0/1 overload\n",
+                        "output_tail": "\nshow running-config\nspanning-tree mode rapid-pvst\nspanning-tree vlan 10 root primary\nspanning-tree vlan 20 priority 4096\nspanning-tree portfast default\nspanning-tree bpduguard default\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip helper-address 172.16.1.10\n standby version 2\n standby 10 ip 10.0.0.254\n standby 10 priority 110\n standby 10 preempt\n standby 10 timers 1 3\n standby 10 track GigabitEthernet0/1 20\n ip nat inside\n ip access-group 10 in\n channel-group 1 mode active\n no shutdown\ninterface Port-channel1\n switchport mode trunk\n switchport trunk allowed vlan 10,20\n no shutdown\nip dhcp excluded-address 10.0.0.1 10.0.0.20\nip dhcp pool VLAN10\n network 10.0.0.0 255.255.255.0\n default-router 10.0.0.254\n dns-server 172.16.1.10 172.16.1.11\n domain-name campus.local\nntp source GigabitEthernet0/0\nntp server 172.16.1.20 prefer\nlogging source-interface GigabitEthernet0/0\nlogging trap informational\nlogging host 172.16.1.30\nservice timestamps log datetime msec\nsnmp-server community campusRO RO 10\nsnmp-server location Core Room\nrouter rip\n version 2\n network 10.0.0.0\nrouter ospf 1\n router-id 10.255.0.1\n passive-interface GigabitEthernet0/0\n network 10.0.0.0 0.0.0.255 area 0\nip route 0.0.0.0 0.0.0.0 10.0.0.254\naccess-list 10 permit 10.0.0.0 0.0.0.255\nip nat inside source list 10 interface GigabitEthernet0/1 overload\n",
                     },
                 },
                 {
@@ -193,7 +193,24 @@ class TopologyCliTest(unittest.TestCase):
         self.assertTrue(data["config_summaries"][0]["spanning_tree"]["portfast_default"])
         self.assertTrue(data["config_summaries"][0]["spanning_tree"]["bpduguard_default"])
         self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["channel_group"], "1")
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["helper_addresses"], ["172.16.1.10"])
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["standby_version"], "2")
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["hsrp"]["10"]["ip"], "10.0.0.254")
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["hsrp"]["10"]["priority"], "110")
+        self.assertTrue(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["hsrp"]["10"]["preempt"])
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["hsrp"]["10"]["timers"]["hold"], "3")
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["hsrp"]["10"]["track"][0]["decrement"], "20")
         self.assertEqual(data["config_summaries"][0]["interfaces"]["Port-channel1"]["trunk_allowed_vlans"], "10,20")
+        self.assertEqual(data["config_summaries"][0]["dhcp"]["excluded_addresses"][0]["end"], "10.0.0.20")
+        self.assertEqual(data["config_summaries"][0]["dhcp"]["pools"]["VLAN10"]["default_router"], ["10.0.0.254"])
+        self.assertEqual(data["config_summaries"][0]["dhcp"]["pools"]["VLAN10"]["dns_server"], ["172.16.1.10", "172.16.1.11"])
+        self.assertEqual(data["config_summaries"][0]["ntp"]["source"], "GigabitEthernet0/0")
+        self.assertEqual(data["config_summaries"][0]["ntp"]["servers"][0]["address"], "172.16.1.20")
+        self.assertEqual(data["config_summaries"][0]["logging"]["hosts"][0]["address"], "172.16.1.30")
+        self.assertEqual(data["config_summaries"][0]["logging"]["trap"], "informational")
+        self.assertTrue(data["config_summaries"][0]["logging"]["timestamps_log"])
+        self.assertEqual(data["config_summaries"][0]["snmp"]["communities"][0]["name"], "campusRO")
+        self.assertEqual(data["config_summaries"][0]["snmp"]["location"], "Core Room")
         self.assertIn("10", data["config_summaries"][0]["acl_numbers"])
         self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["acl_in"], "10")
         self.assertEqual(data["config_summaries"][0]["acl_applications"][0]["direction"], "in")

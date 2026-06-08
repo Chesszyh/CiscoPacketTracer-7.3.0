@@ -94,11 +94,16 @@ Example IOS template rendering for switching features:
 ```bash
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json --topology-json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json --topology-json
 ```
 
 The switching IOS template supports STP/Rapid PVST root and priority commands,
 portfast/bpduguard defaults, EtherChannel member `channel-group` commands, and
 Port-channel trunk/access/routed interface configuration.
+The FHRP/services template supports DHCP relay `ip helper-address`, HSRP
+`standby` groups, IOS DHCP pools, NTP servers, Syslog hosts, and SNMP
+communities for dual-core campus labs.
 
 Example device preview:
 
