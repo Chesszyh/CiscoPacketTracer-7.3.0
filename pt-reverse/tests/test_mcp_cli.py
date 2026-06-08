@@ -183,6 +183,8 @@ class McpCliTest(unittest.TestCase):
                                 "compose_spec": "pt-reverse/examples/compose-campus.json",
                                 "output_dir": str(out_dir),
                                 "routing": "rip",
+                                "layout_style": "grid",
+                                "compact": True,
                             },
                         },
                     }
@@ -190,10 +192,52 @@ class McpCliTest(unittest.TestCase):
             )
             result = responses[0]["result"]
             self.assertEqual(result["isError"], False)
+            self.assertIn("--compact", result["structuredContent"]["command"])
+            self.assertIn("--layout-style", result["structuredContent"]["command"])
+            self.assertIn("grid", result["structuredContent"]["command"])
+            self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
             manifest = json.loads(result["structuredContent"]["stdout"])
             self.assertEqual(manifest["kind"], "pt730-campus-pipeline")
             self.assertEqual(manifest["artifacts"]["drawio"], "topology.drawio")
             self.assertTrue((out_dir / "topology.drawio").exists())
+
+    def test_offline_workflow_tools_expose_compact_and_layout_options(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_ip_plan_campus",
+                        "arguments": {
+                            "spec": "pt-reverse/examples/ip-plan-campus.json",
+                            "compact": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_compose_campus",
+                        "arguments": {
+                            "spec": "pt-reverse/examples/compose-campus.json",
+                            "layout_style": "grid",
+                            "compact": True,
+                        },
+                    },
+                },
+            ]
+        )
+        for result in (responses[0]["result"], responses[1]["result"]):
+            self.assertEqual(result["isError"], False)
+            self.assertIn("--compact", result["structuredContent"]["command"])
+            self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+        compose_command = responses[1]["result"]["structuredContent"]["command"]
+        self.assertIn("--layout-style", compose_command)
+        self.assertIn("grid", compose_command)
 
     def test_config_plan_and_export_tools_expose_ios_only_source_and_compact_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -357,6 +401,26 @@ class McpCliTest(unittest.TestCase):
                     "params": {
                         "name": "pt730_template_lan_star",
                         "arguments": {
+                            "layout_style": "diagonal",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("layout_style must be one of", responses[0]["error"]["message"])
+
+    def test_compose_tool_rejects_unknown_layout_style(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_compose_campus",
+                        "arguments": {
+                            "spec": "pt-reverse/examples/compose-campus.json",
                             "layout_style": "diagonal",
                         },
                     },

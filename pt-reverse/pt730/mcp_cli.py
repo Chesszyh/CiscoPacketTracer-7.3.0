@@ -15,6 +15,7 @@ from typing import Any
 
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "pt730-mcp", "version": "0.1.0"}
+LAYOUT_STYLES = {"auto", "hierarchical", "campus", "lan", "ring", "grid"}
 
 
 class ToolError(ValueError):
@@ -276,7 +277,7 @@ def tool_template_lan_star(root: Path, args: dict[str, Any]) -> dict[str, Any]:
             command.extend([flag, value])
     layout_style = str_arg(args, "layout_style", required=False)
     if layout_style:
-        if layout_style not in {"auto", "hierarchical", "campus", "lan", "ring", "grid"}:
+        if layout_style not in LAYOUT_STYLES:
             raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
         command.extend(["--layout-style", layout_style])
     if bool_arg(args, "no_layout", default=False):
@@ -303,7 +304,7 @@ def tool_template_router_ring(root: Path, args: dict[str, Any]) -> dict[str, Any
             command.extend([flag, value])
     layout_style = str_arg(args, "layout_style", required=False)
     if layout_style:
-        if layout_style not in {"auto", "hierarchical", "campus", "lan", "ring", "grid"}:
+        if layout_style not in LAYOUT_STYLES:
             raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
         command.extend(["--layout-style", layout_style])
     if bool_arg(args, "no_layout", default=False):
@@ -312,7 +313,10 @@ def tool_template_router_ring(root: Path, args: dict[str, Any]) -> dict[str, Any
 
 
 def tool_ip_plan_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    command = [str(bin_path(root, "pt730-ip-plan")), "campus", str_arg(args, "spec")]
+    command = [str(bin_path(root, "pt730-ip-plan"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.extend(["campus", str_arg(args, "spec")])
     output = str_arg(args, "output", required=False)
     if output:
         command.extend(["--output", output])
@@ -320,7 +324,10 @@ def tool_ip_plan_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_compose_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    command = [str(bin_path(root, "pt730-compose")), "campus", str_arg(args, "spec")]
+    command = [str(bin_path(root, "pt730-compose"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.extend(["campus", str_arg(args, "spec")])
     ip_plan = str_arg(args, "segments_from_ip_plan", required=False)
     if ip_plan:
         command.extend(["--segments-from-ip-plan", ip_plan])
@@ -328,6 +335,8 @@ def tool_compose_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         command.append("--no-layout")
     layout_style = str_arg(args, "layout_style", required=False)
     if layout_style:
+        if layout_style not in LAYOUT_STYLES:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
         command.extend(["--layout-style", layout_style])
     output = str_arg(args, "output", required=False)
     if output:
@@ -367,7 +376,7 @@ def tool_layout(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-layout")), str_arg(args, "plan")]
     style = str_arg(args, "style", required=False)
     if style:
-        if style not in {"auto", "hierarchical", "campus", "lan", "ring", "grid"}:
+        if style not in LAYOUT_STYLES:
             raise ToolError("style must be one of: auto, campus, grid, hierarchical, lan, ring")
         command.extend(["--style", style])
     if bool_arg(args, "preserve_existing", default=False):
@@ -405,8 +414,10 @@ def tool_ios_template_render(root: Path, args: dict[str, Any]) -> dict[str, Any]
 
 
 def tool_pipeline_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    command = [
-        str(bin_path(root, "pt730-pipeline")),
+    command = [str(bin_path(root, "pt730-pipeline"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.extend([
         "campus",
         "--compose-spec",
         str_arg(args, "compose_spec"),
@@ -414,12 +425,14 @@ def tool_pipeline_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         str_arg(args, "output_dir"),
         "--routing",
         enum_arg(args, "routing", {"none", "rip", "static"}, default="rip"),
-    ]
+    ])
     ip_plan = str_arg(args, "ip_plan", required=False)
     if ip_plan:
         command.extend(["--ip-plan", ip_plan])
     layout_style = str_arg(args, "layout_style", required=False)
     if layout_style:
+        if layout_style not in LAYOUT_STYLES:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
         command.extend(["--layout-style", layout_style])
     if bool_arg(args, "strict_safety", default=False):
         command.append("--strict-safety")
@@ -1038,13 +1051,13 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_catalog", "Query the offline Packet Tracer catalog with local PT 7.3 safety overlay.", schema({"action": {"type": "string", "enum": ["devices", "device", "ports", "modules", "module", "cables", "infer_cable", "aliases"]}, "model": string, "module": string, "category": string, "category_a": string, "category_b": string, "status": string, "include_ports": boolean, "table": boolean}, ["action"]), tool_catalog),
         tool("pt730_template_lan_star", "Generate a router-switch-PC/server star LAN topology JSON.", schema({"name": string, "pcs": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_lan_star),
         tool("pt730_template_router_ring", "Generate a serial router ring topology JSON with RIP configs.", schema({"name": string, "routers": integer, "interconnect_pool": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_router_ring),
-        tool("pt730_ip_plan_campus", "Plan VLSM campus subnets from a compact IP planning spec.", schema({"spec": string, "output": string}, ["spec"]), tool_ip_plan_campus),
-        tool("pt730_compose_campus", "Compose a high-level campus topology spec into topology JSON.", schema({"spec": string, "segments_from_ip_plan": string, "no_layout": boolean, "layout_style": string, "output": string}, ["spec"]), tool_compose_campus),
+        tool("pt730_ip_plan_campus", "Plan VLSM campus subnets from a compact IP planning spec.", schema({"spec": string, "compact": boolean, "output": string}, ["spec"]), tool_ip_plan_campus),
+        tool("pt730_compose_campus", "Compose a high-level campus topology spec into topology JSON.", schema({"spec": string, "segments_from_ip_plan": string, "no_layout": boolean, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "compact": boolean, "output": string}, ["spec"]), tool_compose_campus),
         tool("pt730_config_plan_campus", "Generate IOS config records from topology VLAN/L3 metadata.", schema({"plan": string, "ios_only": boolean, "l3": boolean, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "compact": boolean, "output": string}, ["plan"]), tool_config_plan_campus),
         tool("pt730_export_configs", "Export topology ios_configs into per-device .cfg files.", schema({"plan": string, "output_dir": string, "source": string, "compact": boolean}, ["plan", "output_dir"]), tool_export_configs),
         tool("pt730_layout", "Assign deterministic coordinates to a topology plan.", schema({"plan": string, "style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "preserve_existing": boolean, "canvas_width": integer, "canvas_height": integer, "spacing_x": integer, "spacing_y": integer, "margin": integer, "compact": boolean, "output": string}, ["plan"]), tool_layout),
         tool("pt730_ios_template_render", "Render high-level IOS template JSON into commands or topology ios_configs.", schema({"spec": string, "topology_json": boolean, "output": string}, ["spec"]), tool_ios_template_render),
-        tool("pt730_pipeline_campus", "Run IP plan, compose, config planning, layout, safety, rendering, and config export offline.", schema({"compose_spec": string, "ip_plan": string, "output_dir": string, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "layout_style": string, "strict_safety": boolean, "course_audit": boolean}, ["compose_spec", "output_dir"]), tool_pipeline_campus),
+        tool("pt730_pipeline_campus", "Run IP plan, compose, config planning, layout, safety, rendering, and config export offline.", schema({"compose_spec": string, "ip_plan": string, "output_dir": string, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "strict_safety": boolean, "course_audit": boolean, "compact": boolean}, ["compose_spec", "output_dir"]), tool_pipeline_campus),
         tool("pt730_topo_summarize_query", "Summarize a saved pt730-topo query JSON file offline.", schema({"query_json": string}, ["query_json"]), tool_topo_summarize_query),
         tool("pt730_topo_export", "Export raw and summarized topology query JSON; offline with from_query, live otherwise.", schema({"from_query": string, "raw_out": string, "summary_out": string, "markdown_out": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["raw_out", "summary_out"]), tool_topo_export),
         tool("pt730_models_manifest", "Print grouped PT 7.3 model safety registry.", schema({}), tool_models_manifest),

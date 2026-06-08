@@ -48,7 +48,7 @@ def schema() -> dict[str, Any]:
         "campus": {
             "description": "Offline IP plan -> topology compose -> L3 config planning -> layout -> render -> cfg export.",
             "required": ["--compose-spec", "--output-dir"],
-            "optional": ["--ip-plan", "--routing none|rip|static", "--layout-style", "--course-audit", "--strict-safety"],
+            "optional": ["--compact", "--ip-plan", "--routing none|rip|static", "--layout-style", "--course-audit", "--strict-safety"],
             "outputs": [
                 "ip-plan.json",
                 "topology.composed.json",

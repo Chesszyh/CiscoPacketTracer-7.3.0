@@ -40,6 +40,17 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
+Example campus workflow steps through MCP:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_ip_plan_campus","arguments":{"spec":"pt-reverse/examples/ip-plan-campus.json","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_compose_campus","arguments":{"spec":"pt-reverse/examples/compose-campus.json","layout_style":"grid","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_pipeline_campus","arguments":{"ip_plan":"pt-reverse/examples/ip-plan-campus.json","compose_spec":"pt-reverse/examples/compose-campus.json","output_dir":"compose-campus-out","routing":"rip","layout_style":"grid","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
 Example layout control through MCP:
 
 ```bash

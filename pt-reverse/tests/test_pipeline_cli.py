@@ -15,6 +15,20 @@ PIPELINE = ROOT / "bin" / "pt730-pipeline"
 
 
 class PipelineCliTest(unittest.TestCase):
+    def test_schema_describes_compact_option(self) -> None:
+        result = subprocess.run(
+            [str(PIPELINE), "schema"],
+            cwd=ROOT.parent,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIn("--compact", data["campus"]["optional"])
+
     def test_campus_pipeline_generates_agent_ready_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "out"

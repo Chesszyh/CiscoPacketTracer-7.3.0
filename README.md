@@ -77,6 +77,8 @@ and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
 Built-in template MCP tools expose the same DNS, layout, no-layout, compact, and
 naming options as the underlying `pt730-template` CLI.
+Campus workflow MCP tools expose compact JSON and layout-style controls through
+`pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
 JSON controls for denser or cleaner topology diagrams.
 Config planning MCP tools expose IOS-only output, source filtering, and compact

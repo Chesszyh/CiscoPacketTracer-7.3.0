@@ -38,7 +38,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
 ## Common Tasks
 
 - Generate a small lab topology: use `pt730-template lan-star` or `pt730-template router-ring`; through MCP, `pt730_template_lan_star` and `pt730_template_router_ring` expose layout, no-layout, compact JSON, and template-specific options.
-- Generate a campus/course design: use `pt730-ip-plan`, then `pt730-compose`, then `pt730-config-plan`, or run `pt730-pipeline campus`.
+- Generate a campus/course design: use `pt730-ip-plan`, then `pt730-compose`, then `pt730-config-plan`, or run `pt730-pipeline campus`; through MCP, `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus` expose compact JSON and layout-style controls where applicable.
 - Refine topology placement through MCP with `pt730_layout`; use canvas width/height, spacing, margin, style, and compact options when diagrams need clearer density or framing.
 - Render outputs for review: use `pt730-render svg`, `drawio`, `html`, `markdown`, `summary`, and `course-audit`.
 - Plan and export IOS configs: use `pt730-config-plan campus` and `pt730-config-plan export-configs`; through MCP, `pt730_config_plan_campus` exposes `ios_only`/`compact`, and `pt730_export_configs` exposes `source`/`compact`.
