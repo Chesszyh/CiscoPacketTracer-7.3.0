@@ -49,7 +49,7 @@ pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssi
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
-pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing rip
+pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing rip
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
@@ -82,8 +82,9 @@ and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
 Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
 VLAN, edge-security, router-ring, WAN-ring, and campus template options
-including DNS, SSID, 802.1Q, NAT/ACL, DMZ, layout, no-layout, compact, L3,
-routing, and naming controls from the underlying `pt730-template` CLI.
+including DNS, SSID, 802.1Q, NAT/ACL, DMZ, RIP/OSPF/static WAN routing, layout,
+no-layout, compact, L3 routing, and naming controls from the underlying
+`pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls

@@ -74,6 +74,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("router-ring", data["templates"])
         self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
+        self.assertIn("ospf", " ".join(data["templates"]["wan-ring"]["options"]))
 
     def test_lan_star_generates_static_hosts_server_services_and_layout(self) -> None:
         result = self.run_template(
@@ -306,6 +307,37 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("ip route 192.168.101.0 255.255.255.0 10.30.0.2", joined)
         self.assertIn("interface Serial0/0/0", joined)
         self.assertNotIn("3560-24PS", json.dumps(plan))
+        self.assert_safe_and_renderable(plan)
+
+    def test_wan_ring_supports_ospf_routing_configs(self) -> None:
+        result = self.run_template(
+            "wan-ring",
+            "--name",
+            "OSPF",
+            "--sites",
+            "3",
+            "--hosts-per-site",
+            "1",
+            "--servers-per-site",
+            "0",
+            "--interconnect-pool",
+            "10.50.0.0/28",
+            "--lan-pool",
+            "192.168.140.0/22",
+            "--routing",
+            "ospf",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(len(plan["ios_configs"]), 3)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("router ospf 1", joined)
+        self.assertIn("router-id 10.255.0.1", joined)
+        self.assertIn("passive-interface GigabitEthernet0/0", joined)
+        self.assertIn("network 192.168.140.0 0.0.0.255 area 0", joined)
+        self.assertIn("network 10.50.0.0 0.0.0.3 area 0", joined)
+        self.assertNotIn("router rip", joined)
+        self.assertNotIn("ip route", joined)
         self.assert_safe_and_renderable(plan)
 
     def test_campus_generates_core_access_servers_services_and_l3_configs(self) -> None:

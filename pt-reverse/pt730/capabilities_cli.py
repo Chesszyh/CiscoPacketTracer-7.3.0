@@ -85,7 +85,7 @@ def manifest() -> dict[str, Any]:
         "ip_plan_features": ["schema", "campus_vlsm", "gateway_reservation", "compose_segments", "unused_pool_summary"],
         "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "svg_render", "drawio_render", "html_render", "config_file_export"],
         "render_features": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course_audit", "visual_themes", "link_label_toggle", "model_label_toggle", "visual_group_boxes", "wireless_ap_icons", "wireless_link_styling", "ap_config_summary", "vlan_config_summary", "security_policy_summary"],
-        "template_features": ["schema", "lan_star", "wireless_lan", "vlan_router_on_stick", "edge_security", "router_ring", "wan_ring", "campus", "campus_l3_configs", "static_host_ips", "wireless_access_points", "laptop_clients", "ssid_metadata", "dot1q_subinterfaces", "trunk_ports", "access_vlan_ports", "dmz_servers", "nat_overload", "outside_acl", "site_lans", "server_http", "server_dns", "server_ftp", "server_email", "serial_modules", "ripv2", "static_routes", "auto_layout"],
+        "template_features": ["schema", "lan_star", "wireless_lan", "vlan_router_on_stick", "edge_security", "router_ring", "wan_ring", "campus", "campus_l3_configs", "static_host_ips", "wireless_access_points", "laptop_clients", "ssid_metadata", "dot1q_subinterfaces", "trunk_ports", "access_vlan_ports", "dmz_servers", "nat_overload", "outside_acl", "site_lans", "server_http", "server_dns", "server_ftp", "server_email", "serial_modules", "ripv2", "ospf", "static_routes", "auto_layout"],
         "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "schema_wrappers", "template_option_wrappers", "workflow_option_wrappers", "layout_option_wrappers", "config_export_option_wrappers", "catalog_wrappers", "safety_js_wrappers", "allow_live_gated_live_tools", "allow_live_gated_device_tools", "write_gated_model_records", "topo_query_export_wrappers", "model_registry_wrappers", "live_lifecycle_dry_run", "live_eval_dry_run", "live_smoke_dry_run", "live_apply_dry_run", "live_device_dry_run", "live_pc_dhcp_dry_run", "live_server_service_dry_run", "live_server_account_config_dry_run", "live_ftp_dry_run", "live_sim_dry_run"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
@@ -111,7 +111,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10",
             "pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local",
             "pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28",
-            "pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing rip",
+            "pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf",
             "pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip",
             "pt-reverse/bin/pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec <campus-spec.json> --output-dir <out-dir> --routing rip",
             "pt-reverse/bin/pt730-ip-plan schema",

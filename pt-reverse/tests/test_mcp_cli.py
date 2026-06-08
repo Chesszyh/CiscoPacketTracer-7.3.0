@@ -91,6 +91,8 @@ class McpCliTest(unittest.TestCase):
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
         self.assertIn("group_by", render["inputSchema"]["properties"])
+        wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
+        self.assertIn("ospf", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
         self.assertIn("allow_live", live_count["inputSchema"]["required"])
 
@@ -542,7 +544,7 @@ class McpCliTest(unittest.TestCase):
                             "interconnect_pool": "10.40.0.0/28",
                             "lan_pool": "192.168.120.0/22",
                             "lan_prefix": 24,
-                            "routing": "static",
+                            "routing": "ospf",
                             "layout_style": "ring",
                             "compact": True,
                         },
@@ -611,7 +613,7 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(len(ring_plan["devices"]), 3)
         self.assertEqual(wan_plan["metadata"]["source"], "pt730-template wan-ring")
         self.assertEqual(len(wan_plan["ios_configs"]), 3)
-        self.assertIn("ip route", "\n".join(command for config in wan_plan["ios_configs"] for command in config["commands"]))
+        self.assertIn("router ospf 1", "\n".join(command for config in wan_plan["ios_configs"] for command in config["commands"]))
 
     def test_campus_template_tool_generates_complex_topology_with_l3_configs(self) -> None:
         responses = self.run_mcp(

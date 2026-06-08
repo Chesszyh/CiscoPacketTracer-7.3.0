@@ -70,8 +70,8 @@ def schema() -> dict[str, Any]:
                 "options": ["--name", "--routers", "--interconnect-pool", "--layout-style", "--no-layout"],
             },
             "wan-ring": {
-                "description": "Serial multi-site WAN ring with one access LAN per site, representative PCs/servers, HTTP/DNS services, and optional RIP/static routing.",
-                "options": ["--name", "--sites", "--hosts-per-site", "--servers-per-site", "--interconnect-pool", "--lan-pool", "--lan-prefix", "--routing none|rip|static", "--layout-style", "--no-layout"],
+                "description": "Serial multi-site WAN ring with one access LAN per site, representative PCs/servers, HTTP/DNS services, and optional RIP/OSPF/static routing.",
+                "options": ["--name", "--sites", "--hosts-per-site", "--servers-per-site", "--interconnect-pool", "--lan-pool", "--lan-prefix", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
             },
             "campus": {
                 "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs.",
@@ -739,6 +739,7 @@ def wan_ring(
         router: ["enable", "configure terminal", f"hostname {router}"] for router in routers
     }
     rip_networks: set[str] = set()
+    ospf_networks: dict[str, list[ipaddress.IPv4Network]] = {router: [] for router in routers}
     clockwise_next_hop: dict[str, ipaddress.IPv4Address] = {}
     server_configs_by_name: dict[str, dict[str, Any]] = {}
     dns_records: list[dict[str, str]] = []
@@ -753,6 +754,7 @@ def wan_ring(
         plan["links"].append({"a": router, "pa": "GigabitEthernet0/0", "b": switch, "pb": "FastEthernet0/1", "cable": "straight", "note": f"site {site_index} LAN"})
         configs[router].extend(["interface GigabitEthernet0/0", f"ip address {gateway} {_mask(network)}", "no shutdown", "exit"])
         rip_networks.add(_rip_network(gateway))
+        ospf_networks[router].append(network)
 
         next_switch_port = 2
         for host_index, address in enumerate(site["host_addresses"], start=1):
@@ -791,6 +793,8 @@ def wan_ring(
         clockwise_next_hop[a] = b_ip
         rip_networks.add(_rip_network(a_ip))
         rip_networks.add(_rip_network(b_ip))
+        ospf_networks[a].append(subnet)
+        ospf_networks[b].append(subnet)
 
     for router_index, router in enumerate(routers):
         commands = configs[router]
@@ -798,6 +802,11 @@ def wan_ring(
             commands.extend(["router rip", "version 2", "no auto-summary"])
             for network in sorted(rip_networks, key=lambda value: tuple(int(part) for part in value.split("."))):
                 commands.append(f"network {network}")
+            commands.append("exit")
+        elif routing == "ospf":
+            commands.extend(["router ospf 1", f"router-id 10.255.0.{router_index + 1}", "passive-interface GigabitEthernet0/0"])
+            for network in sorted(ospf_networks[router], key=lambda value: int(value.network_address)):
+                commands.append(f"network {network.network_address} {_wildcard(network)} area 0")
             commands.append("exit")
         elif routing == "static":
             next_hop = clockwise_next_hop[router]
@@ -975,7 +984,7 @@ def main(argv: list[str] | None = None) -> int:
     wan_p.add_argument("--interconnect-pool", default="10.30.0.0/28")
     wan_p.add_argument("--lan-pool", default="192.168.100.0/22")
     wan_p.add_argument("--lan-prefix", type=int, default=24)
-    wan_p.add_argument("--routing", choices=("none", "rip", "static"), default="rip")
+    wan_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="rip")
     wan_p.add_argument("--layout-style", choices=STYLES, default="ring")
     wan_p.add_argument("--no-layout", action="store_true")
     wan_p.add_argument("--output", type=Path)
