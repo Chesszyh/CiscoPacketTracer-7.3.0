@@ -293,6 +293,44 @@ def tool_lab_template(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_lab_plan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-lab"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.extend(["plan", str_arg(args, "plan"), "--output-dir", str_arg(args, "output_dir")])
+    for key, flag in (("name", "--name"), ("basename", "--basename"), ("config_source", "--config-source")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    formats = optional_render_formats_arg(args, "formats")
+    if formats:
+        command.extend(["--formats", ",".join(formats)])
+    direction = enum_arg(args, "direction", {"LR", "TD", "TB", "RL", "BT"}, default="LR")
+    command.extend(["--direction", direction])
+    theme = str_arg(args, "theme", required=False)
+    if theme:
+        if theme not in RENDER_THEMES:
+            raise ToolError("theme must be one of: dark, light, paper")
+        command.extend(["--theme", theme])
+    link_labels = optional_bool_arg(args, "link_labels")
+    if link_labels is not None and not link_labels:
+        command.append("--no-link-labels")
+    model_labels = optional_bool_arg(args, "model_labels")
+    if model_labels is not None and not model_labels:
+        command.append("--no-model-labels")
+    group_by = str_arg(args, "group_by", required=False)
+    if group_by:
+        if group_by not in RENDER_GROUP_BY:
+            raise ToolError("group_by must be one of: auto, category, network, none, site, vlan")
+        command.extend(["--group-by", group_by])
+    if bool_arg(args, "strict_safety", default=False):
+        command.append("--strict-safety")
+    export_configs = optional_bool_arg(args, "export_configs")
+    if export_configs is not None and not export_configs:
+        command.append("--no-configs")
+    return run_cli(root, command)
+
+
 def tool_safety_plan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-safety")), "plan", str_arg(args, "plan")]
     if bool_arg(args, "strict", default=False):
@@ -1401,6 +1439,7 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, or course-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_lab_template", "Generate a full offline lab bundle from one template spec JSON: topology, safety report, render bundle, configs, and manifest.", schema({"spec": string, "output_dir": string, "strict_safety": boolean, "compact": boolean}, ["spec", "output_dir"]), tool_lab_template),
+        tool("pt730_lab_plan", "Generate a full offline lab bundle from an existing topology plan JSON: topology copy, safety report, render bundle, configs, and manifest.", schema({"plan": string, "output_dir": string, "name": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "strict_safety": boolean, "export_configs": boolean, "config_source": string, "compact": boolean}, ["plan", "output_dir"]), tool_lab_plan),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),
         tool("pt730_safety_policy", "Print the current PT 7.3 automation safety policy.", schema({}), tool_safety_policy),

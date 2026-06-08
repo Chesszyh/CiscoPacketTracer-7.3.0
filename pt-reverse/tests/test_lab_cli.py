@@ -36,9 +36,11 @@ class LabCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertIn("template", data["commands"])
+        self.assertIn("plan", data["commands"])
         self.assertIn("enterprise-edge", data["templates"])
         self.assertIn("campus_vlans", data["templates"]["enterprise-edge"]["options"])
         self.assertIn("render/<basename>.*", data["template"]["outputs"])
+        self.assertIn("--basename", data["plan"]["optional"])
         self.assertEqual(data["template"]["render_options"]["formats"], ["svg", "drawio", "html", "markdown", "summary"])
 
     def test_template_generates_agent_ready_lab_bundle(self) -> None:
@@ -119,6 +121,39 @@ class LabCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "render" / "small.summary.json").exists())
             self.assertFalse((out_dir / "render" / "small.svg").exists())
             self.assertFalse((out_dir / "configs").exists())
+
+    def test_plan_generates_lab_bundle_from_existing_topology_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "plan-lab"
+            result = self.run_lab(
+                "plan",
+                "pt-reverse/examples/two-router-serial-configured.json",
+                "--output-dir",
+                str(out_dir),
+                "--name",
+                "serial-lab",
+                "--basename",
+                "serial",
+                "--formats",
+                "svg,summary",
+                "--group-by",
+                "category",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["kind"], "pt730-lab-plan-bundle")
+            self.assertEqual(manifest["name"], "serial-lab")
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "summary"])
+            self.assertTrue(manifest["safety"]["ok"])
+            self.assertEqual(manifest["config_files"]["count"], 2)
+            self.assertTrue((out_dir / "topology.json").exists())
+            self.assertTrue((out_dir / "safety.json").exists())
+            self.assertTrue((out_dir / "render" / "serial.svg").exists())
+            self.assertTrue((out_dir / "render" / "serial.summary.json").exists())
+            self.assertTrue((out_dir / "configs" / "R_AUTO1.cfg").exists())
+            topology = json.loads((out_dir / "topology.json").read_text(encoding="utf-8"))
+            self.assertEqual(topology["metadata"]["lab_bundle"]["name"], "serial-lab")
+            self.assertEqual(topology["metadata"]["lab_bundle"]["plan"], "pt-reverse/examples/two-router-serial-configured.json")
 
     def test_template_rejects_unknown_template(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

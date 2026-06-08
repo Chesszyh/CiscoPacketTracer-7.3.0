@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from collections.abc import Callable
@@ -263,6 +264,31 @@ def _parse_formats(value: Any) -> list[str]:
     raise ValueError("render.formats must be a comma-separated string or an array of strings")
 
 
+def _render_settings_from_values(
+    *,
+    basename: str,
+    formats: Any,
+    direction: str,
+    theme: str,
+    link_labels: bool,
+    model_labels: bool,
+    group_by: str,
+) -> dict[str, Any]:
+    safe_basename = _safe_basename(basename)
+    if direction not in {"LR", "TD", "TB", "RL", "BT"}:
+        raise ValueError("render.direction must be one of: LR, TD, TB, RL, BT")
+    if theme not in RENDER_THEMES:
+        raise ValueError(f"render.theme must be one of: {', '.join(RENDER_THEMES)}")
+    if group_by not in RENDER_GROUP_BY:
+        raise ValueError(f"render.group_by must be one of: {', '.join(RENDER_GROUP_BY)}")
+    return {
+        "basename": safe_basename,
+        "formats": _parse_formats(formats),
+        "direction": direction,
+        "options": RenderOptions(theme=theme, link_labels=link_labels, model_labels=model_labels, group_by=group_by),
+    }
+
+
 def _render_settings(spec: dict[str, Any], *, lab_name: str, template_name: str) -> dict[str, Any]:
     raw = spec.get("render", {})
     if raw is None:
@@ -270,25 +296,15 @@ def _render_settings(spec: dict[str, Any], *, lab_name: str, template_name: str)
     if not isinstance(raw, dict):
         raise ValueError("render must be an object when provided")
     render = _normalize_object_keys(raw, RENDER_KEYS, section="render")
-
-    basename = _safe_basename(_string_value(render, "basename", default=lab_name or template_name))
-    direction = _string_value(render, "direction", default="LR")
-    if direction not in {"LR", "TD", "TB", "RL", "BT"}:
-        raise ValueError("render.direction must be one of: LR, TD, TB, RL, BT")
-    theme = _string_value(render, "theme", default="light")
-    if theme not in RENDER_THEMES:
-        raise ValueError(f"render.theme must be one of: {', '.join(RENDER_THEMES)}")
-    group_by = _string_value(render, "group_by", default="none")
-    if group_by not in RENDER_GROUP_BY:
-        raise ValueError(f"render.group_by must be one of: {', '.join(RENDER_GROUP_BY)}")
-    link_labels = _bool_value(render, "link_labels", default=True)
-    model_labels = _bool_value(render, "model_labels", default=True)
-    return {
-        "basename": basename,
-        "formats": _parse_formats(render.get("formats")),
-        "direction": direction,
-        "options": RenderOptions(theme=theme, link_labels=link_labels, model_labels=model_labels, group_by=group_by),
-    }
+    return _render_settings_from_values(
+        basename=_string_value(render, "basename", default=lab_name or template_name),
+        formats=render.get("formats"),
+        direction=_string_value(render, "direction", default="LR"),
+        theme=_string_value(render, "theme", default="light"),
+        link_labels=_bool_value(render, "link_labels", default=True),
+        model_labels=_bool_value(render, "model_labels", default=True),
+        group_by=_string_value(render, "group_by", default="none"),
+    )
 
 
 def _template_kwargs(spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -312,7 +328,7 @@ def _template_kwargs(spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
 def schema() -> dict[str, Any]:
     source_schema = template_schema()
     return {
-        "commands": ["schema", "template"],
+        "commands": ["schema", "template", "plan"],
         "template": {
             "description": "Generate a full offline lab bundle from one compact JSON spec.",
             "required": ["template"],
@@ -326,6 +342,12 @@ def schema() -> dict[str, Any]:
                 "model_labels": True,
                 "group_by": list(RENDER_GROUP_BY),
             },
+            "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
+        },
+        "plan": {
+            "description": "Generate the same offline lab bundle from an existing topology plan JSON.",
+            "required": ["plan", "--output-dir"],
+            "optional": ["--name", "--basename", "--formats", "--direction", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--strict-safety", "--no-configs", "--config-source", "--compact"],
             "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
         },
         "templates": {
@@ -357,35 +379,35 @@ def schema() -> dict[str, Any]:
     }
 
 
-def lab_template(spec_path: Path, *, output_dir: Path, strict_safety: bool, compact: bool) -> tuple[dict[str, Any], int]:
-    spec = load_json(spec_path)
-    unknown = set(spec) - TOP_LEVEL_KEYS
-    if unknown:
-        raise ValueError(f"unknown top-level field(s): {', '.join(sorted(unknown))}")
-
-    lab_name = _string_value(spec, "name")
-    template_name, kwargs = _template_kwargs(spec)
-    strict = strict_safety or _bool_value(spec, "strict_safety", default=False)
-    compact_output = compact or _bool_value(spec, "compact", default=False)
-    export_configs = _bool_value(spec, "export_configs", default=True)
-    config_source = _string_value(spec, "config_source")
-    render = _render_settings(spec, lab_name=lab_name, template_name=template_name)
-
+def _write_lab_bundle(
+    plan: dict[str, Any],
+    *,
+    output_dir: Path,
+    topology_source: Path,
+    render: dict[str, Any],
+    strict: bool,
+    compact: bool,
+    export_configs: bool,
+    config_source: str,
+    kind: str,
+    inputs: dict[str, Any],
+    metadata_bundle: dict[str, Any],
+    manifest_fields: dict[str, Any],
+) -> tuple[dict[str, Any], int]:
     output_dir.mkdir(parents=True, exist_ok=True)
     artifacts: dict[str, str] = {}
 
-    plan = TEMPLATES[template_name].function(**kwargs)
     metadata = plan.setdefault("metadata", {})
     if isinstance(metadata, dict):
-        metadata["lab_bundle"] = {"name": lab_name, "template": template_name}
+        metadata["lab_bundle"] = metadata_bundle
 
     topology_out = output_dir / "topology.json"
-    write_json(topology_out, plan, compact=compact_output)
+    write_json(topology_out, plan, compact=compact)
     artifacts["topology"] = rel(output_dir, topology_out)
 
     safety_report = summarize("plan", check_plan(plan), strict=strict)
     safety_out = output_dir / "safety.json"
-    write_json(safety_out, safety_report, compact=compact_output)
+    write_json(safety_out, safety_report, compact=compact)
     artifacts["safety"] = rel(output_dir, safety_out)
 
     render_dir = output_dir / "render"
@@ -408,14 +430,13 @@ def lab_template(spec_path: Path, *, output_dir: Path, strict_safety: bool, comp
         artifacts["configs"] = rel(output_dir, configs_dir)
 
     manifest = {
-        "kind": "pt730-lab-template-bundle",
+        "kind": kind,
+        **manifest_fields,
         "packet_tracer_version": "7.3.0",
-        "name": lab_name,
-        "template": template_name,
         "output_dir": str(output_dir),
         "inputs": {
-            "spec": str(spec_path),
-            "template_options": kwargs,
+            **inputs,
+            "topology_source": str(topology_source),
             "strict_safety": strict,
             "export_configs": export_configs,
             "config_source": config_source,
@@ -429,10 +450,88 @@ def lab_template(spec_path: Path, *, output_dir: Path, strict_safety: bool, comp
     manifest_out = output_dir / "manifest.json"
     artifacts["manifest"] = rel(output_dir, manifest_out)
     manifest["artifacts"] = artifacts
-    write_json(manifest_out, manifest, compact=compact_output)
+    write_json(manifest_out, manifest, compact=compact)
 
     code = 0 if safety_report["ok"] and render_code == 0 else 1
     return manifest, code
+
+
+def lab_template(spec_path: Path, *, output_dir: Path, strict_safety: bool, compact: bool) -> tuple[dict[str, Any], int]:
+    spec = load_json(spec_path)
+    unknown = set(spec) - TOP_LEVEL_KEYS
+    if unknown:
+        raise ValueError(f"unknown top-level field(s): {', '.join(sorted(unknown))}")
+
+    lab_name = _string_value(spec, "name")
+    template_name, kwargs = _template_kwargs(spec)
+    strict = strict_safety or _bool_value(spec, "strict_safety", default=False)
+    compact_output = compact or _bool_value(spec, "compact", default=False)
+    export_configs = _bool_value(spec, "export_configs", default=True)
+    config_source = _string_value(spec, "config_source")
+    render = _render_settings(spec, lab_name=lab_name, template_name=template_name)
+
+    plan = TEMPLATES[template_name].function(**kwargs)
+    return _write_lab_bundle(
+        plan,
+        output_dir=output_dir,
+        topology_source=spec_path,
+        render=render,
+        strict=strict,
+        compact=compact_output,
+        export_configs=export_configs,
+        config_source=config_source,
+        kind="pt730-lab-template-bundle",
+        inputs={
+            "spec": str(spec_path),
+            "template_options": kwargs,
+        },
+        metadata_bundle={"name": lab_name, "template": template_name},
+        manifest_fields={"name": lab_name, "template": template_name},
+    )
+
+
+def lab_plan(
+    plan_path: Path,
+    *,
+    output_dir: Path,
+    name: str,
+    basename: str,
+    formats: str,
+    direction: str,
+    theme: str,
+    link_labels: bool,
+    model_labels: bool,
+    group_by: str,
+    strict_safety: bool,
+    export_configs: bool,
+    config_source: str,
+    compact: bool,
+) -> tuple[dict[str, Any], int]:
+    plan = copy.deepcopy(load_json(plan_path))
+    lab_name = name or plan_path.stem
+    render = _render_settings_from_values(
+        basename=basename or lab_name,
+        formats=formats,
+        direction=direction,
+        theme=theme,
+        link_labels=link_labels,
+        model_labels=model_labels,
+        group_by=group_by,
+    )
+    return _write_lab_bundle(
+        plan,
+        output_dir=output_dir,
+        topology_source=plan_path,
+        render=render,
+        strict=strict_safety,
+        compact=compact,
+        export_configs=export_configs,
+        config_source=config_source,
+        kind="pt730-lab-plan-bundle",
+        inputs={"plan": str(plan_path)},
+        metadata_bundle={"name": lab_name, "plan": str(plan_path)},
+        manifest_fields={"name": lab_name},
+    )
 
 
 def emit_json(value: Any, *, compact: bool) -> None:
@@ -451,6 +550,21 @@ def main(argv: list[str] | None = None) -> int:
     template_p.add_argument("--output-dir", type=Path, required=True)
     template_p.add_argument("--strict-safety", action="store_true", help="treat plan safety warnings as failures")
 
+    plan_p = sub.add_parser("plan", help="generate a complete offline lab bundle from an existing topology plan")
+    plan_p.add_argument("plan", type=Path)
+    plan_p.add_argument("--output-dir", type=Path, required=True)
+    plan_p.add_argument("--name", default="", help="logical lab name; defaults to the plan filename stem")
+    plan_p.add_argument("--basename", default="", help="render artifact filename stem; defaults to --name or the plan filename stem")
+    plan_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit")
+    plan_p.add_argument("--direction", choices=("LR", "TD", "TB", "RL", "BT"), default="LR", help="Mermaid direction when mermaid is included")
+    plan_p.add_argument("--theme", choices=RENDER_THEMES, default="light", help="diagram color theme")
+    plan_p.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=True, help="hide link port/cable/VLAN labels")
+    plan_p.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=True, help="hide device model labels")
+    plan_p.add_argument("--group-by", choices=RENDER_GROUP_BY, default="none", help="draw visual group boxes by network, VLAN, site, category, or auto detection")
+    plan_p.add_argument("--strict-safety", action="store_true", help="treat plan safety warnings as failures")
+    plan_p.add_argument("--no-configs", action="store_false", dest="export_configs", default=True, help="skip per-device .cfg export")
+    plan_p.add_argument("--config-source", default="", help="only export ios_configs matching this source")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "schema":
@@ -458,6 +572,25 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.cmd == "template":
             manifest, code = lab_template(args.spec, output_dir=args.output_dir, strict_safety=args.strict_safety, compact=args.compact)
+            emit_json(manifest, compact=args.compact)
+            return code
+        if args.cmd == "plan":
+            manifest, code = lab_plan(
+                args.plan,
+                output_dir=args.output_dir,
+                name=args.name,
+                basename=args.basename,
+                formats=args.formats,
+                direction=args.direction,
+                theme=args.theme,
+                link_labels=args.link_labels,
+                model_labels=args.model_labels,
+                group_by=args.group_by,
+                strict_safety=args.strict_safety,
+                export_configs=args.export_configs,
+                config_source=args.config_source,
+                compact=args.compact,
+            )
             emit_json(manifest, compact=args.compact)
             return code
         raise ValueError(f"unknown command: {args.cmd}")

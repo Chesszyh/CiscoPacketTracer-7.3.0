@@ -79,6 +79,8 @@ cat > lab-spec.json <<'JSON'
 JSON
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_template","arguments":{"spec":"lab-spec.json","output_dir":"enterprise-demo-lab","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"serial-plan-lab","basename":"serial","formats":["svg","summary"],"group_by":"category","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
 ```
 
 Example campus workflow steps through MCP:
@@ -183,6 +185,7 @@ pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf --output redundant-campus.json
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf --output enterprise-edge.json
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir enterprise-demo-lab
+pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary
 pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
@@ -231,10 +234,12 @@ for ASA-like security labs without touching risky ASA models in PT 7.3.0.
 ## Lab Bundle
 
 Use `pt730-lab template <lab-spec.json> --output-dir <out-dir>` when an agent
-should create a complete offline deliverable from one template spec. The output
-directory contains `topology.json`, `safety.json`, `render/<basename>.*`,
-`configs/*.cfg`, and `manifest.json`. The spec selects any built-in template,
-uses snake_case `template_options`, and can set render `formats`, `theme`,
+should create a complete offline deliverable from one template spec. Use
+`pt730-lab plan <plan.json> --output-dir <out-dir>` for the same bundle after
+an agent has already composed or hand-authored a custom topology JSON. The
+output directory contains `topology.json`, `safety.json`,
+`render/<basename>.*`, `configs/*.cfg`, and `manifest.json`. Template specs use
+snake_case `template_options`; both paths can set render `formats`, `theme`,
 labels, and `group_by`.
 
 ## Campus Pipeline

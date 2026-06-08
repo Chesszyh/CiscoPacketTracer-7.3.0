@@ -214,8 +214,18 @@ test -s "$tmp/lab/manifest.json"
 test -s "$tmp/lab/render/selftest-enterprise.manifest.json"
 test -s "$tmp/lab/render/selftest-enterprise.svg"
 test -s "$tmp/lab/configs/R-SELF-EDGE.cfg"
+"$BIN/pt730-lab" plan "$ROOT/pt-reverse/examples/two-router-serial-configured.json" --output-dir "$tmp/plan-lab" --basename serial --formats svg,summary --group-by category >/dev/null
+test -s "$tmp/plan-lab/topology.json"
+test -s "$tmp/plan-lab/safety.json"
+test -s "$tmp/plan-lab/manifest.json"
+test -s "$tmp/plan-lab/render/serial.svg"
+test -s "$tmp/plan-lab/render/serial.summary.json"
+test -s "$tmp/plan-lab/configs/R_AUTO1.cfg"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_template","arguments":{"spec":"'"$tmp"'/lab-spec.json","output_dir":"'"$tmp"'/mcp-lab","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 test -s "$tmp/mcp-lab/manifest.json"
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"'"$tmp"'/mcp-plan-lab","basename":"mcp-serial","formats":["svg","summary"],"group_by":"category","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+test -s "$tmp/mcp-plan-lab/manifest.json"
+test -s "$tmp/mcp-plan-lab/render/mcp-serial.svg"
 ok "lab bundle checks"
 "$BIN/pt730-config-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-config-plan" campus "$tmp/compose-plan.json" --output "$tmp/configured-plan.json"

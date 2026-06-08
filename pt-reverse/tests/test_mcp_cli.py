@@ -44,6 +44,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_render_bundle", names)
         self.assertIn("pt730_lab_template", names)
+        self.assertIn("pt730_lab_plan", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
         self.assertIn("pt730_template_wireless_lan", names)
@@ -101,6 +102,9 @@ class McpCliTest(unittest.TestCase):
         lab = next(tool for tool in tools if tool["name"] == "pt730_lab_template")
         self.assertIn("spec", lab["inputSchema"]["required"])
         self.assertIn("output_dir", lab["inputSchema"]["required"])
+        lab_plan = next(tool for tool in tools if tool["name"] == "pt730_lab_plan")
+        self.assertIn("plan", lab_plan["inputSchema"]["required"])
+        self.assertIn("formats", lab_plan["inputSchema"]["properties"])
         roas = next(tool for tool in tools if tool["name"] == "pt730_template_vlan_router_on_stick")
         self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
@@ -409,6 +413,46 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "render" / "mcp-enterprise.svg").exists())
             self.assertTrue((out_dir / "render" / "mcp-enterprise.summary.json").exists())
             self.assertTrue((out_dir / "configs" / "R-MCP-EDGE.cfg").exists())
+
+    def test_tools_call_lab_plan_generates_manifest_and_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "mcp-plan-lab"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_lab_plan",
+                            "arguments": {
+                                "plan": "pt-reverse/examples/two-router-serial-configured.json",
+                                "output_dir": str(out_dir),
+                                "name": "mcp-serial",
+                                "basename": "mcp-serial",
+                                "formats": ["svg", "summary"],
+                                "group_by": "category",
+                                "compact": True,
+                            },
+                        },
+                    }
+                ]
+            )
+            result = responses[0]["result"]
+            self.assertEqual(result["isError"], False)
+            command = result["structuredContent"]["command"]
+            self.assertIn("pt730-lab", command[0])
+            self.assertIn("plan", command)
+            self.assertIn("--group-by", command)
+            self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+            manifest = json.loads(result["structuredContent"]["stdout"])
+            self.assertEqual(manifest["kind"], "pt730-lab-plan-bundle")
+            self.assertEqual(manifest["name"], "mcp-serial")
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "summary"])
+            self.assertEqual(manifest["config_files"]["count"], 2)
+            self.assertTrue((out_dir / "manifest.json").exists())
+            self.assertTrue((out_dir / "render" / "mcp-serial.svg").exists())
+            self.assertTrue((out_dir / "configs" / "R_AUTO1.cfg").exists())
 
     def test_tools_call_pipeline_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
