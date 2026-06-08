@@ -256,35 +256,58 @@ def tool_catalog(root: Path, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_template_lan_star(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    command = [
-        str(bin_path(root, "pt730-template")),
-        "lan-star",
-        "--pcs",
-        str(int_arg(args, "pcs", default=4)),
-        "--servers",
-        str(int_arg(args, "servers", default=0)),
-        "--network",
-        str_arg(args, "network", required=False, default="192.168.10.0/24"),
-    ]
-    for key, flag in (("name", "--name"), ("gateway", "--gateway"), ("output", "--output")):
+    command = [str(bin_path(root, "pt730-template"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.extend(
+        [
+            "lan-star",
+            "--pcs",
+            str(int_arg(args, "pcs", default=4)),
+            "--servers",
+            str(int_arg(args, "servers", default=0)),
+            "--network",
+            str_arg(args, "network", required=False, default="192.168.10.0/24"),
+        ]
+    )
+    for key, flag in (("name", "--name"), ("gateway", "--gateway"), ("dns", "--dns"), ("output", "--output")):
         value = str_arg(args, key, required=False)
         if value:
             command.extend([flag, value])
+    layout_style = str_arg(args, "layout_style", required=False)
+    if layout_style:
+        if layout_style not in {"auto", "hierarchical", "campus", "lan", "ring", "grid"}:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
+        command.extend(["--layout-style", layout_style])
+    if bool_arg(args, "no_layout", default=False):
+        command.append("--no-layout")
     return run_cli(root, command)
 
 
 def tool_template_router_ring(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    command = [
-        str(bin_path(root, "pt730-template")),
-        "router-ring",
-        "--routers",
-        str(int_arg(args, "routers", default=4)),
-        "--interconnect-pool",
-        str_arg(args, "interconnect_pool", required=False, default="10.20.0.0/28"),
-    ]
-    output = str_arg(args, "output", required=False)
-    if output:
-        command.extend(["--output", output])
+    command = [str(bin_path(root, "pt730-template"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.extend(
+        [
+            "router-ring",
+            "--routers",
+            str(int_arg(args, "routers", default=4)),
+            "--interconnect-pool",
+            str_arg(args, "interconnect_pool", required=False, default="10.20.0.0/28"),
+        ]
+    )
+    for key, flag in (("name", "--name"), ("output", "--output")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    layout_style = str_arg(args, "layout_style", required=False)
+    if layout_style:
+        if layout_style not in {"auto", "hierarchical", "campus", "lan", "ring", "grid"}:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
+        command.extend(["--layout-style", layout_style])
+    if bool_arg(args, "no_layout", default=False):
+        command.append("--no-layout")
     return run_cli(root, command)
 
 
@@ -990,8 +1013,8 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),
         tool("pt730_safety_policy", "Print the current PT 7.3 automation safety policy.", schema({}), tool_safety_policy),
         tool("pt730_catalog", "Query the offline Packet Tracer catalog with local PT 7.3 safety overlay.", schema({"action": {"type": "string", "enum": ["devices", "device", "ports", "modules", "module", "cables", "infer_cable", "aliases"]}, "model": string, "module": string, "category": string, "category_a": string, "category_b": string, "status": string, "include_ports": boolean, "table": boolean}, ["action"]), tool_catalog),
-        tool("pt730_template_lan_star", "Generate a router-switch-PC/server star LAN topology JSON.", schema({"name": string, "pcs": integer, "servers": integer, "network": string, "gateway": string, "output": string}), tool_template_lan_star),
-        tool("pt730_template_router_ring", "Generate a serial router ring topology JSON with RIP configs.", schema({"routers": integer, "interconnect_pool": string, "output": string}), tool_template_router_ring),
+        tool("pt730_template_lan_star", "Generate a router-switch-PC/server star LAN topology JSON.", schema({"name": string, "pcs": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_lan_star),
+        tool("pt730_template_router_ring", "Generate a serial router ring topology JSON with RIP configs.", schema({"name": string, "routers": integer, "interconnect_pool": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_router_ring),
         tool("pt730_ip_plan_campus", "Plan VLSM campus subnets from a compact IP planning spec.", schema({"spec": string, "output": string}, ["spec"]), tool_ip_plan_campus),
         tool("pt730_compose_campus", "Compose a high-level campus topology spec into topology JSON.", schema({"spec": string, "segments_from_ip_plan": string, "no_layout": boolean, "layout_style": string, "output": string}, ["spec"]), tool_compose_campus),
         tool("pt730_config_plan_campus", "Generate IOS config records from topology VLAN/L3 metadata.", schema({"plan": string, "l3": boolean, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "output": string}, ["plan"]), tool_config_plan_campus),

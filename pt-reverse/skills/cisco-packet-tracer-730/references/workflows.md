@@ -33,6 +33,13 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
+Example template generation through MCP:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_lan_star","arguments":{"name":"AGENT","pcs":2,"servers":1,"network":"192.168.60.0/24","gateway":"192.168.60.1","dns":"192.168.60.254","layout_style":"grid","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
 Example device preview:
 
 ```bash

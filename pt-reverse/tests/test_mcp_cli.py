@@ -195,6 +195,84 @@ class McpCliTest(unittest.TestCase):
             self.assertEqual(manifest["artifacts"]["drawio"], "topology.drawio")
             self.assertTrue((out_dir / "topology.drawio").exists())
 
+    def test_template_tools_expose_full_cli_options(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_lan_star",
+                        "arguments": {
+                            "name": "AGENT",
+                            "pcs": 1,
+                            "servers": 1,
+                            "network": "192.168.60.0/24",
+                            "gateway": "192.168.60.1",
+                            "dns": "192.168.60.254",
+                            "layout_style": "grid",
+                            "no_layout": True,
+                            "compact": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_router_ring",
+                        "arguments": {
+                            "name": "WAN",
+                            "routers": 3,
+                            "interconnect_pool": "10.30.0.0/28",
+                            "layout_style": "ring",
+                            "compact": True,
+                        },
+                    },
+                },
+            ]
+        )
+        lan_result = responses[0]["result"]
+        ring_result = responses[1]["result"]
+        self.assertEqual(lan_result["isError"], False)
+        self.assertEqual(ring_result["isError"], False)
+        lan_command = lan_result["structuredContent"]["command"]
+        ring_command = ring_result["structuredContent"]["command"]
+        self.assertIn("--compact", lan_command)
+        self.assertIn("--dns", lan_command)
+        self.assertIn("--layout-style", lan_command)
+        self.assertIn("--no-layout", lan_command)
+        self.assertIn("--name", ring_command)
+        self.assertIn("--layout-style", ring_command)
+        lan_plan = json.loads(lan_result["structuredContent"]["stdout"])
+        ring_plan = json.loads(ring_result["structuredContent"]["stdout"])
+        self.assertEqual(lan_plan["metadata"]["name"], "AGENT")
+        self.assertEqual(lan_plan["pc_configs"][0]["dns"], "192.168.60.254")
+        self.assertFalse(any("x" in device or "y" in device for device in lan_plan["devices"]))
+        self.assertEqual(ring_plan["metadata"]["name"], "WAN")
+        self.assertEqual(len(ring_plan["devices"]), 3)
+
+    def test_template_tool_rejects_unknown_layout_style(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_lan_star",
+                        "arguments": {
+                            "layout_style": "diagonal",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("layout_style must be one of", responses[0]["error"]["message"])
+
     def test_live_tool_without_allow_live_returns_protocol_error(self) -> None:
         responses = self.run_mcp(
             [

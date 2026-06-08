@@ -75,6 +75,8 @@ JavaScript safety checks are exposed offline through MCP, along with
 `pt730_schema` for retrieving template, IP-plan, compose, config-plan, pipeline,
 and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
+Built-in template MCP tools expose the same DNS, layout, no-layout, compact, and
+naming options as the underlying `pt730-template` CLI.
 
 Read `pt-reverse/SAFETY.md` before running live Packet Tracer operations.
 
