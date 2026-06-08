@@ -62,8 +62,10 @@ tools, Server-PT service/account/config tools, FTP client tools,
 app/bridge/launch/recover lifecycle tools, and simulation/PDU tools support
 `dry_run=true` previews that return the underlying CLI command without touching
 Packet Tracer. Catalog and JavaScript safety checks are exposed offline through
-MCP. Model registry reads are exposed through MCP; model metadata writes require
-`allow_write=true` unless run as `dry_run=true`.
+MCP, along with `pt730_schema` for retrieving template, IP-plan, compose,
+config-plan, pipeline, and IOS-template input schemas. Model registry reads are
+exposed through MCP; model metadata writes require `allow_write=true` unless run
+as `dry_run=true`.
 
 The known-good launch path is:
 

@@ -152,6 +152,30 @@ def tool_capabilities(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_schema(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    target = enum_arg(args, "target", {"template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template"})
+    cli_by_target = {
+        "template": "pt730-template",
+        "ip_plan": "pt730-ip-plan",
+        "compose": "pt730-compose",
+        "config_plan": "pt730-config-plan",
+        "pipeline": "pt730-pipeline",
+        "ios_template": "pt730-ios-template",
+    }
+    compact = bool_arg(args, "compact", default=False)
+    command = [str(bin_path(root, cli_by_target[target]))]
+    if compact and target != "ios_template":
+        command.append("--compact")
+    command.append("schema")
+    result = run_cli(root, command)
+    if compact and target == "ios_template" and result["exitCode"] == 0:
+        try:
+            result["stdout"] = json.dumps(json.loads(result["stdout"]), separators=(",", ":"), ensure_ascii=False) + "\n"
+        except json.JSONDecodeError:
+            pass
+    return result
+
+
 def tool_render(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     fmt = enum_arg(args, "format", {"mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit"})
     command = [str(bin_path(root, "pt730-render"))]
@@ -960,6 +984,7 @@ def tools() -> list[dict[str, Any]]:
     integer = {"type": "integer", "minimum": 0}
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean}), tool_capabilities),
+        tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, or course-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),

@@ -40,6 +40,7 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(responses[0]["result"]["capabilities"]["tools"]["listChanged"], False)
         tools = responses[1]["result"]["tools"]
         names = [tool["name"] for tool in tools]
+        self.assertIn("pt730_schema", names)
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
@@ -86,6 +87,62 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("format", render["inputSchema"]["required"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
         self.assertIn("allow_live", live_count["inputSchema"]["required"])
+
+    def test_schema_tool_returns_workflow_schemas(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_schema",
+                        "arguments": {
+                            "target": "compose",
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_schema",
+                        "arguments": {
+                            "target": "ios_template",
+                            "compact": True,
+                        },
+                    },
+                },
+            ]
+        )
+        compose_result = responses[0]["result"]
+        ios_result = responses[1]["result"]
+        self.assertEqual(compose_result["isError"], False)
+        self.assertIn('"commands": [', compose_result["structuredContent"]["stdout"])
+        self.assertIn('"campus"', compose_result["structuredContent"]["stdout"])
+        self.assertEqual(ios_result["isError"], False)
+        self.assertIn('"format":"pt730-ios-template"', ios_result["structuredContent"]["stdout"])
+        self.assertNotIn("\n  ", ios_result["structuredContent"]["stdout"])
+
+    def test_schema_tool_rejects_unknown_target(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_schema",
+                        "arguments": {
+                            "target": "not-real",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("target must be one of", responses[0]["error"]["message"])
 
     def test_tools_call_render_summary_returns_text_and_structured_content(self) -> None:
         responses = self.run_mcp(

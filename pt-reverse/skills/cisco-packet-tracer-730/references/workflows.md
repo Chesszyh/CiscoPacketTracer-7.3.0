@@ -24,7 +24,14 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
-The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/email/NTP/Syslog/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. Catalog and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
+The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/email/NTP/Syslog/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. `pt730_schema`, catalog, and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
+
+Example schema query:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_schema","arguments":{"target":"compose","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
 
 Example device preview:
 
