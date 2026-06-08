@@ -210,6 +210,51 @@ def _sorted_networks(values: set[str]) -> list[str]:
     return sorted(values, key=lambda item: tuple(int(part) for part in item.split(".")))
 
 
+def _first_hop(adjacency: dict[str, list[dict[str, Any]]], source: str, target: str) -> ipaddress.IPv4Address | None:
+    if source == target:
+        return None
+    queue: list[tuple[str, ipaddress.IPv4Address | None]] = [(source, None)]
+    seen = {source}
+    while queue:
+        device, first_next_hop = queue.pop(0)
+        for edge in sorted(adjacency.get(device, []), key=lambda item: str(item["neighbor"])):
+            neighbor = str(edge["neighbor"])
+            if neighbor in seen:
+                continue
+            next_hop = first_next_hop or edge["next_hop"]
+            if neighbor == target:
+                return next_hop
+            seen.add(neighbor)
+            queue.append((neighbor, next_hop))
+    return None
+
+
+def _add_static_routes(
+    configs: dict[str, dict[str, Any]],
+    svi_networks: dict[str, list[ipaddress.IPv4Network]],
+    adjacency: dict[str, list[dict[str, Any]]],
+) -> None:
+    l3_devices = sorted(set(svi_networks) | set(adjacency))
+    for source in l3_devices:
+        local_networks = set(svi_networks.get(source, []))
+        routes: dict[tuple[str, str, str], dict[str, str]] = {}
+        for target in sorted(svi_networks):
+            if target == source:
+                continue
+            next_hop = _first_hop(adjacency, source, target)
+            if next_hop is None:
+                raise ValueError(f"{source}: no L3 path to {target} for static route planning")
+            for network in svi_networks[target]:
+                if network in local_networks:
+                    continue
+                route = {"destination": str(network.network_address), "mask": str(network.netmask), "next_hop": str(next_hop)}
+                routes[(route["destination"], route["mask"], route["next_hop"])] = route
+        if routes:
+            spec = _ensure_spec(configs, source)
+            spec["ip_routing"] = True
+            spec["static_routes"] = sorted(routes.values(), key=lambda item: (tuple(int(part) for part in item["destination"].split(".")), item["mask"], item["next_hop"]))
+
+
 def _add_l3_plan(
     plan: dict[str, Any],
     configs: dict[str, dict[str, Any]],
@@ -221,6 +266,8 @@ def _add_l3_plan(
 ) -> None:
     links = [link for link in plan.get("links", []) if isinstance(link, dict)]
     rip_networks: dict[str, set[str]] = {}
+    svi_networks: dict[str, list[ipaddress.IPv4Network]] = {}
+    adjacency: dict[str, list[dict[str, Any]]] = {}
     device_vlans = _device_vlans(links, endpoint_names)
     vlan_owners = _vlan_owners(links, by_name, switch_names)
     gateway_groups = _gateway_groups(plan, device_vlans)
@@ -243,6 +290,7 @@ def _add_l3_plan(
             },
         )
         rip_networks.setdefault(owner, set()).add(_rip_network(ipaddress.ip_address(gateway["gateway"])))
+        svi_networks.setdefault(owner, []).append(gateway["network"])
 
     for link in links:
         if _vlan(link):
@@ -266,12 +314,16 @@ def _add_l3_plan(
         _add_l3_interface(configs, b, {"name": pb, "description": f"L3 link to {a} {network}", "mode": "routed", "ip": str(b_ip), "mask": mask})
         rip_networks.setdefault(a, set()).add(_rip_network(a_ip))
         rip_networks.setdefault(b, set()).add(_rip_network(b_ip))
+        adjacency.setdefault(a, []).append({"neighbor": b, "next_hop": b_ip})
+        adjacency.setdefault(b, []).append({"neighbor": a, "next_hop": a_ip})
 
     if routing == "rip":
         for device, networks in rip_networks.items():
             if networks:
                 spec = _ensure_spec(configs, device)
                 spec["rip"] = {"version": 2, "no_auto_summary": True, "networks": _sorted_networks(networks)}
+    elif routing == "static":
+        _add_static_routes(configs, svi_networks, adjacency)
 
 
 def generated_ios_configs(plan: dict[str, Any], *, include_l3: bool = False, routing: str = "none") -> list[dict[str, Any]]:
@@ -330,9 +382,10 @@ def schema() -> dict[str, Any]:
             "--l3 derives VLAN SVI gateways from pc_configs gateway/mask values",
             "--l3 derives routed switch-switch links from note/subnet/network CIDR metadata",
             "--routing rip adds RIPv2 network statements to L3 switch configs",
+            "--routing static adds static routes between derived SVI networks",
             "existing ios_configs with other sources are preserved",
         ],
-        "options": ["--l3", "--routing none|rip", "--ios-only", "--compact", "--output"],
+        "options": ["--l3", "--routing none|rip|static", "--ios-only", "--compact", "--output"],
         "output": "full topology JSON by default; use --ios-only for {ios_configs:[...]}",
     }
 
@@ -356,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--output", type=Path, help="write JSON to a file instead of stdout")
     campus_p.add_argument("--ios-only", action="store_true", help="output only generated ios_configs")
     campus_p.add_argument("--l3", action="store_true", help="derive SVI gateways and routed switch-switch links")
-    campus_p.add_argument("--routing", choices=("none", "rip"), default="none", help="routing protocol config to derive with --l3")
+    campus_p.add_argument("--routing", choices=("none", "rip", "static"), default="none", help="routing config to derive with --l3")
 
     args = parser.parse_args(argv)
     try:
