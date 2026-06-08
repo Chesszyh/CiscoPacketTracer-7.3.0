@@ -23,6 +23,7 @@ pt-reverse/bin/pt730-models manifest
 pt-reverse/bin/pt730-template schema
 pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
+pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip
 pt-reverse/bin/pt730-pipeline schema
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing rip
 pt-reverse/bin/pt730-ip-plan schema
@@ -66,8 +67,9 @@ MCP, along with `pt730_schema` for retrieving template, IP-plan, compose,
 config-plan, pipeline, and IOS-template input schemas. Model registry reads are
 exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
-Built-in template MCP tools expose the same DNS, layout, no-layout, compact,
-and naming options as the underlying `pt730-template` CLI.
+Built-in template MCP tools expose LAN-star, router-ring, and campus template
+options including DNS, layout, no-layout, compact, L3, routing, and naming
+controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme and label controls through `pt730_render`
@@ -293,8 +295,10 @@ Use `pt730-compose campus <spec.json> --segments-from-ip-plan <planned.json>
 --output <plan.json>` to expand a compact agent-friendly campus spec into
 devices, safe ports, links, static host IPs, server services, and default layout
 coordinates before touching Packet Tracer.
-Use `pt730-template lan-star ...` and `pt730-template router-ring ...` when an
-agent needs a common lab topology without first writing a topology JSON file.
+Use `pt730-template lan-star ...`, `pt730-template router-ring ...`, and
+`pt730-template campus ...` when an agent needs a common lab topology without
+first writing a topology JSON file. Campus templates generate core/access/server
+topology, representative hosts, server services, and optional L3 IOS configs.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing rip` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered

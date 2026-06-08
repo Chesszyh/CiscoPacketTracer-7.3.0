@@ -7,9 +7,12 @@ import argparse
 import ipaddress
 import json
 import sys
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
+from compose_cli import compose_campus
+from config_plan_cli import configured_plan
 from layout_cli import LayoutOptions, STYLES, layout_plan
 
 
@@ -40,7 +43,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "router-ring"],
+        "commands": ["schema", "lan-star", "router-ring", "campus"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -49,6 +52,10 @@ def schema() -> dict[str, Any]:
             "router-ring": {
                 "description": "Serial WAN ring of 2911 routers with HWIC-2T modules and RIPv2 configs.",
                 "options": ["--name", "--routers", "--interconnect-pool", "--layout-style", "--no-layout"],
+            },
+            "campus": {
+                "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs.",
+                "options": ["--name", "--cores", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--interconnect-pool", "--l3", "--routing none|rip|static", "--layout-style", "--no-layout"],
             },
         },
     }
@@ -179,6 +186,126 @@ def router_ring(*, name: str, routers: int, interconnect_pool: str, layout_style
     return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
 
 
+def _subnets(pool: ipaddress.IPv4Network, prefix: int, count: int, *, label: str) -> list[ipaddress.IPv4Network]:
+    if count < 0:
+        raise ValueError(f"{label}: count must be >= 0")
+    if prefix < pool.prefixlen or prefix > 32:
+        raise ValueError(f"{label}: prefix must be between {pool.prefixlen} and 32")
+    networks = list(islice(pool.subnets(new_prefix=prefix), count))
+    if len(networks) < count:
+        raise ValueError(f"{pool}: not enough /{prefix} subnets for {count} segment(s)")
+    return networks
+
+
+def _last_gateway(network: ipaddress.IPv4Network) -> ipaddress.IPv4Address:
+    if network.num_addresses > 2:
+        return ipaddress.ip_address(int(network.broadcast_address) - 1)
+    hosts = list(network.hosts())
+    if not hosts:
+        raise ValueError(f"{network}: no usable gateway address")
+    return hosts[-1]
+
+
+def _host_list(network: ipaddress.IPv4Network, *, count: int, skip: set[ipaddress.IPv4Address]) -> list[ipaddress.IPv4Address]:
+    result: list[ipaddress.IPv4Address] = []
+    for address in network.hosts():
+        if address in skip:
+            continue
+        result.append(address)
+        if len(result) >= count:
+            return result
+    raise ValueError(f"{network}: not enough usable host addresses")
+
+
+def campus(
+    *,
+    name: str,
+    cores: int,
+    segments: int,
+    hosts_per_segment: int,
+    access_switches_per_segment: int,
+    servers: int,
+    address_pool: str,
+    segment_prefix: int,
+    server_network: str,
+    server_vlan: int,
+    vlan_base: int,
+    interconnect_pool: str,
+    layout_style: str,
+    no_layout: bool,
+    l3: bool,
+    routing: str,
+) -> dict[str, Any]:
+    if cores < 1:
+        raise ValueError("campus requires at least one core switch")
+    if segments < 1:
+        raise ValueError("campus requires at least one access segment")
+    if hosts_per_segment < 0:
+        raise ValueError("hosts-per-segment must be >= 0")
+    if access_switches_per_segment < 1:
+        raise ValueError("access-switches-per-segment must be >= 1")
+    if servers < 0:
+        raise ValueError("servers must be >= 0")
+
+    pool = ipaddress.ip_network(address_pool, strict=False)
+    segment_networks = _subnets(pool, segment_prefix, segments, label="segment-prefix")
+    srv_net = ipaddress.ip_network(server_network, strict=False)
+    server_gateway = _last_gateway(srv_net)
+    server_addresses = _host_list(srv_net, count=servers, skip={server_gateway}) if servers else []
+    dns_ip = str(server_addresses[1] if len(server_addresses) > 1 else server_addresses[0]) if server_addresses else ""
+    slug = name.upper()
+
+    server_specs: list[dict[str, Any]] = []
+    for index, address in enumerate(server_addresses, start=1):
+        if index == 1:
+            server_name = f"SRV-{slug}-WEB"
+            services: dict[str, Any] = {"http": True}
+        elif index == 2:
+            server_name = f"SRV-{slug}-DNS"
+            services = {"dns": {"enabled": True, "records": [{"name": f"www.{name.lower()}.local", "ip": str(server_addresses[0])}]}}
+        elif index == 3:
+            server_name = f"SRV-{slug}-FTP"
+            services = {"ftp": {"enabled": True, "accounts": [{"username": "student", "password": "packet", "permissions": "RWDNL"}]}}
+        elif index == 4:
+            server_name = f"SRV-{slug}-MAIL"
+            services = {"email": {"enabled": True, "domain": f"{name.lower()}.local", "accounts": [{"username": "student", "password": "packet"}]}}
+        else:
+            server_name = f"SRV-{slug}-{index}"
+            services = {"http": True}
+        server_specs.append({"name": server_name, "ip": str(address), "services": services})
+
+    segment_specs = []
+    for index, network in enumerate(segment_networks, start=1):
+        gateway = _last_gateway(network)
+        segment_specs.append(
+            {
+                "name": f"SEG-{index}",
+                "vlan": vlan_base + index - 1,
+                "subnet": str(network),
+                "gateway": str(gateway),
+                "dns": dns_ip,
+                "representative_hosts": hosts_per_segment,
+                "access_switches": access_switches_per_segment,
+                "core": f"MLS{((index - 1) % cores) + 1}",
+            }
+        )
+
+    spec = {
+        "name": name,
+        "core": {"count": cores, "prefix": "MLS", "interconnect_pool": interconnect_pool, "interconnect_prefix": 30},
+        "server_defaults": {"mask": _mask(srv_net), "gateway": str(server_gateway), "dns": dns_ip},
+        "server_switch": {"name": f"SW-{slug}-SRV", "vlan": server_vlan, "core": "MLS1"},
+        "servers": server_specs,
+        "segments": segment_specs,
+    }
+    plan = compose_campus(spec, do_layout=not no_layout, layout_style=layout_style)
+    plan["metadata"] = {"source": "pt730-template campus", "name": name, "address_pool": str(pool), "server_network": str(srv_net)}
+    if l3 or routing != "none":
+        plan = configured_plan(plan, include_l3=True, routing=routing)
+        plan["metadata"]["source"] = "pt730-template campus"
+    return plan
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pt730-template", description=__doc__)
     parser.add_argument("--compact", action="store_true", help="emit compact JSON")
@@ -204,6 +331,25 @@ def main(argv: list[str] | None = None) -> int:
     ring_p.add_argument("--layout-style", choices=STYLES, default="ring")
     ring_p.add_argument("--no-layout", action="store_true")
     ring_p.add_argument("--output", type=Path)
+
+    campus_p = sub.add_parser("campus", help="generate a representative campus topology")
+    campus_p.add_argument("--name", default="CAMPUS")
+    campus_p.add_argument("--cores", type=int, default=2)
+    campus_p.add_argument("--segments", type=int, default=4)
+    campus_p.add_argument("--hosts-per-segment", type=int, default=2)
+    campus_p.add_argument("--access-switches-per-segment", type=int, default=1)
+    campus_p.add_argument("--servers", type=int, default=2)
+    campus_p.add_argument("--address-pool", default="192.168.0.0/21")
+    campus_p.add_argument("--segment-prefix", type=int, default=24)
+    campus_p.add_argument("--server-network", default="172.16.1.0/26")
+    campus_p.add_argument("--server-vlan", type=int, default=10)
+    campus_p.add_argument("--vlan-base", type=int, default=20)
+    campus_p.add_argument("--interconnect-pool", default="10.10.0.0/24")
+    campus_p.add_argument("--l3", action="store_true")
+    campus_p.add_argument("--routing", choices=("none", "rip", "static"), default="none")
+    campus_p.add_argument("--layout-style", choices=STYLES, default="campus")
+    campus_p.add_argument("--no-layout", action="store_true")
+    campus_p.add_argument("--output", type=Path)
 
     args = parser.parse_args(argv)
     try:
@@ -234,6 +380,30 @@ def main(argv: list[str] | None = None) -> int:
                     interconnect_pool=args.interconnect_pool,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "campus":
+            _emit(
+                campus(
+                    name=args.name,
+                    cores=args.cores,
+                    segments=args.segments,
+                    hosts_per_segment=args.hosts_per_segment,
+                    access_switches_per_segment=args.access_switches_per_segment,
+                    servers=args.servers,
+                    address_pool=args.address_pool,
+                    segment_prefix=args.segment_prefix,
+                    server_network=args.server_network,
+                    server_vlan=args.server_vlan,
+                    vlan_base=args.vlan_base,
+                    interconnect_pool=args.interconnect_pool,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                    l3=args.l3,
+                    routing=args.routing,
                 ),
                 args.output,
                 compact=args.compact,

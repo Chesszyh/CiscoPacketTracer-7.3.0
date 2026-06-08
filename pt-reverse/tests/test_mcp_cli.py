@@ -44,6 +44,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
+        self.assertIn("pt730_template_campus", names)
         self.assertIn("pt730_catalog", names)
         self.assertIn("pt730_safety_js", names)
         self.assertIn("pt730_safety_policy", names)
@@ -460,6 +461,44 @@ class McpCliTest(unittest.TestCase):
         self.assertFalse(any("x" in device or "y" in device for device in lan_plan["devices"]))
         self.assertEqual(ring_plan["metadata"]["name"], "WAN")
         self.assertEqual(len(ring_plan["devices"]), 3)
+
+    def test_campus_template_tool_generates_complex_topology_with_l3_configs(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_campus",
+                        "arguments": {
+                            "name": "AGENT",
+                            "cores": 2,
+                            "segments": 3,
+                            "hosts_per_segment": 2,
+                            "servers": 4,
+                            "l3": True,
+                            "routing": "rip",
+                            "layout_style": "campus",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("campus", command)
+        self.assertIn("--compact", command)
+        self.assertIn("--l3", command)
+        self.assertIn("rip", command)
+        self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template campus")
+        self.assertEqual(len(plan["server_configs"]), 4)
+        self.assertTrue(any(config["device"] == "MLS1" for config in plan["ios_configs"]))
+        self.assertIn("router rip", "\n".join(command for config in plan["ios_configs"] for command in config["commands"]))
 
     def test_template_tool_rejects_unknown_layout_style(self) -> None:
         responses = self.run_mcp(
