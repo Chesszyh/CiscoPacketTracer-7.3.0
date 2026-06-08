@@ -297,6 +297,133 @@ def tool_pipeline_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_topo_summarize_query(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-topo")), "summarize-query", str_arg(args, "query_json")]
+    return run_cli(root, command)
+
+
+def tool_topo_export(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [
+        str(bin_path(root, "pt730-topo")),
+        "--timeout",
+        str(int_arg(args, "timeout", default=20)),
+        "export",
+        "--raw-out",
+        str_arg(args, "raw_out"),
+        "--summary-out",
+        str_arg(args, "summary_out"),
+    ]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command[1:1] = ["--bridge", bridge]
+    from_query = str_arg(args, "from_query", required=False)
+    if from_query:
+        command.extend(["--from-query", from_query])
+    markdown_out = str_arg(args, "markdown_out", required=False)
+    if markdown_out:
+        command.extend(["--markdown-out", markdown_out])
+    if from_query:
+        return run_cli(root, command)
+    return run_live_cli(root, args, "pt730_topo_export", command)
+
+
+def tool_models_manifest(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    return run_cli(root, [str(bin_path(root, "pt730-models")), "manifest"])
+
+
+def tool_models_queue(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-models")), "queue"]
+    if bool_arg(args, "include_risky", default=False):
+        command.append("--include-risky")
+    if bool_arg(args, "include_blocked", default=False):
+        command.append("--include-blocked")
+    return run_cli(root, command)
+
+
+def tool_models_probe_plan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-models")), "probe-plan", str_arg(args, "model")]
+    if bool_arg(args, "allow_risky", default=False):
+        command.append("--allow-risky")
+    if bool_arg(args, "allow_blocked", default=False):
+        command.append("--allow-blocked")
+    return run_cli(root, command)
+
+
+def tool_models_validate(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    dry_run = bool_arg(args, "dry_run", default=False)
+    live = bool_arg(args, "live", default=False)
+    command = [str(bin_path(root, "pt730-models")), "validate", str_arg(args, "model")]
+    if dry_run:
+        command.append("--dry-run")
+    if live:
+        require_live(args, "pt730_models_validate")
+        command.append("--live")
+    elif not dry_run:
+        raise ToolError("pt730_models_validate requires dry_run=true or live=true with allow_live=true")
+    if bool_arg(args, "allow_risky", default=False):
+        command.append("--allow-risky")
+    if bool_arg(args, "allow_blocked", default=False):
+        command.append("--allow-blocked")
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["--timeout", str(int_arg(args, "timeout", default=20))])
+    record_failure_status = str_arg(args, "record_failure_status", required=False)
+    if record_failure_status:
+        if record_failure_status not in {"risky", "blocked"}:
+            raise ToolError("record_failure_status must be one of: blocked, risky")
+        command.extend(["--record-failure-status", record_failure_status])
+    return run_cli(root, command)
+
+
+def tool_models_validate_batch(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    dry_run = bool_arg(args, "dry_run", default=False)
+    live = bool_arg(args, "live", default=False)
+    command = [str(bin_path(root, "pt730-models")), "validate-batch"]
+    if dry_run:
+        command.append("--dry-run")
+    if live:
+        require_live(args, "pt730_models_validate_batch")
+        command.append("--live")
+    elif not dry_run:
+        raise ToolError("pt730_models_validate_batch requires dry_run=true or live=true with allow_live=true")
+    limit = int_arg(args, "limit", default=0)
+    if limit:
+        command.extend(["--limit", str(limit)])
+    if bool_arg(args, "include_risky", default=False):
+        command.append("--include-risky")
+    if bool_arg(args, "include_blocked", default=False):
+        command.append("--include-blocked")
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["--timeout", str(int_arg(args, "timeout", default=20))])
+    if bool_arg(args, "keep_going", default=False):
+        command.append("--keep-going")
+    record_failures = str_arg(args, "record_failures", required=False)
+    if record_failures:
+        if record_failures not in {"risky", "blocked"}:
+            raise ToolError("record_failures must be one of: blocked, risky")
+        command.extend(["--record-failures", record_failures])
+    return run_cli(root, command)
+
+
+def tool_models_record(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-models")), "record", str_arg(args, "model"), "--status", enum_arg(args, "status", {"safe", "risky", "blocked", "unverified"})]
+    reason = str_arg(args, "reason", required=False)
+    if reason:
+        command.extend(["--reason", reason])
+    for item in list_str_arg(args, "evidence", required=False):
+        command.extend(["--evidence", item])
+    if bool_arg(args, "save_reopen", default=False):
+        command.append("--save-reopen")
+    if bool_arg(args, "dry_run", default=False):
+        return dry_run_result(command)
+    if not bool_arg(args, "allow_write", default=False):
+        raise ToolError("pt730_models_record requires allow_write=true because it changes model validation metadata")
+    return run_cli(root, command)
+
+
 def tool_live_count(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     require_live(args, "pt730_live_count")
     command = [str(bin_path(root, "pt730-app")), "--timeout", str(int_arg(args, "timeout", default=15)), "count"]
@@ -336,6 +463,55 @@ def tool_live_save_as(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     if bool_arg(args, "direct", default=False):
         command.append("--direct")
     return run_cli(root, command)
+
+
+def tool_live_app(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    action = enum_arg(args, "action", {"count", "save", "new", "save_as", "open", "screenshot"})
+    command = [str(bin_path(root, "pt730-app")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    if action == "count":
+        command.append("count")
+    elif action == "save":
+        command.append("save")
+    elif action == "new":
+        command.append("new")
+    elif action == "save_as":
+        command.extend(["save-as", str_arg(args, "path")])
+        if bool_arg(args, "direct", default=False):
+            command.append("--direct")
+    elif action == "open":
+        command.extend(["open", str_arg(args, "path")])
+        if bool_arg(args, "direct", default=False):
+            command.append("--direct")
+    elif action == "screenshot":
+        command.extend(["screenshot", str_arg(args, "path")])
+    return run_live_cli(root, args, "pt730_live_app", command)
+
+
+def tool_live_bridge(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    action = enum_arg(args, "action", {"start", "stop", "restart", "status", "bootstrap", "logs"})
+    command = [str(bin_path(root, "pt730-bridge")), action]
+    if action == "logs":
+        lines = str_arg(args, "lines", required=False)
+        if lines:
+            command.append(lines)
+    return run_live_cli(root, args, "pt730_live_bridge", command)
+
+
+def tool_live_launch(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    action = enum_arg(args, "action", {"start", "stop", "restart", "status", "logs"})
+    command = [str(bin_path(root, "pt730-launch")), action]
+    if action == "logs":
+        lines = str_arg(args, "lines", required=False)
+        if lines:
+            command.append(lines)
+    return run_live_cli(root, args, "pt730_live_launch", command)
+
+
+def tool_live_recover(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-recover")), "--wait", str(int_arg(args, "wait", default=45))]
+    if bool_arg(args, "notify", default=False):
+        command.append("--notify")
+    return run_live_cli(root, args, "pt730_live_recover", command)
 
 
 def tool_live_ios(root: Path, args: dict[str, Any]) -> dict[str, Any]:
@@ -621,10 +797,22 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_layout", "Assign deterministic coordinates to a topology plan.", schema({"plan": string, "style": string, "preserve_existing": boolean, "output": string}, ["plan"]), tool_layout),
         tool("pt730_ios_template_render", "Render high-level IOS template JSON into commands or topology ios_configs.", schema({"spec": string, "topology_json": boolean, "output": string}, ["spec"]), tool_ios_template_render),
         tool("pt730_pipeline_campus", "Run IP plan, compose, config planning, layout, safety, rendering, and config export offline.", schema({"compose_spec": string, "ip_plan": string, "output_dir": string, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "layout_style": string, "strict_safety": boolean, "course_audit": boolean}, ["compose_spec", "output_dir"]), tool_pipeline_campus),
+        tool("pt730_topo_summarize_query", "Summarize a saved pt730-topo query JSON file offline.", schema({"query_json": string}, ["query_json"]), tool_topo_summarize_query),
+        tool("pt730_topo_export", "Export raw and summarized topology query JSON; offline with from_query, live otherwise.", schema({"from_query": string, "raw_out": string, "summary_out": string, "markdown_out": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["raw_out", "summary_out"]), tool_topo_export),
+        tool("pt730_models_manifest", "Print grouped PT 7.3 model safety registry.", schema({}), tool_models_manifest),
+        tool("pt730_models_queue", "Print the guarded common-model validation queue.", schema({"include_risky": boolean, "include_blocked": boolean}), tool_models_queue),
+        tool("pt730_models_probe_plan", "Generate a guarded one-model validation topology plan.", schema({"model": string, "allow_risky": boolean, "allow_blocked": boolean}, ["model"]), tool_models_probe_plan),
+        tool("pt730_models_validate", "Run guarded model validation dry_run, or live validation with allow_live=true.", schema({"model": string, "dry_run": boolean, "live": boolean, "allow_live": boolean, "allow_risky": boolean, "allow_blocked": boolean, "bridge": string, "timeout": integer, "record_failure_status": {"type": "string", "enum": ["risky", "blocked"]}}, ["model"]), tool_models_validate),
+        tool("pt730_models_validate_batch", "Run guarded batch model validation dry_run, or live validation with allow_live=true.", schema({"dry_run": boolean, "live": boolean, "allow_live": boolean, "limit": integer, "include_risky": boolean, "include_blocked": boolean, "bridge": string, "timeout": integer, "keep_going": boolean, "record_failures": {"type": "string", "enum": ["risky", "blocked"]}}), tool_models_validate_batch),
+        tool("pt730_models_record", "Record model validation metadata; requires allow_write=true unless dry_run=true.", schema({"model": string, "status": {"type": "string", "enum": ["safe", "risky", "blocked", "unverified"]}, "reason": string, "evidence": string_array, "save_reopen": boolean, "dry_run": boolean, "allow_write": boolean}, ["model", "status"]), tool_models_record),
         tool("pt730_live_count", "Count devices/links on a live Packet Tracer canvas. Requires allow_live=true.", schema({"allow_live": boolean, "timeout": integer}, ["allow_live"]), tool_live_count),
         tool("pt730_live_query", "Query the live Packet Tracer canvas. Requires allow_live=true.", schema({"allow_live": boolean, "summary": boolean, "timeout": integer}, ["allow_live"]), tool_live_query),
         tool("pt730_live_apply", "Apply a topology plan to live Packet Tracer, or run offline dry_run without live access.", schema({"plan": string, "dry_run": boolean, "allow_live": boolean, "replace": boolean, "batch_size": integer, "allow_risky": boolean, "strict_safety": boolean, "timeout": integer}, ["plan"]), tool_live_apply),
         tool("pt730_live_save_as", "Save the current live Packet Tracer file to a Linux path. Requires allow_live=true.", schema({"allow_live": boolean, "path": string, "direct": boolean, "timeout": integer}, ["allow_live", "path"]), tool_live_save_as),
+        tool("pt730_live_app", "Run guarded Packet Tracer appWindow helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["count", "save", "new", "save_as", "open", "screenshot"]}, "path": string, "direct": boolean, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["action"]), tool_live_app),
+        tool("pt730_live_bridge", "Run guarded localhost bridge lifecycle helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["start", "stop", "restart", "status", "bootstrap", "logs"]}, "lines": string, "dry_run": boolean, "allow_live": boolean}, ["action"]), tool_live_bridge),
+        tool("pt730_live_launch", "Run guarded Packet Tracer tmux launcher helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["start", "stop", "restart", "status", "logs"]}, "lines": string, "dry_run": boolean, "allow_live": boolean}, ["action"]), tool_live_launch),
+        tool("pt730_live_recover", "Run guarded Packet Tracer bridge recovery, or return a safe dry_run command preview.", schema({"wait": integer, "notify": boolean, "dry_run": boolean, "allow_live": boolean}), tool_live_recover),
         tool("pt730_live_ios", "Send IOS commands to a live router/switch, or return a safe dry_run command preview.", schema({"device": string, "commands": string_array, "file": string, "init_dialog": boolean, "save": boolean, "keep_comments": boolean, "output": {"type": "string", "enum": ["tail", "full", "none"]}, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_ios),
         tool("pt730_live_pc_inspect", "Inspect live PC/server/laptop port IP state, or return a safe dry_run command preview.", schema({"device": string, "port": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_pc_inspect),
         tool("pt730_live_pc_static", "Set a static IPv4 address on a live PC/server port, or return a safe dry_run command preview.", schema({"device": string, "port": string, "ip": string, "mask": string, "gateway": string, "dns": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "ip", "mask"]), tool_live_pc_static),

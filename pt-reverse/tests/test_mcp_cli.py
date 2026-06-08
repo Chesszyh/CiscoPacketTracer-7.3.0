@@ -67,6 +67,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_models_probe_plan", names)
         self.assertIn("pt730_models_validate", names)
         self.assertIn("pt730_models_validate_batch", names)
+        self.assertIn("pt730_models_record", names)
         self.assertIn("pt730_live_app", names)
         self.assertIn("pt730_live_bridge", names)
         self.assertIn("pt730_live_launch", names)
@@ -487,6 +488,50 @@ class McpCliTest(unittest.TestCase):
             self.assertIn("2911", responses[3]["result"]["structuredContent"]["stdout"])
             self.assertIn("dry_run", responses[4]["result"]["structuredContent"]["stdout"])
             self.assertIn("dry_run", responses[5]["result"]["structuredContent"]["stdout"])
+
+    def test_models_record_requires_allow_write_or_dry_run(self) -> None:
+        blocked = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_models_record",
+                        "arguments": {
+                            "model": "2911",
+                            "status": "risky",
+                            "reason": "test",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(blocked[0]["error"]["code"], -32602)
+        self.assertIn("allow_write", blocked[0]["error"]["message"])
+
+        preview = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_models_record",
+                        "arguments": {
+                            "model": "2911",
+                            "status": "risky",
+                            "reason": "test",
+                            "dry_run": True,
+                        },
+                    },
+                }
+            ]
+        )
+        command = preview[0]["result"]["structuredContent"]["command"]
+        self.assertIn("pt730-models", command[0])
+        self.assertIn("record", command)
+        self.assertIn("--status", command)
 
     def test_live_lifecycle_tools_require_allow_live_or_dry_run(self) -> None:
         blocked = self.run_mcp(
