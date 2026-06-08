@@ -48,6 +48,8 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_campus","arguments":{"name":"AGENT","cores":2,"segments":4,"hosts_per_segment":2,"servers":4,"l3":true,"routing":"ospf","layout_style":"campus","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_redundant_campus","arguments":{"name":"AGENT","segments":4,"hosts_per_segment":2,"servers":4,"routing":"ospf","layout_style":"campus","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
 ```
 
 Example campus workflow steps through MCP:
@@ -147,6 +149,7 @@ pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --i
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28 --output router-ring.json
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf --output wan-ring.json
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf --output campus.json
+pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf --output redundant-campus.json
 pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
@@ -173,6 +176,12 @@ Use `rip`, `static`, or `none` when that better matches the lab.
 SVI passive-interface commands, and direct SVI/core-link `network ... area 0`
 statements for multi-core campus L3 labs. Use `rip`, `static`, or `none` when
 that better matches the assignment.
+
+`redundant-campus --routing ospf` writes a dual-core, dual-homed campus plan
+with HSRP virtual gateways, STP primary/secondary root roles, DHCP relay, IOS
+DHCP pools, NTP/Syslog/SNMP client config, server services, and VLAN metadata
+for group-by-VLAN SVG/draw.io/HTML renders. Use `rip` or `none` when dynamic
+OSPF is not wanted.
 
 `edge-security` uses verified `2911`, `2960-24TT`, `PC-PT`, and `Server-PT`
 models to generate an ISP edge, inside LAN, DMZ, Internet test host, NAT

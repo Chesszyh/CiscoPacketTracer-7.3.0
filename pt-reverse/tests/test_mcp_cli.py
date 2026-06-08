@@ -49,6 +49,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_template_edge_security", names)
         self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
+        self.assertIn("pt730_template_redundant_campus", names)
         self.assertIn("pt730_catalog", names)
         self.assertIn("pt730_safety_js", names)
         self.assertIn("pt730_safety_policy", names)
@@ -97,6 +98,8 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("ospf", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
         campus = next(tool for tool in tools if tool["name"] == "pt730_template_campus")
         self.assertIn("ospf", campus["inputSchema"]["properties"]["routing"]["enum"])
+        redundant = next(tool for tool in tools if tool["name"] == "pt730_template_redundant_campus")
+        self.assertIn("ospf", redundant["inputSchema"]["properties"]["routing"]["enum"])
         config_plan = next(tool for tool in tools if tool["name"] == "pt730_config_plan_campus")
         self.assertIn("ospf", config_plan["inputSchema"]["properties"]["routing"]["enum"])
         pipeline = next(tool for tool in tools if tool["name"] == "pt730_pipeline_campus")
@@ -666,6 +669,44 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(len(plan["server_configs"]), 4)
         self.assertTrue(any(config["device"] == "MLS1" for config in plan["ios_configs"]))
         self.assertIn("router ospf 1", "\n".join(command for config in plan["ios_configs"] for command in config["commands"]))
+
+    def test_redundant_campus_template_tool_generates_hsrp_services_and_compact_output(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_redundant_campus",
+                        "arguments": {
+                            "name": "AGENT",
+                            "segments": 3,
+                            "hosts_per_segment": 2,
+                            "servers": 4,
+                            "routing": "ospf",
+                            "layout_style": "campus",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("redundant-campus", command)
+        self.assertIn("--compact", command)
+        self.assertIn("ospf", command)
+        self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template redundant-campus")
+        self.assertEqual(len(plan["redundancy_groups"]), 3)
+        self.assertEqual(len(plan["dhcp_pools"]), 3)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("standby 20 ip 192.168.0.254", joined)
+        self.assertIn("ip helper-address 172.16.1.1", joined)
+        self.assertIn("ntp server 172.16.1.4 prefer", joined)
 
     def test_template_tool_rejects_unknown_layout_style(self) -> None:
         responses = self.run_mcp(

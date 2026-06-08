@@ -47,7 +47,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "edge-security", "router-ring", "wan-ring", "campus"],
+        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -76,6 +76,10 @@ def schema() -> dict[str, Any]:
             "campus": {
                 "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs, and optional RIP/OSPF/static routing.",
                 "options": ["--name", "--cores", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--interconnect-pool", "--l3", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
+            },
+            "redundant-campus": {
+                "description": "Dual-core campus with dual-homed access switches, HSRP gateways, STP root roles, DHCP relay/pools, NTP/Syslog/SNMP, services, and optional RIP/OSPF routing.",
+                "options": ["--name", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--routing none|rip|ospf", "--layout-style", "--no-layout"],
             },
         },
     }
@@ -324,6 +328,15 @@ def _host_list(network: ipaddress.IPv4Network, *, count: int, skip: set[ipaddres
         if len(result) >= count:
             return result
     raise ValueError(f"{network}: not enough usable host addresses")
+
+
+def _redundant_gateway_addresses(network: ipaddress.IPv4Network) -> tuple[ipaddress.IPv4Address, ipaddress.IPv4Address, ipaddress.IPv4Address]:
+    gateway = _last_gateway(network)
+    core_b = ipaddress.ip_address(int(gateway) - 1)
+    core_a = ipaddress.ip_address(int(gateway) - 2)
+    if core_a not in network or core_b not in network or core_a == network.network_address:
+        raise ValueError(f"{network}: not enough addresses for HSRP gateway plus two core SVI addresses")
+    return gateway, core_a, core_b
 
 
 def vlan_router_on_stick(
@@ -970,6 +983,426 @@ def campus(
     return plan
 
 
+def redundant_campus(
+    *,
+    name: str,
+    segments: int,
+    hosts_per_segment: int,
+    access_switches_per_segment: int,
+    servers: int,
+    address_pool: str,
+    segment_prefix: int,
+    server_network: str,
+    server_vlan: int,
+    vlan_base: int,
+    routing: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if segments < 1:
+        raise ValueError("redundant-campus requires at least one access segment")
+    if hosts_per_segment < 0:
+        raise ValueError("hosts-per-segment must be >= 0")
+    if access_switches_per_segment < 1:
+        raise ValueError("access-switches-per-segment must be >= 1")
+    if servers < 0:
+        raise ValueError("servers must be >= 0")
+    if hosts_per_segment > access_switches_per_segment * 24:
+        raise ValueError("hosts-per-segment exceeds available FastEthernet access ports")
+    if servers > 24:
+        raise ValueError("redundant-campus supports up to 24 servers on one server access switch")
+
+    core_fe_uplinks = segments * access_switches_per_segment + (1 if servers else 0)
+    if core_fe_uplinks > 24:
+        raise ValueError("redundant-campus supports up to 24 dual-homed access/server uplinks per core")
+
+    pool = ipaddress.ip_network(address_pool, strict=False)
+    segment_networks = _subnets(pool, segment_prefix, segments, label="segment-prefix")
+    srv_net = ipaddress.ip_network(server_network, strict=False)
+    server_gateway, server_core_a_ip, server_core_b_ip = _redundant_gateway_addresses(srv_net)
+    server_addresses = _host_list(srv_net, count=servers, skip={server_gateway, server_core_a_ip, server_core_b_ip}) if servers else []
+    dns_ip = str(server_addresses[1] if len(server_addresses) > 1 else server_addresses[0]) if server_addresses else ""
+    nms_ip = str(server_addresses[3] if len(server_addresses) > 3 else server_addresses[0]) if server_addresses else ""
+    dhcp_helper = str(server_addresses[0]) if server_addresses else ""
+    slug = name.upper()
+    core_a = f"CORE-{slug}-A"
+    core_b = f"CORE-{slug}-B"
+    server_switch = f"SW-{slug}-SRV"
+    vlan_ids = [server_vlan] + [vlan_base + index for index in range(segments)]
+    allowed_vlans = ",".join(str(vlan_id) for vlan_id in vlan_ids)
+    segment_infos: list[dict[str, Any]] = []
+
+    for index, network in enumerate(segment_networks, start=1):
+        gateway, core_a_ip, core_b_ip = _redundant_gateway_addresses(network)
+        host_addresses = _host_list(network, count=hosts_per_segment, skip={gateway, core_a_ip, core_b_ip})
+        segment_infos.append(
+            {
+                "index": index,
+                "name": f"SEG-{index}",
+                "vlan": vlan_base + index - 1,
+                "network": network,
+                "gateway": gateway,
+                "core_a_ip": core_a_ip,
+                "core_b_ip": core_b_ip,
+                "host_addresses": host_addresses,
+            }
+        )
+
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": core_a, "category": "switch", "model": "2960-24TT", "pt_note": "automation-safe visual substitute for multilayer core switch"},
+            {"name": core_b, "category": "switch", "model": "2960-24TT", "pt_note": "automation-safe visual substitute for multilayer core switch"},
+        ],
+        "links": [
+            {"a": core_a, "pa": "GigabitEthernet0/1", "b": core_b, "pb": "GigabitEthernet0/1", "cable": "cross", "note": "redundant core peer trunk"},
+        ],
+        "pc_configs": [],
+        "server_configs": [],
+        "vlan_configs": [
+            {
+                "id": server_vlan,
+                "name": "SERVER",
+                "network": str(srv_net),
+                "gateway": str(server_gateway),
+                "description": "Dual-core HSRP server VLAN",
+                "primary_svi": str(server_core_a_ip),
+                "secondary_svi": str(server_core_b_ip),
+            }
+        ],
+        "dhcp_pools": [],
+        "redundancy_groups": [],
+        "ios_configs": [],
+        "metadata": {
+            "source": "pt730-template redundant-campus",
+            "name": name,
+            "address_pool": str(pool),
+            "server_network": str(srv_net),
+            "routing": routing,
+            "features": ["dual_core", "dual_homed_access", "hsrp", "stp_root_roles", "dhcp_relay", "ios_dhcp_pools", "ntp", "syslog", "snmp"],
+        },
+    }
+    if servers:
+        plan["devices"].append({"name": server_switch, "category": "switch", "model": "2960-24TT"})
+
+    core_next_fe = {core_a: 1, core_b: 1}
+    core_trunks: dict[str, list[tuple[str, str, str]]] = {core_a: [], core_b: []}
+
+    def next_core_fe(core: str) -> str:
+        index = core_next_fe[core]
+        if index > 24:
+            raise ValueError(f"{core}: no free FastEthernet trunk ports")
+        core_next_fe[core] += 1
+        return f"FastEthernet0/{index}"
+
+    if servers:
+        port_a = next_core_fe(core_a)
+        port_b = next_core_fe(core_b)
+        plan["links"].extend(
+            [
+                {"a": core_a, "pa": port_a, "b": server_switch, "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": server_vlan, "note": "server VLAN redundant uplink A"},
+                {"a": core_b, "pa": port_b, "b": server_switch, "pb": "GigabitEthernet0/2", "cable": "cross", "vlan": server_vlan, "note": "server VLAN redundant uplink B"},
+            ]
+        )
+        core_trunks[core_a].append((port_a, allowed_vlans, "SERVER_ACCESS_A"))
+        core_trunks[core_b].append((port_b, allowed_vlans, "SERVER_ACCESS_B"))
+
+    server_configs_by_name: dict[str, dict[str, Any]] = {}
+    dns_records: list[dict[str, str]] = []
+    for index, address in enumerate(server_addresses, start=1):
+        if index == 1:
+            server_name = f"SRV-{slug}-WEB"
+            services: dict[str, Any] = {"http": True}
+        elif index == 2:
+            server_name = f"SRV-{slug}-DNS"
+            services = {"dns": {"enabled": True, "records": []}}
+        elif index == 3:
+            server_name = f"SRV-{slug}-FTP"
+            services = {"ftp": {"enabled": True, "accounts": [{"username": "student", "password": "packet", "permissions": "RWDNL"}]}}
+        elif index == 4:
+            server_name = f"SRV-{slug}-NMS"
+            services = {"ntp": {"enabled": True, "authentication": False}, "syslog": {"enabled": True, "port": 514}}
+        else:
+            server_name = f"SRV-{slug}-{index}"
+            services = {"http": True}
+        plan["devices"].append({"name": server_name, "category": "server", "model": "Server-PT"})
+        plan["links"].append({"a": server_switch, "pa": f"FastEthernet0/{index}", "b": server_name, "pb": "FastEthernet0", "cable": "straight", "vlan": server_vlan, "note": "server host"})
+        plan["pc_configs"].append({"name": server_name, "port": "FastEthernet0", "ip": str(address), "mask": _mask(srv_net), "gateway": str(server_gateway), "dns": dns_ip or str(address)})
+        server_configs_by_name[server_name] = {"name": server_name, **services}
+        dns_records.append({"name": f"{server_name.lower()}.{name.lower()}.local", "ip": str(address)})
+    if server_addresses:
+        dns_records.insert(0, {"name": f"www.{name.lower()}.local", "ip": str(server_addresses[0])})
+    dns_server = f"SRV-{slug}-DNS" if len(server_addresses) >= 2 else (next(iter(server_configs_by_name)) if server_configs_by_name else "")
+    if dns_server:
+        dns_config = server_configs_by_name.setdefault(dns_server, {"name": dns_server})
+        dns_config["dns"] = {"enabled": True, "records": dns_records}
+    plan["server_configs"] = list(server_configs_by_name.values())
+
+    access_switch_names: list[str] = []
+    for segment in segment_infos:
+        vlan = segment["vlan"]
+        plan["vlan_configs"].append(
+            {
+                "id": vlan,
+                "name": segment["name"],
+                "network": str(segment["network"]),
+                "gateway": str(segment["gateway"]),
+                "description": "Dual-core HSRP access VLAN",
+                "primary_svi": str(segment["core_a_ip"]),
+                "secondary_svi": str(segment["core_b_ip"]),
+            }
+        )
+        plan["redundancy_groups"].append(
+            {
+                "vlan": vlan,
+                "group": vlan,
+                "virtual_ip": str(segment["gateway"]),
+                "primary": core_a,
+                "secondary": core_b,
+            }
+        )
+        start = _host(segment["network"], 1)
+        end = ipaddress.ip_address(int(segment["gateway"]) - 3)
+        if start <= end:
+            plan["dhcp_pools"].append(
+                {
+                    "device": core_a,
+                    "name": f"VLAN{vlan}",
+                    "vlan": vlan,
+                    "network": str(segment["network"].network_address),
+                    "mask": _mask(segment["network"]),
+                    "start": str(start),
+                    "end": str(end),
+                    "gateway": str(segment["gateway"]),
+                    "dns": dns_ip,
+                }
+            )
+        switch_names = [
+            f"SW-{slug}-V{vlan}" if access_switches_per_segment == 1 else f"SW-{slug}-V{vlan}-{switch_index}"
+            for switch_index in range(1, access_switches_per_segment + 1)
+        ]
+        for switch_index, switch_name in enumerate(switch_names, start=1):
+            access_switch_names.append(switch_name)
+            port_a = next_core_fe(core_a)
+            port_b = next_core_fe(core_b)
+            plan["devices"].append({"name": switch_name, "category": "switch", "model": "2960-24TT"})
+            plan["links"].extend(
+                [
+                    {"a": core_a, "pa": port_a, "b": switch_name, "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": vlan, "note": f"{segment['name']} redundant uplink A"},
+                    {"a": core_b, "pa": port_b, "b": switch_name, "pb": "GigabitEthernet0/2", "cable": "cross", "vlan": vlan, "note": f"{segment['name']} redundant uplink B"},
+                ]
+            )
+            core_trunks[core_a].append((port_a, allowed_vlans, f"{switch_name}_UPLINK_A"))
+            core_trunks[core_b].append((port_b, allowed_vlans, f"{switch_name}_UPLINK_B"))
+        for host_index, address in enumerate(segment["host_addresses"], start=1):
+            switch_name = switch_names[(host_index - 1) % len(switch_names)]
+            port_index = 1 + (host_index - 1) // len(switch_names)
+            host = f"PC-{slug}-V{vlan}-{host_index}"
+            plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT"})
+            plan["links"].append({"a": switch_name, "pa": f"FastEthernet0/{port_index}", "b": host, "pb": "FastEthernet0", "cable": "straight", "vlan": vlan, "note": f"{segment['name']} host"})
+            plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(segment["network"]), "gateway": str(segment["gateway"]), "dns": dns_ip})
+
+    def access_switch_commands(switch_name: str, vlan: int, host_ports: list[str]) -> list[str]:
+        commands = [
+            "enable",
+            "configure terminal",
+            f"hostname {switch_name}",
+            f"vlan {vlan}",
+            f" name ACCESS_{vlan}",
+            "exit",
+            "spanning-tree mode rapid-pvst",
+            "spanning-tree portfast default",
+            "spanning-tree bpduguard default",
+            "interface GigabitEthernet0/1",
+            "description UPLINK_TO_CORE_A",
+            "switchport mode trunk",
+            f"switchport trunk allowed vlan {allowed_vlans}",
+            "no shutdown",
+            "exit",
+            "interface GigabitEthernet0/2",
+            "description UPLINK_TO_CORE_B",
+            "switchport mode trunk",
+            f"switchport trunk allowed vlan {allowed_vlans}",
+            "no shutdown",
+            "exit",
+        ]
+        for port in host_ports:
+            commands.extend(
+                [
+                    f"interface {port}",
+                    f"description ACCESS_VLAN_{vlan}",
+                    "switchport mode access",
+                    f"switchport access vlan {vlan}",
+                    "no shutdown",
+                    "exit",
+                ]
+            )
+        commands.append("end")
+        return commands
+
+    server_switch_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {server_switch}",
+        f"vlan {server_vlan}",
+        " name SERVER",
+        "exit",
+        "spanning-tree mode rapid-pvst",
+        "interface GigabitEthernet0/1",
+        "description UPLINK_TO_CORE_A",
+        "switchport mode trunk",
+        f"switchport trunk allowed vlan {allowed_vlans}",
+        "no shutdown",
+        "exit",
+        "interface GigabitEthernet0/2",
+        "description UPLINK_TO_CORE_B",
+        "switchport mode trunk",
+        f"switchport trunk allowed vlan {allowed_vlans}",
+        "no shutdown",
+        "exit",
+    ]
+    for index in range(1, servers + 1):
+        server_switch_commands.extend(
+            [
+                f"interface FastEthernet0/{index}",
+                "description SERVER_ACCESS",
+                "switchport mode access",
+                f"switchport access vlan {server_vlan}",
+                "no shutdown",
+                "exit",
+            ]
+        )
+    server_switch_commands.append("end")
+
+    def core_commands(core: str, role: str, router_id: str, server_ip: ipaddress.IPv4Address, svi_ip_key: str, priority: int, root_role: str) -> list[str]:
+        commands = [
+            "enable",
+            "configure terminal",
+            f"hostname {core}",
+            "ip routing",
+            "no ip domain-lookup",
+        ]
+        for vlan_config in plan["vlan_configs"]:
+            commands.extend([f"vlan {vlan_config['id']}", f" name {vlan_config['name']}", "exit"])
+        commands.extend(
+            [
+                "spanning-tree mode rapid-pvst",
+                f"spanning-tree vlan {allowed_vlans} root {root_role}",
+                "interface GigabitEthernet0/1",
+                f"description CORE_PEER_{role}",
+                "switchport mode trunk",
+                f"switchport trunk allowed vlan {allowed_vlans}",
+                "no shutdown",
+                "exit",
+            ]
+        )
+        for port, vlans, description in core_trunks[core]:
+            commands.extend(
+                [
+                    f"interface {port}",
+                    f"description {description}",
+                    "switchport mode trunk",
+                    f"switchport trunk allowed vlan {vlans}",
+                    "no shutdown",
+                    "exit",
+                ]
+            )
+        svi_specs = [
+            {"vlan": server_vlan, "name": "SERVER", "network": srv_net, "gateway": server_gateway, "ip": server_ip, "helper": ""},
+            *[
+                {
+                    "vlan": segment["vlan"],
+                    "name": segment["name"],
+                    "network": segment["network"],
+                    "gateway": segment["gateway"],
+                    "ip": segment[svi_ip_key],
+                    "helper": dhcp_helper,
+                }
+                for segment in segment_infos
+            ],
+        ]
+        for spec in svi_specs:
+            commands.extend(
+                [
+                    f"interface Vlan{spec['vlan']}",
+                    f"description {spec['name']}_HSRP_{role}",
+                    f"ip address {spec['ip']} {_mask(spec['network'])}",
+                ]
+            )
+            if spec["helper"]:
+                commands.append(f"ip helper-address {spec['helper']}")
+            commands.extend(
+                [
+                    "standby version 2",
+                    f"standby {spec['vlan']} ip {spec['gateway']}",
+                    f"standby {spec['vlan']} priority {priority}",
+                    f"standby {spec['vlan']} name VLAN{spec['vlan']}_GW",
+                    f"standby {spec['vlan']} preempt",
+                    "no shutdown",
+                    "exit",
+                ]
+            )
+        if core == core_a:
+            for segment in segment_infos:
+                commands.extend(
+                    [
+                        f"ip dhcp excluded-address {ipaddress.ip_address(int(segment['gateway']) - 2)} {segment['gateway']}",
+                        f"ip dhcp pool VLAN{segment['vlan']}",
+                        f" network {segment['network'].network_address} {_mask(segment['network'])}",
+                        f" default-router {segment['gateway']}",
+                    ]
+                )
+                if dns_ip:
+                    commands.append(f" dns-server {dns_ip}")
+                commands.extend([f" domain-name {name.lower()}.local", "exit"])
+        if nms_ip:
+            commands.extend(
+                [
+                    f"ntp source Vlan{server_vlan}",
+                    f"ntp server {nms_ip} prefer",
+                    "service timestamps log datetime msec",
+                    f"logging source-interface Vlan{server_vlan}",
+                    "logging trap informational",
+                    f"logging host {nms_ip}",
+                    f"snmp-server community campusRO RO 10",
+                    f"snmp-server location {name} {role} core",
+                    f"access-list 10 permit {pool.network_address} {_wildcard(pool)}",
+                    f"access-list 10 permit {srv_net.network_address} {_wildcard(srv_net)}",
+                ]
+            )
+        if routing == "ospf":
+            commands.extend(["router ospf 1", f"router-id {router_id}"])
+            for spec in svi_specs:
+                commands.append(f"passive-interface Vlan{spec['vlan']}")
+            for spec in svi_specs:
+                commands.append(f"network {spec['network'].network_address} {_wildcard(spec['network'])} area 0")
+            commands.append("exit")
+        elif routing == "rip":
+            networks = sorted({_rip_network(spec["ip"]) for spec in svi_specs}, key=lambda value: tuple(int(part) for part in value.split(".")))
+            commands.extend(["router rip", "version 2", "no auto-summary"])
+            for network in networks:
+                commands.append(f"network {network}")
+            commands.append("exit")
+        commands.append("end")
+        return commands
+
+    access_host_ports: dict[str, list[str]] = {name: [] for name in access_switch_names}
+    for link in plan["links"]:
+        if isinstance(link, dict) and str(link.get("a", "")) in access_host_ports and str(link.get("pb", "")) == "FastEthernet0":
+            access_host_ports[str(link["a"])].append(str(link["pa"]))
+
+    plan["ios_configs"].append({"device": core_a, "init_dialog": True, "commands": core_commands(core_a, "PRIMARY", "10.255.10.1", server_core_a_ip, "core_a_ip", 110, "primary")})
+    plan["ios_configs"].append({"device": core_b, "init_dialog": True, "commands": core_commands(core_b, "SECONDARY", "10.255.10.2", server_core_b_ip, "core_b_ip", 100, "secondary")})
+    if servers:
+        plan["ios_configs"].append({"device": server_switch, "init_dialog": True, "commands": server_switch_commands})
+    for segment in segment_infos:
+        vlan = int(segment["vlan"])
+        switch_names = [name for name in access_switch_names if f"-V{vlan}" in name]
+        for switch_name in switch_names:
+            plan["ios_configs"].append({"device": switch_name, "init_dialog": True, "commands": access_switch_commands(switch_name, vlan, sorted(access_host_ports.get(switch_name, [])))})
+
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pt730-template", description=__doc__)
     parser.add_argument("--compact", action="store_true", help="emit compact JSON")
@@ -1069,6 +1502,22 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--layout-style", choices=STYLES, default="campus")
     campus_p.add_argument("--no-layout", action="store_true")
     campus_p.add_argument("--output", type=Path)
+
+    redundant_p = sub.add_parser("redundant-campus", help="generate a dual-core redundant campus topology")
+    redundant_p.add_argument("--name", default="REDUNDANT")
+    redundant_p.add_argument("--segments", type=int, default=4)
+    redundant_p.add_argument("--hosts-per-segment", type=int, default=2)
+    redundant_p.add_argument("--access-switches-per-segment", type=int, default=1)
+    redundant_p.add_argument("--servers", type=int, default=4)
+    redundant_p.add_argument("--address-pool", default="192.168.0.0/21")
+    redundant_p.add_argument("--segment-prefix", type=int, default=24)
+    redundant_p.add_argument("--server-network", default="172.16.1.0/26")
+    redundant_p.add_argument("--server-vlan", type=int, default=10)
+    redundant_p.add_argument("--vlan-base", type=int, default=20)
+    redundant_p.add_argument("--routing", choices=("none", "rip", "ospf"), default="ospf")
+    redundant_p.add_argument("--layout-style", choices=STYLES, default="campus")
+    redundant_p.add_argument("--no-layout", action="store_true")
+    redundant_p.add_argument("--output", type=Path)
 
     args = parser.parse_args(argv)
     try:
@@ -1198,6 +1647,27 @@ def main(argv: list[str] | None = None) -> int:
                     no_layout=args.no_layout,
                     l3=args.l3,
                     routing=args.routing,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "redundant-campus":
+            _emit(
+                redundant_campus(
+                    name=args.name,
+                    segments=args.segments,
+                    hosts_per_segment=args.hosts_per_segment,
+                    access_switches_per_segment=args.access_switches_per_segment,
+                    servers=args.servers,
+                    address_pool=args.address_pool,
+                    segment_prefix=args.segment_prefix,
+                    server_network=args.server_network,
+                    server_vlan=args.server_vlan,
+                    vlan_base=args.vlan_base,
+                    routing=args.routing,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
                 ),
                 args.output,
                 compact=args.compact,

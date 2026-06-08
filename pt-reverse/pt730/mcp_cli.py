@@ -518,6 +518,41 @@ def tool_template_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_template_redundant_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-template"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.append("redundant-campus")
+    for key, flag in (
+        ("name", "--name"),
+        ("address_pool", "--address-pool"),
+        ("server_network", "--server-network"),
+        ("output", "--output"),
+    ):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    for key, flag, default in (
+        ("segments", "--segments", 4),
+        ("hosts_per_segment", "--hosts-per-segment", 2),
+        ("access_switches_per_segment", "--access-switches-per-segment", 1),
+        ("servers", "--servers", 4),
+        ("segment_prefix", "--segment-prefix", 24),
+        ("server_vlan", "--server-vlan", 10),
+        ("vlan_base", "--vlan-base", 20),
+    ):
+        command.extend([flag, str(int_arg(args, key, default=default))])
+    command.extend(["--routing", enum_arg(args, "routing", {"none", "rip", "ospf"}, default="ospf")])
+    layout_style = str_arg(args, "layout_style", required=False)
+    if layout_style:
+        if layout_style not in LAYOUT_STYLES:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
+        command.extend(["--layout-style", layout_style])
+    if bool_arg(args, "no_layout", default=False):
+        command.append("--no-layout")
+    return run_cli(root, command)
+
+
 def tool_ip_plan_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-ip-plan"))]
     if bool_arg(args, "compact", default=False):
@@ -1262,6 +1297,7 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_template_router_ring", "Generate a serial router ring topology JSON with RIP configs.", schema({"name": string, "routers": integer, "interconnect_pool": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_router_ring),
         tool("pt730_template_wan_ring", "Generate a multi-site serial WAN ring with per-site LANs, services, and optional routing configs.", schema({"name": string, "sites": integer, "hosts_per_site": integer, "servers_per_site": integer, "interconnect_pool": string, "lan_pool": string, "lan_prefix": integer, "routing": {"type": "string", "enum": ["none", "rip", "ospf", "static"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_wan_ring),
         tool("pt730_template_campus", "Generate a representative core/access/server campus topology JSON with optional L3 configs.", schema({"name": string, "cores": integer, "segments": integer, "hosts_per_segment": integer, "access_switches_per_segment": integer, "servers": integer, "address_pool": string, "segment_prefix": integer, "server_network": string, "server_vlan": integer, "vlan_base": integer, "interconnect_pool": string, "l3": boolean, "routing": {"type": "string", "enum": ["none", "rip", "ospf", "static"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_campus),
+        tool("pt730_template_redundant_campus", "Generate a dual-core redundant campus topology with dual-homed access, HSRP, STP, DHCP relay/pools, services, and optional RIP/OSPF configs.", schema({"name": string, "segments": integer, "hosts_per_segment": integer, "access_switches_per_segment": integer, "servers": integer, "address_pool": string, "segment_prefix": integer, "server_network": string, "server_vlan": integer, "vlan_base": integer, "routing": {"type": "string", "enum": ["none", "rip", "ospf"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_redundant_campus),
         tool("pt730_ip_plan_campus", "Plan VLSM campus subnets from a compact IP planning spec.", schema({"spec": string, "compact": boolean, "output": string}, ["spec"]), tool_ip_plan_campus),
         tool("pt730_compose_campus", "Compose a high-level campus topology spec into topology JSON.", schema({"spec": string, "segments_from_ip_plan": string, "no_layout": boolean, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "compact": boolean, "output": string}, ["spec"]), tool_compose_campus),
         tool("pt730_config_plan_campus", "Generate IOS config records from topology VLAN/L3 metadata.", schema({"plan": string, "ios_only": boolean, "l3": boolean, "routing": {"type": "string", "enum": ["none", "rip", "ospf", "static"]}, "compact": boolean, "output": string}, ["plan"]), tool_config_plan_campus),

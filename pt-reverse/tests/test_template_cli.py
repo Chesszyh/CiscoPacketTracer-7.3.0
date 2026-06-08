@@ -67,6 +67,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("vlan-router-on-stick", data["commands"])
         self.assertIn("edge-security", data["commands"])
         self.assertIn("campus", data["commands"])
+        self.assertIn("redundant-campus", data["commands"])
         self.assertIn("lan-star", data["templates"])
         self.assertIn("wireless-lan", data["templates"])
         self.assertIn("vlan-router-on-stick", data["templates"])
@@ -74,8 +75,10 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("router-ring", data["templates"])
         self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
+        self.assertIn("redundant-campus", data["templates"])
         self.assertIn("ospf", " ".join(data["templates"]["wan-ring"]["options"]))
         self.assertIn("--routing none|rip|ospf|static", data["templates"]["campus"]["options"])
+        self.assertIn("--routing none|rip|ospf", data["templates"]["redundant-campus"]["options"])
         self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
 
     def test_lan_star_generates_static_hosts_server_services_and_layout(self) -> None:
@@ -476,6 +479,55 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("network 172.16.1.0 0.0.0.63 area 0", joined)
         self.assertIn("network 10.10.0.0 0.0.0.3 area 0", joined)
         self.assertNotIn("router rip", joined)
+        self.assert_safe_and_renderable(plan)
+
+    def test_redundant_campus_generates_dual_core_hsrp_services_and_layout(self) -> None:
+        result = self.run_template(
+            "redundant-campus",
+            "--name",
+            "AGENT",
+            "--segments",
+            "3",
+            "--hosts-per-segment",
+            "2",
+            "--servers",
+            "4",
+            "--routing",
+            "ospf",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertIn("CORE-AGENT-A", names)
+        self.assertIn("CORE-AGENT-B", names)
+        self.assertIn("SW-AGENT-SRV", names)
+        self.assertIn("SW-AGENT-V20", names)
+        self.assertIn("SRV-AGENT-NMS", names)
+        self.assertIn("PC-AGENT-V22-2", names)
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        self.assertEqual(plan["metadata"]["source"], "pt730-template redundant-campus")
+        self.assertIn("dual_homed_access", plan["metadata"]["features"])
+        self.assertEqual(len(plan["redundancy_groups"]), 3)
+        self.assertEqual(plan["vlan_configs"][0]["gateway"], "172.16.1.62")
+        self.assertEqual({link.get("vlan") for link in plan["links"] if "vlan" in link}, {10, 20, 21, 22})
+        self.assertEqual(len(plan["dhcp_pools"]), 3)
+        services = {config["name"]: config for config in plan["server_configs"]}
+        self.assertIn("http", services["SRV-AGENT-WEB"])
+        self.assertIn("dns", services["SRV-AGENT-DNS"])
+        self.assertIn("ftp", services["SRV-AGENT-FTP"])
+        self.assertIn("ntp", services["SRV-AGENT-NMS"])
+        self.assertIn("syslog", services["SRV-AGENT-NMS"])
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("spanning-tree vlan 10,20,21,22 root primary", joined)
+        self.assertIn("spanning-tree vlan 10,20,21,22 root secondary", joined)
+        self.assertIn("standby 20 ip 192.168.0.254", joined)
+        self.assertIn("standby 20 priority 110", joined)
+        self.assertIn("ip helper-address 172.16.1.1", joined)
+        self.assertIn("ip dhcp pool VLAN20", joined)
+        self.assertIn("ntp server 172.16.1.4 prefer", joined)
+        self.assertIn("logging host 172.16.1.4", joined)
+        self.assertIn("snmp-server community campusRO RO 10", joined)
+        self.assertIn("router ospf 1", joined)
         self.assert_safe_and_renderable(plan)
 
 
