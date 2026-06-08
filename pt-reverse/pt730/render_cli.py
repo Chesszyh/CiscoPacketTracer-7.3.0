@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import html
 import ipaddress
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -51,6 +53,19 @@ def yes_no(value: Any) -> str:
     if value is False:
         return "no"
     return ""
+
+
+def svg_text(value: Any) -> str:
+    return html.escape("" if value is None else str(value), quote=True)
+
+
+def as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def ip_config_fields(config: dict[str, Any]) -> dict[str, str]:
@@ -187,6 +202,168 @@ def mermaid(plan: dict[str, Any], *, direction: str) -> str:
 
     if len(lines) == 1:
         lines.append("  empty[\"empty topology\"]")
+    return "\n".join(lines) + "\n"
+
+
+def svg_device_kind(device: dict[str, Any]) -> str:
+    category = pick(device, ("category", "kind")).lower()
+    model = pick(device, ("model",)).lower()
+    name = pick(device, ("name", "id")).lower()
+    joined = " ".join([category, model, name])
+    if "router" in joined or model in {"2911", "1941", "1841"}:
+        return "router"
+    if "switch" in joined or "2960" in joined or "3560" in joined or "multilayer" in joined:
+        return "switch"
+    if "server" in joined:
+        return "server"
+    if "pc" in joined or "host" in joined or "laptop" in joined:
+        return "pc"
+    return "device"
+
+
+def svg_devices(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    devices: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, device in enumerate(plan.get("devices", [])):
+        if not isinstance(device, dict):
+            continue
+        item = dict(device)
+        name = pick(item, ("name", "id"), f"device_{index}")
+        item["name"] = name
+        devices.append(item)
+        seen.add(name)
+
+    for index, link in enumerate(plan.get("links", [])):
+        if not isinstance(link, dict):
+            continue
+        for names, fallback in ((("a", "device_a", "from", "from_device"), f"a_{index}"), (("b", "device_b", "to", "to_device"), f"b_{index}")):
+            name = pick(link, names, fallback)
+            if name and name not in seen:
+                devices.append({"name": name, "category": "device", "model": ""})
+                seen.add(name)
+
+    return devices
+
+
+def svg_positions(devices: list[dict[str, Any]]) -> tuple[dict[str, tuple[float, float]], float, float]:
+    if not devices:
+        return {}, 320.0, 220.0
+
+    cols = max(1, math.ceil(math.sqrt(len(devices))))
+    raw: dict[str, tuple[float, float]] = {}
+    for index, device in enumerate(devices):
+        name = pick(device, ("name", "id"), f"device_{index}")
+        x = as_float(device.get("x"))
+        y = as_float(device.get("y"))
+        if x is None or y is None:
+            x = float((index % cols) * 220)
+            y = float((index // cols) * 150)
+        raw[name] = (x, y)
+
+    min_x = min(x for x, _ in raw.values())
+    min_y = min(y for _, y in raw.values())
+    max_x = max(x for x, _ in raw.values())
+    max_y = max(y for _, y in raw.values())
+    pad = 90.0
+    positions = {name: (x - min_x + pad, y - min_y + pad) for name, (x, y) in raw.items()}
+    width = max(320.0, max_x - min_x + pad * 2)
+    height = max(220.0, max_y - min_y + pad * 2)
+    return positions, width, height
+
+
+def svg_link_label(link: dict[str, Any]) -> str:
+    parts = [
+        pick(link, ("pa", "port_a", "from_port")),
+        pick(link, ("cable", "type", "link_type", "cable_type"), "straight"),
+        pick(link, ("pb", "port_b", "to_port")),
+    ]
+    vlan = pick(link, ("vlan", "vlan_id"))
+    if vlan:
+        parts.append(f"VLAN {vlan}")
+    note = pick(link, ("note", "description"))
+    if note:
+        parts.append(note)
+    return " / ".join(part for part in parts if part)
+
+
+def svg_device_group(device: dict[str, Any], x: float, y: float) -> list[str]:
+    kind = svg_device_kind(device)
+    name = pick(device, ("name", "id"))
+    model = pick(device, ("model",))
+    lines = [f'  <g class="device {kind}" transform="translate({x:.1f} {y:.1f})">']
+    lines.append(f"    <title>{svg_text(name)} {svg_text(model)}</title>")
+    if kind == "router":
+        lines.append('    <ellipse cx="0" cy="0" rx="64" ry="32" />')
+        lines.append('    <path d="M -34 -5 L 34 -5 M -18 8 L 18 8" />')
+    elif kind == "switch":
+        lines.append('    <rect x="-68" y="-32" width="136" height="64" rx="8" />')
+        lines.append('    <path d="M -42 -8 H 42 M -42 8 H 42 M -42 -8 L -24 -20 M 42 8 L 24 20" />')
+    elif kind == "server":
+        lines.append('    <rect x="-54" y="-38" width="108" height="76" rx="6" />')
+        lines.append('    <path d="M -54 -16 H 54 M -40 8 H 22 M 34 8 h8" />')
+    elif kind == "pc":
+        lines.append('    <rect x="-54" y="-36" width="108" height="62" rx="6" />')
+        lines.append('    <path d="M -24 34 H 24 M -10 26 V 34 M 10 26 V 34" />')
+    else:
+        lines.append('    <rect x="-58" y="-32" width="116" height="64" rx="8" />')
+    lines.append(f'    <text class="device-name" x="0" y="52">{svg_text(name)}</text>')
+    if model:
+        lines.append(f'    <text class="device-model" x="0" y="68">{svg_text(model)}</text>')
+    lines.append("  </g>")
+    return lines
+
+
+def svg(plan: dict[str, Any]) -> str:
+    devices = svg_devices(plan)
+    positions, width, height = svg_positions(devices)
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-labelledby="title desc">',
+        "  <title id=\"title\">Packet Tracer topology</title>",
+        "  <desc id=\"desc\">Offline-rendered Packet Tracer 7.3.0 topology diagram.</desc>",
+        "  <style>",
+        "    svg { background: #f8fafc; font-family: Inter, Segoe UI, Arial, sans-serif; }",
+        "    .link { stroke: #475569; stroke-width: 2.2; stroke-linecap: round; }",
+        "    .link-label { fill: #334155; font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: #f8fafc; stroke-width: 4px; stroke-linejoin: round; }",
+        "    .device text { text-anchor: middle; stroke: none; }",
+        "    .device-name { fill: #0f172a; font-size: 13px; font-weight: 700; }",
+        "    .device-model { fill: #475569; font-size: 10px; }",
+        "    .device rect, .device ellipse { stroke-width: 2; }",
+        "    .device path { fill: none; stroke-width: 2; stroke-linecap: round; }",
+        "    .router ellipse { fill: #dbeafe; stroke: #1d4ed8; } .router path { stroke: #1d4ed8; }",
+        "    .switch rect { fill: #dcfce7; stroke: #15803d; } .switch path { stroke: #15803d; }",
+        "    .server rect { fill: #fef3c7; stroke: #b45309; } .server path { stroke: #b45309; }",
+        "    .pc rect { fill: #e0e7ff; stroke: #4338ca; } .pc path { stroke: #4338ca; }",
+        "    .device.device rect { fill: #f1f5f9; stroke: #64748b; }",
+        "  </style>",
+    ]
+
+    for index, link in enumerate(plan.get("links", [])):
+        if not isinstance(link, dict):
+            continue
+        a = pick(link, ("a", "device_a", "from", "from_device"), f"a_{index}")
+        b = pick(link, ("b", "device_b", "to", "to_device"), f"b_{index}")
+        if a not in positions or b not in positions:
+            continue
+        x1, y1 = positions[a]
+        x2, y2 = positions[b]
+        lines.append(f'  <line class="link" x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" />')
+        link_label = svg_link_label(link)
+        if link_label:
+            mid_x = (x1 + x2) / 2
+            mid_y = (y1 + y2) / 2 - 8
+            lines.append(f'  <text class="link-label" x="{mid_x:.1f}" y="{mid_y:.1f}">{svg_text(link_label)}</text>')
+
+    for device in devices:
+        name = pick(device, ("name", "id"))
+        if name in positions:
+            x, y = positions[name]
+            lines.extend(svg_device_group(device, x, y))
+
+    if not devices:
+        lines.append('  <text class="device-name" x="160" y="110">empty topology</text>')
+
+    lines.append("</svg>")
     return "\n".join(lines) + "\n"
 
 
@@ -492,6 +669,10 @@ def main(argv: list[str] | None = None) -> int:
     mermaid_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"])
     mermaid_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
 
+    svg_p = sub.add_parser("svg", help="render a plan as an offline SVG topology diagram")
+    svg_p.add_argument("plan", type=Path)
+    svg_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+
     markdown_p = sub.add_parser("markdown", help="render a plan as Markdown tables")
     markdown_p.add_argument("plan", type=Path)
     markdown_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
@@ -510,6 +691,11 @@ def main(argv: list[str] | None = None) -> int:
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(mermaid(plan, direction=args.direction), args.output)
+            return 0
+        if args.cmd == "svg":
+            plan = _load_plan(args.plan)
+            _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
+            emit(svg(plan), args.output)
             return 0
         if args.cmd == "markdown":
             plan = _load_plan(args.plan)

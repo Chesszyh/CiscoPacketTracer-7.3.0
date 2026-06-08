@@ -14,7 +14,7 @@ from compose_cli import compose_campus
 from config_plan_cli import configured_plan, export_config_files
 from ip_plan_cli import plan_campus
 from layout_cli import LayoutOptions, STYLES, layout_plan
-from render_cli import course_audit, markdown, summary
+from render_cli import course_audit, markdown, summary, svg
 from safety_cli import check_plan, summarize
 
 
@@ -56,6 +56,7 @@ def schema() -> dict[str, Any]:
                 "topology.layout.json",
                 "topology.summary.json",
                 "topology.md",
+                "topology.svg",
                 "safety.json",
                 "configs/*.cfg",
                 "manifest.json",
@@ -115,6 +116,10 @@ def campus_pipeline(
     markdown_out = output_dir / "topology.md"
     write_text(markdown_out, markdown(laid_out))
     artifacts["markdown"] = rel(output_dir, markdown_out)
+
+    svg_out = output_dir / "topology.svg"
+    write_text(svg_out, svg(laid_out))
+    artifacts["svg"] = rel(output_dir, svg_out)
 
     configs_dir = output_dir / "configs"
     config_manifest = export_config_files(laid_out, configs_dir)

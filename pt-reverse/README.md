@@ -33,6 +33,7 @@ pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
+pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
@@ -161,6 +162,7 @@ pt-reverse/bin/pt730-models record 1841 --status risky --reason 'Packet Tracer c
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 pt-reverse/bin/pt730-capabilities --table
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
+pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json --output simple-lan.svg
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.generated.md
 pt-reverse/bin/pt730-render summary pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.summary.json
@@ -256,7 +258,7 @@ agent needs a common lab topology without first writing a topology JSON file.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing rip` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered
-tables, topology JSON files, and per-device configs.
+tables, SVG topology diagram, topology JSON files, and per-device configs.
 Set `core.interconnect_pool` in the compose spec to assign `/30` L3 subnets to
 core switch links for later config planning.
 Use `pt730-config-plan campus <plan.json> --output <configured-plan.json>` to
@@ -276,6 +278,9 @@ Use `pt730-render markdown <plan.json>` for report-ready offline tables.  It
 includes link VLAN/notes, configured host IPs, inferred address groups, server
 service details, and IOS config counts.  Use `pt730-render summary <plan.json>`
 for a compact JSON summary that agents can consume before any live operation.
+Use `pt730-render svg <plan.json> --output <diagram.svg>` for an offline
+topology diagram that respects existing `x`/`y` coordinates and falls back to a
+deterministic grid when coordinates are missing.
 For this course assignment, `pt730-render course-audit <plan.json>` checks the
 required VLAN links, the server address space `172.16.1.0/26`, the PC address
 space `192.168.0.0/21`, and representative host coverage.

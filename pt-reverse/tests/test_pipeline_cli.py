@@ -51,12 +51,15 @@ class PipelineCliTest(unittest.TestCase):
                 "topology.layout.json",
                 "topology.summary.json",
                 "topology.md",
+                "topology.svg",
                 "safety.json",
                 "manifest.json",
                 "configs/MLS1.cfg",
             ]
             for relative in expected:
                 self.assertTrue((out_dir / relative).exists(), relative)
+            self.assertEqual(manifest["artifacts"]["svg"], "topology.svg")
+            self.assertIn("<svg", (out_dir / "topology.svg").read_text(encoding="utf-8"))
 
             layout = json.loads((out_dir / "topology.layout.json").read_text(encoding="utf-8"))
             self.assertGreater(len(layout["devices"]), 0)

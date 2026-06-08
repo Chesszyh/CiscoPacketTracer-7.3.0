@@ -50,6 +50,29 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("| A | Port A | B | Port B | Cable | VLAN | Note |", result.stdout)
         self.assertIn("192.168.50.10", result.stdout)
 
+    def test_svg_renders_devices_and_links(self) -> None:
+        result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("<svg", result.stdout)
+        self.assertIn("R_DEMO", result.stdout)
+        self.assertIn("SW_DEMO", result.stdout)
+        self.assertIn("PC_DEMO", result.stdout)
+        self.assertIn("<line", result.stdout)
+        self.assertIn("GigabitEthernet0/0", result.stdout)
+
+    def test_svg_output_option_writes_file(self) -> None:
+        out = ROOT / "tests" / ".render-output.svg"
+        out.unlink(missing_ok=True)
+        try:
+            result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--output", str(out))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("<svg", text)
+            self.assertIn("PC_DEMO", text)
+        finally:
+            out.unlink(missing_ok=True)
+
     def test_markdown_renders_address_and_link_metadata(self) -> None:
         result = self.run_render("markdown", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))
         self.assertEqual(result.returncode, 0, result.stderr)

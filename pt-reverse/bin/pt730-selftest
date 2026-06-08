@@ -96,10 +96,12 @@ ok "ip planning checks"
 "$BIN/pt730-compose" campus "$ROOT/pt-reverse/examples/compose-campus.json" --segments-from-ip-plan "$tmp/ip-plan.json" --output "$tmp/compose-plan.json"
 "$BIN/pt730-safety" plan "$tmp/compose-plan.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/compose-plan.json" >/dev/null
+"$BIN/pt730-render" svg "$tmp/compose-plan.json" >/dev/null
 ok "compose checks"
 "$BIN/pt730-pipeline" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-pipeline" campus --ip-plan "$ROOT/pt-reverse/examples/ip-plan-campus.json" --compose-spec "$ROOT/pt-reverse/examples/compose-campus.json" --output-dir "$tmp/pipeline" --routing rip >/dev/null
 test -s "$tmp/pipeline/topology.layout.json"
+test -s "$tmp/pipeline/topology.svg"
 test -s "$tmp/pipeline/configs/MLS1.cfg"
 ok "pipeline checks"
 "$BIN/pt730-template" schema | python3 -m json.tool >/dev/null
@@ -131,6 +133,7 @@ printf '%s' '{"devices":[{"name":"R1","category":"router","model":"2911"},{"name
 python3 -m json.tool "$tmp/layout-campus.json" >/dev/null
 ok "layout checks"
 "$BIN/pt730-render" mermaid "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" svg "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" summary "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" course-audit "$ROOT/pt-reverse/course-design/college-network-topology-pt73-safe.json" >/dev/null
@@ -159,6 +162,8 @@ printf '%s' '{"devices":[{"name":"R1","model":"2911","command_line":{"prompt":"R
 "$BIN/pt730-topo" export --from-query "$tmp/query.json" --raw-out "$tmp/query-raw2.json" --summary-out "$tmp/query-summary2.json" --markdown-out "$tmp/query-summary.md" >/dev/null
 "$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" --output "$tmp/simple-lan.md"
 test -s "$tmp/simple-lan.md"
+"$BIN/pt730-render" svg "$ROOT/pt-reverse/examples/simple-lan.json" --output "$tmp/simple-lan.svg"
+test -s "$tmp/simple-lan.svg"
 ok "safety policy checks"
 
 if [[ "$LIVE" -eq 1 ]]; then
