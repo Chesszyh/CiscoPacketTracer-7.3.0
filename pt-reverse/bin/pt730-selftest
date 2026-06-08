@@ -102,6 +102,14 @@ ok "compose checks"
 test -s "$tmp/pipeline/topology.layout.json"
 test -s "$tmp/pipeline/configs/MLS1.cfg"
 ok "pipeline checks"
+"$BIN/pt730-template" schema | python3 -m json.tool >/dev/null
+"$BIN/pt730-template" lan-star --pcs 2 --servers 1 --network 192.168.10.0/24 --output "$tmp/lan-star.json"
+"$BIN/pt730-safety" plan "$tmp/lan-star.json" >/dev/null
+"$BIN/pt730-render" summary "$tmp/lan-star.json" >/dev/null
+"$BIN/pt730-template" router-ring --routers 4 --interconnect-pool 10.20.0.0/28 --output "$tmp/router-ring.json"
+"$BIN/pt730-safety" plan "$tmp/router-ring.json" >/dev/null
+"$BIN/pt730-render" summary "$tmp/router-ring.json" >/dev/null
+ok "template checks"
 "$BIN/pt730-config-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-config-plan" campus "$tmp/compose-plan.json" --output "$tmp/configured-plan.json"
 "$BIN/pt730-safety" plan "$tmp/configured-plan.json" >/dev/null

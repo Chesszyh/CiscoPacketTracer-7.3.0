@@ -37,6 +37,7 @@ class SelftestCliTest(unittest.TestCase):
         self.assertIn("ip planning checks", result.stdout)
         self.assertIn("compose checks", result.stdout)
         self.assertIn("pipeline checks", result.stdout)
+        self.assertIn("template checks", result.stdout)
         self.assertIn("config planning checks", result.stdout)
         self.assertIn("layout checks", result.stdout)
         self.assertNotIn("pt730-app", result.stdout, "default self-test must not contact live Packet Tracer")

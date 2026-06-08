@@ -23,6 +23,7 @@ OFFLINE_TOOLS = [
     "pt730-render",
     "pt730-safety",
     "pt730-selftest",
+    "pt730-template",
 ]
 
 LIVE_TOOLS = [
@@ -82,9 +83,12 @@ def manifest() -> dict[str, Any]:
         "compose_features": ["schema", "campus", "core_ring", "core_interconnect_pool", "server_block", "access_segments", "segments_from_ip_plan", "representative_hosts", "static_ip_configs", "server_services", "auto_layout"],
         "ip_plan_features": ["schema", "campus_vlsm", "gateway_reservation", "compose_segments", "unused_pool_summary"],
         "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "config_file_export"],
+        "template_features": ["schema", "lan_star", "router_ring", "static_host_ips", "server_http", "serial_modules", "ripv2", "auto_layout"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
             "pt-reverse/bin/pt730-selftest",
+            "pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24",
+            "pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28",
             "pt-reverse/bin/pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec <campus-spec.json> --output-dir <out-dir> --routing rip",
             "pt-reverse/bin/pt730-ip-plan schema",
             "pt-reverse/bin/pt730-ip-plan campus <ip-plan.json> --output <planned-segments.json>",
