@@ -53,6 +53,7 @@ pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
+pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
@@ -87,10 +88,10 @@ and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
 Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
 VLAN, edge-security, router-ring, WAN-ring, campus, and redundant-campus
-template options including DNS, SSID, 802.1Q, NAT/ACL, DMZ, HSRP/STP,
-DHCP relay, RIP/OSPF/static WAN and campus L3 routing, layout, no-layout,
-compact, router DHCP pools, DHCP client hosts, and naming controls from the
-underlying `pt730-template` CLI.
+plus enterprise-edge template options including DNS, SSID, 802.1Q, NAT/ACL,
+DMZ, HSRP/STP, DHCP relay, branch WAN, ISP/Internet, RIP/OSPF/static WAN and
+campus L3 routing, layout, no-layout, compact, router DHCP pools, DHCP client
+hosts, and naming controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls

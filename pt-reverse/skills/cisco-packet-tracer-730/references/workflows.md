@@ -50,6 +50,8 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_redundant_campus","arguments":{"name":"AGENT","segments":4,"hosts_per_segment":2,"servers":4,"routing":"ospf","layout_style":"campus","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_enterprise_edge","arguments":{"name":"ENT","campus_vlans":3,"hosts_per_vlan":2,"branches":2,"branch_hosts":2,"dmz_servers":2,"routing":"ospf","layout_style":"campus","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
 ```
 
 Example campus workflow steps through MCP:
@@ -152,6 +154,7 @@ pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf --output wan-ring.json
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf --output campus.json
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf --output redundant-campus.json
+pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf --output enterprise-edge.json
 pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
@@ -185,6 +188,12 @@ with HSRP virtual gateways, STP primary/secondary root roles, DHCP relay, IOS
 DHCP pools, NTP/Syslog/SNMP client config, server services, and VLAN metadata
 for group-by-VLAN SVG/draw.io/HTML renders. Use `rip` or `none` when dynamic
 OSPF is not wanted.
+
+`enterprise-edge --routing ospf` writes an integrated HQ/branch/DMZ/Internet
+plan with HQ router-on-a-stick VLANs, server zone, DMZ public services,
+ISP/Internet test LAN, branch serial WAN routers, NAT overload, outside ACL
+metadata, and HTTP/DNS/FTP/email server configs. Use `--group-by auto` or
+`--group-by site` for clearer SVG/draw.io/HTML renders.
 
 `edge-security` uses verified `2911`, `2960-24TT`, `PC-PT`, and `Server-PT`
 models to generate an ISP edge, inside LAN, DMZ, Internet test host, NAT

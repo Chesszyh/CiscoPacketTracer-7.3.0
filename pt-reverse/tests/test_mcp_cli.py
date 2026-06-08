@@ -51,6 +51,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
         self.assertIn("pt730_template_redundant_campus", names)
+        self.assertIn("pt730_template_enterprise_edge", names)
         self.assertIn("pt730_catalog", names)
         self.assertIn("pt730_safety_js", names)
         self.assertIn("pt730_safety_policy", names)
@@ -104,6 +105,8 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("ospf", campus["inputSchema"]["properties"]["routing"]["enum"])
         redundant = next(tool for tool in tools if tool["name"] == "pt730_template_redundant_campus")
         self.assertIn("ospf", redundant["inputSchema"]["properties"]["routing"]["enum"])
+        enterprise = next(tool for tool in tools if tool["name"] == "pt730_template_enterprise_edge")
+        self.assertIn("static", enterprise["inputSchema"]["properties"]["routing"]["enum"])
         config_plan = next(tool for tool in tools if tool["name"] == "pt730_config_plan_campus")
         self.assertIn("ospf", config_plan["inputSchema"]["properties"]["routing"]["enum"])
         pipeline = next(tool for tool in tools if tool["name"] == "pt730_pipeline_campus")
@@ -753,6 +756,50 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("standby 20 ip 192.168.0.254", joined)
         self.assertIn("ip helper-address 172.16.1.1", joined)
         self.assertIn("ntp server 172.16.1.4 prefer", joined)
+
+    def test_enterprise_edge_template_tool_generates_integrated_topology(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_enterprise_edge",
+                        "arguments": {
+                            "name": "ENT",
+                            "campus_vlans": 3,
+                            "hosts_per_vlan": 2,
+                            "campus_servers": 4,
+                            "branches": 2,
+                            "branch_hosts": 2,
+                            "dmz_servers": 2,
+                            "internet_hosts": 1,
+                            "routing": "ospf",
+                            "layout_style": "campus",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("enterprise-edge", command)
+        self.assertIn("--compact", command)
+        self.assertIn("--branches", command)
+        self.assertIn("--routing", command)
+        self.assertIn("ospf", command)
+        self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template enterprise-edge")
+        self.assertEqual(len(plan["devices"]), 30)
+        self.assertEqual(len(plan["security_policies"]), 2)
+        self.assertIn("branch_wan", plan["metadata"]["features"])
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ip nat inside source list 10 interface GigabitEthernet0/2 overload", joined)
+        self.assertIn("router ospf 1", joined)
 
     def test_template_tool_rejects_unknown_layout_style(self) -> None:
         responses = self.run_mcp(

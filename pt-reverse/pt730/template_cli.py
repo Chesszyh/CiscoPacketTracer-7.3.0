@@ -47,7 +47,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus"],
+        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -80,6 +80,10 @@ def schema() -> dict[str, Any]:
             "redundant-campus": {
                 "description": "Dual-core campus with dual-homed access switches, HSRP gateways, STP root roles, DHCP relay/pools, NTP/Syslog/SNMP, services, and optional RIP/OSPF routing.",
                 "options": ["--name", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--routing none|rip|ospf", "--layout-style", "--no-layout"],
+            },
+            "enterprise-edge": {
+                "description": "Integrated enterprise topology with HQ VLANs, server zone, DMZ, ISP/Internet test LAN, branch WAN routers, representative hosts, services, NAT/ACL, and optional RIP/OSPF routing.",
+                "options": ["--name", "--campus-vlans", "--hosts-per-vlan", "--campus-servers", "--branches", "--branch-hosts", "--dmz-servers", "--internet-hosts", "--campus-pool", "--campus-prefix", "--server-network", "--server-vlan", "--vlan-base", "--branch-pool", "--branch-prefix", "--wan-pool", "--dmz-network", "--isp-wan-network", "--internet-network", "--domain", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
             },
         },
     }
@@ -1403,6 +1407,483 @@ def redundant_campus(
     return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
 
 
+def enterprise_edge(
+    *,
+    name: str,
+    campus_vlans: int,
+    hosts_per_vlan: int,
+    campus_servers: int,
+    branches: int,
+    branch_hosts: int,
+    dmz_servers: int,
+    internet_hosts: int,
+    campus_pool: str,
+    campus_prefix: int,
+    server_network: str,
+    server_vlan: int,
+    vlan_base: int,
+    branch_pool: str,
+    branch_prefix: int,
+    wan_pool: str,
+    dmz_network: str,
+    isp_wan_network: str,
+    internet_network: str,
+    domain: str,
+    routing: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if campus_vlans < 1:
+        raise ValueError("enterprise-edge requires at least one campus VLAN")
+    if branches < 1:
+        raise ValueError("enterprise-edge requires at least one branch")
+    if hosts_per_vlan < 0 or branch_hosts < 0:
+        raise ValueError("hosts-per-vlan and branch-hosts must be >= 0")
+    if hosts_per_vlan > 23 or branch_hosts > 23:
+        raise ValueError("enterprise-edge supports up to 23 hosts per access switch")
+    if campus_servers < 1:
+        raise ValueError("enterprise-edge requires at least one campus server")
+    if dmz_servers < 1:
+        raise ValueError("enterprise-edge requires at least one DMZ server")
+    if internet_hosts < 1:
+        raise ValueError("enterprise-edge requires at least one Internet test host")
+    if campus_servers > 23 or dmz_servers > 23 or internet_hosts > 23:
+        raise ValueError("enterprise-edge supports up to 23 servers/hosts per switch")
+    if campus_vlans + 2 > 24:
+        raise ValueError("enterprise-edge supports up to 22 campus VLAN access uplinks on the HQ core switch")
+
+    campus_supernet = ipaddress.ip_network(campus_pool, strict=False)
+    campus_networks = _subnets(campus_supernet, campus_prefix, campus_vlans, label="campus-prefix")
+    server_net = ipaddress.ip_network(server_network, strict=False)
+    branch_supernet = ipaddress.ip_network(branch_pool, strict=False)
+    branch_networks = _subnets(branch_supernet, branch_prefix, branches, label="branch-prefix")
+    serial_supernet = ipaddress.ip_network(wan_pool, strict=False)
+    serial_links_needed = branches if branches == 1 else branches + 1
+    serial_subnets = _subnets(serial_supernet, 30, serial_links_needed, label="wan-pool")
+    dmz_net = ipaddress.ip_network(dmz_network, strict=False)
+    isp_wan_net = ipaddress.ip_network(isp_wan_network, strict=False)
+    inet_net = ipaddress.ip_network(internet_network, strict=False)
+    if len(list(isp_wan_net.hosts())) < 2:
+        raise ValueError(f"{isp_wan_net}: ISP WAN network needs at least two usable hosts")
+
+    slug = name.upper()
+    edge = f"R-{slug}-EDGE"
+    isp = f"R-{slug}-ISP"
+    hq_core = f"SW-{slug}-HQ-CORE"
+    server_switch = f"SW-{slug}-SERVER"
+    dmz_switch = f"SW-{slug}-DMZ"
+    internet_switch = f"SW-{slug}-INET"
+    branch_routers = [f"R-{slug}-BR{index}" for index in range(1, branches + 1)]
+    branch_switches = [f"SW-{slug}-BR{index}" for index in range(1, branches + 1)]
+
+    server_gateway = _host(server_net, 1)
+    server_addresses = _host_list(server_net, count=campus_servers, skip={server_gateway})
+    dmz_gateway = _host(dmz_net, 1)
+    dmz_addresses = _host_list(dmz_net, count=dmz_servers, skip={dmz_gateway})
+    edge_wan = _host(isp_wan_net, 1)
+    isp_wan = _host(isp_wan_net, 2)
+    inet_gateway = _host(inet_net, 1)
+    inet_addresses = _host_list(inet_net, count=internet_hosts, skip={inet_gateway})
+    dns_ip = str(server_addresses[1] if len(server_addresses) > 1 else server_addresses[0])
+    dmz_web_ip = dmz_addresses[0]
+    dmz_dns_ip = dmz_addresses[1] if len(dmz_addresses) > 1 else dmz_addresses[0]
+
+    vlan_ids = [server_vlan] + [vlan_base + index for index in range(campus_vlans)]
+    allowed_vlans = ",".join(str(vlan) for vlan in vlan_ids)
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": edge, "category": "router", "model": "2911"},
+            {"name": isp, "category": "router", "model": "2911"},
+            {"name": hq_core, "category": "switch", "model": "2960-24TT"},
+            {"name": server_switch, "category": "switch", "model": "2960-24TT"},
+            {"name": dmz_switch, "category": "switch", "model": "2960-24TT"},
+            {"name": internet_switch, "category": "switch", "model": "2960-24TT"},
+            *[{"name": router, "category": "router", "model": "2911"} for router in branch_routers],
+            *[{"name": switch, "category": "switch", "model": "2960-24TT"} for switch in branch_switches],
+        ],
+        "modules": [{"device": edge, "slot": "0/0", "model": "HWIC-2T"}, *[{"device": router, "slot": "0/0", "model": "HWIC-2T"} for router in branch_routers]],
+        "links": [
+            {"a": edge, "pa": "GigabitEthernet0/0", "b": hq_core, "pb": "GigabitEthernet0/1", "cable": "straight", "note": f"site HQ 802.1Q trunk VLANs {allowed_vlans}"},
+            {"a": hq_core, "pa": "FastEthernet0/1", "b": server_switch, "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": server_vlan, "note": "site HQ server VLAN uplink"},
+            {"a": edge, "pa": "GigabitEthernet0/1", "b": dmz_switch, "pb": "GigabitEthernet0/1", "cable": "straight", "note": "site DMZ service zone"},
+            {"a": edge, "pa": "GigabitEthernet0/2", "b": isp, "pb": "GigabitEthernet0/0", "cable": "cross", "note": f"site Internet ISP WAN {isp_wan_net}", "l3_subnet": str(isp_wan_net)},
+            {"a": isp, "pa": "GigabitEthernet0/1", "b": internet_switch, "pb": "FastEthernet0/1", "cable": "straight", "note": "site Internet test LAN"},
+        ],
+        "pc_configs": [],
+        "server_configs": [],
+        "vlan_configs": [{"id": server_vlan, "name": "SERVER", "network": str(server_net), "gateway": str(server_gateway), "description": "HQ server VLAN"}],
+        "security_policies": [
+            {
+                "device": edge,
+                "type": "nat_overload",
+                "interface": "GigabitEthernet0/2",
+                "acl": "10",
+                "direction": "inside-to-outside",
+                "summary": "PAT campus, server, DMZ, and branch networks to ISP-facing interface",
+            },
+            {
+                "device": edge,
+                "type": "outside_acl",
+                "interface": "GigabitEthernet0/2",
+                "acl": "101",
+                "direction": "in",
+                "summary": f"Permit public HTTP to {dmz_web_ip}, DNS to {dmz_dns_ip}, deny inbound to private enterprise networks",
+            },
+        ],
+        "ios_configs": [],
+        "metadata": {
+            "source": "pt730-template enterprise-edge",
+            "name": name,
+            "domain": domain,
+            "routing": routing,
+            "features": ["hq_vlans", "server_zone", "dmz", "isp_internet", "branch_wan", "nat_overload", "outside_acl", "server_services"],
+        },
+    }
+
+    campus_infos: list[dict[str, Any]] = []
+    for index, network in enumerate(campus_networks, start=1):
+        vlan = vlan_base + index - 1
+        gateway = _host(network, 1)
+        host_addresses = _host_list(network, count=hosts_per_vlan, skip={gateway})
+        campus_infos.append({"index": index, "vlan": vlan, "network": network, "gateway": gateway, "host_addresses": host_addresses})
+        plan["vlan_configs"].append({"id": vlan, "name": f"HQ-VLAN{vlan}", "network": str(network), "gateway": str(gateway), "description": f"HQ access VLAN {vlan}"})
+        access_switch = f"SW-{slug}-V{vlan}"
+        plan["devices"].append({"name": access_switch, "category": "switch", "model": "2960-24TT", "vlan": vlan})
+        plan["links"].append({"a": hq_core, "pa": f"FastEthernet0/{index + 1}", "b": access_switch, "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": vlan, "note": f"site HQ VLAN {vlan} uplink"})
+        for host_index, address in enumerate(host_addresses, start=1):
+            host = f"PC-{slug}-V{vlan}-{host_index}"
+            plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT", "vlan": vlan})
+            plan["links"].append({"a": access_switch, "pa": f"FastEthernet0/{host_index}", "b": host, "pb": "FastEthernet0", "cable": "straight", "vlan": vlan, "note": f"site HQ VLAN {vlan} host"})
+            plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": str(gateway), "dns": dns_ip})
+
+    dns_records = [{"name": f"www.{domain}", "ip": str(dmz_web_ip)}, {"name": f"dns.{domain}", "ip": str(dmz_dns_ip)}]
+    server_configs_by_name: dict[str, dict[str, Any]] = {}
+    for index, address in enumerate(server_addresses, start=1):
+        if index == 1:
+            server = f"SRV-{slug}-WEB"
+            services: dict[str, Any] = {"http": True}
+            dns_records.append({"name": f"intranet.{domain}", "ip": str(address)})
+        elif index == 2:
+            server = f"SRV-{slug}-DNS"
+            services = {"dns": {"enabled": True, "records": []}}
+        elif index == 3:
+            server = f"SRV-{slug}-FTP"
+            services = {"ftp": {"enabled": True, "accounts": [{"username": "student", "password": "packet", "permissions": "RWDNL"}]}}
+            dns_records.append({"name": f"ftp.{domain}", "ip": str(address)})
+        elif index == 4:
+            server = f"SRV-{slug}-MAIL"
+            services = {"email": {"enabled": True, "domain": domain, "accounts": [{"username": "student", "password": "packet"}]}}
+        elif index == 5:
+            server = f"SRV-{slug}-NMS"
+            services = {"ntp": {"enabled": True, "authentication": False}, "syslog": {"enabled": True, "port": 514}}
+        else:
+            server = f"SRV-{slug}-{index}"
+            services = {"http": True}
+        plan["devices"].append({"name": server, "category": "server", "model": "Server-PT", "vlan": server_vlan})
+        plan["links"].append({"a": server_switch, "pa": f"FastEthernet0/{index}", "b": server, "pb": "FastEthernet0", "cable": "straight", "vlan": server_vlan, "note": "site HQ server host"})
+        plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(address), "mask": _mask(server_net), "gateway": str(server_gateway), "dns": dns_ip})
+        server_configs_by_name[server] = {"name": server, **services}
+    dns_server = f"SRV-{slug}-DNS" if len(server_addresses) >= 2 else next(iter(server_configs_by_name))
+    server_configs_by_name[dns_server]["dns"] = {"enabled": True, "records": dns_records}
+
+    for index, address in enumerate(dmz_addresses, start=1):
+        if index == 1:
+            server = f"SRV-{slug}-DMZ-WEB"
+            services = {"http": True}
+        elif index == 2:
+            server = f"SRV-{slug}-DMZ-DNS"
+            services = {"dns": {"enabled": True, "records": dns_records}}
+        else:
+            server = f"SRV-{slug}-DMZ-{index}"
+            services = {"http": True}
+        if dmz_servers == 1:
+            services["dns"] = {"enabled": True, "records": dns_records}
+        plan["devices"].append({"name": server, "category": "server", "model": "Server-PT"})
+        plan["links"].append({"a": dmz_switch, "pa": f"FastEthernet0/{index}", "b": server, "pb": "FastEthernet0", "cable": "straight", "note": "site DMZ public service"})
+        plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(address), "mask": _mask(dmz_net), "gateway": str(dmz_gateway), "dns": dns_ip})
+        server_configs_by_name[server] = {"name": server, **services}
+    plan["server_configs"] = list(server_configs_by_name.values())
+
+    for index, address in enumerate(inet_addresses, start=1):
+        host = f"PC-{slug}-INET-{index}"
+        plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT"})
+        plan["links"].append({"a": internet_switch, "pa": f"FastEthernet0/{index + 1}", "b": host, "pb": "FastEthernet0", "cable": "straight", "note": "site Internet test host"})
+        plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(inet_net), "gateway": str(inet_gateway), "dns": str(dmz_dns_ip)})
+
+    branch_infos: list[dict[str, Any]] = []
+    for index, (router, switch, network) in enumerate(zip(branch_routers, branch_switches, branch_networks), start=1):
+        gateway = _host(network, 1)
+        host_addresses = _host_list(network, count=branch_hosts, skip={gateway})
+        branch_infos.append({"index": index, "router": router, "switch": switch, "network": network, "gateway": gateway, "host_addresses": host_addresses})
+        plan["links"].append({"a": router, "pa": "GigabitEthernet0/0", "b": switch, "pb": "FastEthernet0/1", "cable": "straight", "note": f"site BR{index} LAN"})
+        for host_index, address in enumerate(host_addresses, start=1):
+            host = f"PC-{slug}-BR{index}-{host_index}"
+            plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT"})
+            plan["links"].append({"a": switch, "pa": f"FastEthernet0/{host_index + 1}", "b": host, "pb": "FastEthernet0", "cable": "straight", "note": f"site BR{index} host"})
+            plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": str(gateway), "dns": dns_ip})
+
+    router_networks: dict[str, list[ipaddress.IPv4Network]] = {
+        edge: [server_net, *campus_networks, dmz_net, isp_wan_net],
+        isp: [isp_wan_net, inet_net],
+        **{info["router"]: [info["network"]] for info in branch_infos},
+    }
+    router_ports: dict[str, list[tuple[str, ipaddress.IPv4Address, ipaddress.IPv4Network, bool, str]]] = {edge: [], **{router: [] for router in branch_routers}}
+    serial_plan: list[tuple[str, str, str, str, ipaddress.IPv4Network, ipaddress.IPv4Address, ipaddress.IPv4Address]] = []
+
+    if branches == 1:
+        subnet = serial_subnets[0]
+        hosts = list(subnet.hosts())
+        serial_plan.append((edge, "Serial0/0/0", branch_routers[0], "Serial0/0/0", subnet, hosts[0], hosts[1]))
+    else:
+        first_subnet = serial_subnets[0]
+        first_hosts = list(first_subnet.hosts())
+        serial_plan.append((edge, "Serial0/0/0", branch_routers[0], "Serial0/0/0", first_subnet, first_hosts[0], first_hosts[1]))
+        for index in range(branches - 1):
+            subnet = serial_subnets[index + 1]
+            hosts = list(subnet.hosts())
+            serial_plan.append((branch_routers[index], "Serial0/0/1", branch_routers[index + 1], "Serial0/0/0", subnet, hosts[0], hosts[1]))
+        last_subnet = serial_subnets[-1]
+        last_hosts = list(last_subnet.hosts())
+        serial_plan.append((branch_routers[-1], "Serial0/0/1", edge, "Serial0/0/1", last_subnet, last_hosts[0], last_hosts[1]))
+
+    static_next_hop_to_hq: dict[str, ipaddress.IPv4Address] = {}
+    static_hq_routes: dict[str, ipaddress.IPv4Address] = {}
+    for a, pa, b, pb, subnet, a_ip, b_ip in serial_plan:
+        plan["links"].append({"a": a, "pa": pa, "b": b, "pb": pb, "cable": "serial", "note": f"site WAN {subnet}", "l3_subnet": str(subnet)})
+        router_ports.setdefault(a, []).append((pa, a_ip, subnet, True, f"WAN_to_{b}"))
+        router_ports.setdefault(b, []).append((pb, b_ip, subnet, False, f"WAN_to_{a}"))
+        router_networks.setdefault(a, []).append(subnet)
+        router_networks.setdefault(b, []).append(subnet)
+        if a == edge:
+            static_hq_routes[b] = b_ip
+            static_next_hop_to_hq[b] = a_ip
+        elif b == edge:
+            static_hq_routes[a] = a_ip
+            static_next_hop_to_hq[a] = b_ip
+
+    edge_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {edge}",
+        "no ip domain-lookup",
+        "interface GigabitEthernet0/0",
+        "description TRUNK_TO_HQ_CORE",
+        "no shutdown",
+        "exit",
+        f"interface GigabitEthernet0/0.{server_vlan}",
+        f"encapsulation dot1Q {server_vlan}",
+        f"ip address {server_gateway} {_mask(server_net)}",
+        "ip nat inside",
+        "no shutdown",
+        "exit",
+    ]
+    for info in campus_infos:
+        edge_commands.extend(
+            [
+                f"interface GigabitEthernet0/0.{info['vlan']}",
+                f"description HQ_ACCESS_VLAN_{info['vlan']}",
+                f"encapsulation dot1Q {info['vlan']}",
+                f"ip address {info['gateway']} {_mask(info['network'])}",
+                "ip nat inside",
+                "no shutdown",
+                "exit",
+            ]
+        )
+    edge_commands.extend(
+        [
+            "interface GigabitEthernet0/1",
+            "description DMZ_PUBLIC_SERVICES",
+            f"ip address {dmz_gateway} {_mask(dmz_net)}",
+            "ip nat inside",
+            "no shutdown",
+            "exit",
+            "interface GigabitEthernet0/2",
+            "description OUTSIDE_TO_ISP",
+            f"ip address {edge_wan} {_mask(isp_wan_net)}",
+            "ip nat outside",
+            "ip access-group 101 in",
+            "no shutdown",
+            "exit",
+        ]
+    )
+    for port, address, subnet, clock, description in router_ports[edge]:
+        edge_commands.extend([f"interface {port}", f"description {description}", f"ip address {address} {_mask(subnet)}"])
+        if clock:
+            edge_commands.append("clock rate 64000")
+        edge_commands.extend(["no shutdown", "exit"])
+    edge_commands.append(f"ip route 0.0.0.0 0.0.0.0 {isp_wan}")
+
+    inside_networks = [server_net, *campus_networks, dmz_net, *branch_networks]
+    for network in inside_networks:
+        edge_commands.append(f"access-list 10 permit {network.network_address} {_wildcard(network)}")
+    edge_commands.extend(
+        [
+            f"access-list 101 permit tcp any host {dmz_web_ip} eq 80",
+            f"access-list 101 permit udp any host {dmz_dns_ip} eq 53",
+            f"access-list 101 permit icmp any host {dmz_web_ip}",
+        ]
+    )
+    for network in [server_net, campus_supernet, branch_supernet]:
+        edge_commands.append(f"access-list 101 deny ip any {network.network_address} {_wildcard(network)}")
+    edge_commands.extend(["access-list 101 permit ip any any", "ip nat inside source list 10 interface GigabitEthernet0/2 overload"])
+
+    isp_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {isp}",
+        "interface GigabitEthernet0/0",
+        "description WAN_TO_ENTERPRISE_EDGE",
+        f"ip address {isp_wan} {_mask(isp_wan_net)}",
+        "no shutdown",
+        "exit",
+        "interface GigabitEthernet0/1",
+        "description INTERNET_TEST_LAN",
+        f"ip address {inet_gateway} {_mask(inet_net)}",
+        "no shutdown",
+        "exit",
+    ]
+    for network in inside_networks:
+        isp_commands.append(f"ip route {network.network_address} {network.netmask} {edge_wan}")
+
+    def add_routing(commands: list[str], router: str, router_id: str, passive_interfaces: list[str]) -> None:
+        networks = router_networks[router]
+        if routing == "ospf":
+            commands.extend(["router ospf 1", f"router-id {router_id}"])
+            for interface in passive_interfaces:
+                commands.append(f"passive-interface {interface}")
+            for network in sorted(networks, key=lambda item: int(item.network_address)):
+                commands.append(f"network {network.network_address} {_wildcard(network)} area 0")
+            commands.append("exit")
+        elif routing == "rip":
+            rip_networks = sorted({_rip_network(network.network_address) for network in networks}, key=lambda value: tuple(int(part) for part in value.split(".")))
+            commands.extend(["router rip", "version 2", "no auto-summary"])
+            for network in rip_networks:
+                commands.append(f"network {network}")
+            commands.append("exit")
+
+    if routing == "static":
+        for info in branch_infos:
+            next_hop = static_hq_routes.get(info["router"])
+            if next_hop:
+                edge_commands.append(f"ip route {info['network'].network_address} {info['network'].netmask} {next_hop}")
+    add_routing(edge_commands, edge, "10.255.30.1", [f"GigabitEthernet0/0.{server_vlan}", *[f"GigabitEthernet0/0.{info['vlan']}" for info in campus_infos], "GigabitEthernet0/1"])
+    edge_commands.append("end")
+    isp_commands.append("end")
+    plan["ios_configs"].extend([{"device": edge, "init_dialog": True, "commands": edge_commands}, {"device": isp, "init_dialog": True, "commands": isp_commands}])
+
+    for branch_index, info in enumerate(branch_infos, start=1):
+        router = info["router"]
+        commands = [
+            "enable",
+            "configure terminal",
+            f"hostname {router}",
+            "interface GigabitEthernet0/0",
+            f"description BR{branch_index}_LAN",
+            f"ip address {info['gateway']} {_mask(info['network'])}",
+            "no shutdown",
+            "exit",
+        ]
+        for port, address, subnet, clock, description in router_ports[router]:
+            commands.extend([f"interface {port}", f"description {description}", f"ip address {address} {_mask(subnet)}"])
+            if clock:
+                commands.append("clock rate 64000")
+            commands.extend(["no shutdown", "exit"])
+        if routing == "static":
+            next_hop = static_next_hop_to_hq.get(router)
+            if next_hop:
+                commands.append(f"ip route 0.0.0.0 0.0.0.0 {next_hop}")
+        add_routing(commands, router, f"10.255.31.{branch_index}", ["GigabitEthernet0/0"])
+        commands.append("end")
+        plan["ios_configs"].append({"device": router, "init_dialog": True, "commands": commands})
+
+    hq_core_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {hq_core}",
+        *[line for vlan in vlan_ids for line in (f"vlan {vlan}", f" name {'SERVER' if vlan == server_vlan else 'HQ_VLAN_' + str(vlan)}", "exit")],
+        "interface GigabitEthernet0/1",
+        "description TRUNK_TO_EDGE_ROUTER",
+        "switchport mode trunk",
+        f"switchport trunk allowed vlan {allowed_vlans}",
+        "no shutdown",
+        "exit",
+        "interface FastEthernet0/1",
+        "description SERVER_SWITCH_UPLINK",
+        "switchport mode trunk",
+        f"switchport trunk allowed vlan {allowed_vlans}",
+        "no shutdown",
+        "exit",
+    ]
+    for info in campus_infos:
+        hq_core_commands.extend(
+            [
+                f"interface FastEthernet0/{info['index'] + 1}",
+                f"description ACCESS_VLAN_{info['vlan']}",
+                "switchport mode trunk",
+                f"switchport trunk allowed vlan {info['vlan']}",
+                "no shutdown",
+                "exit",
+            ]
+        )
+    hq_core_commands.append("end")
+    plan["ios_configs"].append({"device": hq_core, "init_dialog": True, "commands": hq_core_commands})
+
+    server_switch_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {server_switch}",
+        f"vlan {server_vlan}",
+        " name SERVER",
+        "exit",
+        "interface GigabitEthernet0/1",
+        "description UPLINK_TO_HQ_CORE",
+        "switchport mode trunk",
+        f"switchport trunk allowed vlan {server_vlan}",
+        "no shutdown",
+        "exit",
+    ]
+    for index in range(1, campus_servers + 1):
+        server_switch_commands.extend([f"interface FastEthernet0/{index}", "switchport mode access", f"switchport access vlan {server_vlan}", "spanning-tree portfast", "no shutdown", "exit"])
+    server_switch_commands.append("end")
+    plan["ios_configs"].append({"device": server_switch, "init_dialog": True, "commands": server_switch_commands})
+
+    for info in campus_infos:
+        switch = f"SW-{slug}-V{info['vlan']}"
+        commands = [
+            "enable",
+            "configure terminal",
+            f"hostname {switch}",
+            f"vlan {info['vlan']}",
+            f" name HQ_VLAN_{info['vlan']}",
+            "exit",
+            "interface GigabitEthernet0/1",
+            "description UPLINK_TO_HQ_CORE",
+            "switchport mode trunk",
+            f"switchport trunk allowed vlan {info['vlan']}",
+            "no shutdown",
+            "exit",
+        ]
+        for host_index in range(1, hosts_per_vlan + 1):
+            commands.extend([f"interface FastEthernet0/{host_index}", "switchport mode access", f"switchport access vlan {info['vlan']}", "spanning-tree portfast", "no shutdown", "exit"])
+        commands.append("end")
+        plan["ios_configs"].append({"device": switch, "init_dialog": True, "commands": commands})
+
+    for switch, count, label in ((dmz_switch, dmz_servers, "DMZ"), (internet_switch, internet_hosts, "INET")):
+        commands = ["enable", "configure terminal", f"hostname {switch}"]
+        for index in range(1, count + 1):
+            commands.extend([f"interface FastEthernet0/{index}", f"description {label}_HOST", "no shutdown", "exit"])
+        commands.append("end")
+        plan["ios_configs"].append({"device": switch, "init_dialog": True, "commands": commands})
+    for info in branch_infos:
+        commands = ["enable", "configure terminal", f"hostname {info['switch']}"]
+        for host_index in range(1, branch_hosts + 1):
+            commands.extend([f"interface FastEthernet0/{host_index + 1}", "spanning-tree portfast", "no shutdown", "exit"])
+        commands.append("end")
+        plan["ios_configs"].append({"device": info["switch"], "init_dialog": True, "commands": commands})
+
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pt730-template", description=__doc__)
     parser.add_argument("--compact", action="store_true", help="emit compact JSON")
@@ -1518,6 +1999,32 @@ def main(argv: list[str] | None = None) -> int:
     redundant_p.add_argument("--layout-style", choices=STYLES, default="campus")
     redundant_p.add_argument("--no-layout", action="store_true")
     redundant_p.add_argument("--output", type=Path)
+
+    enterprise_p = sub.add_parser("enterprise-edge", help="generate an integrated enterprise HQ/branch/DMZ/Internet topology")
+    enterprise_p.add_argument("--name", default="ENTERPRISE")
+    enterprise_p.add_argument("--campus-vlans", type=int, default=3)
+    enterprise_p.add_argument("--hosts-per-vlan", type=int, default=2)
+    enterprise_p.add_argument("--campus-servers", type=int, default=4)
+    enterprise_p.add_argument("--branches", type=int, default=2)
+    enterprise_p.add_argument("--branch-hosts", type=int, default=2)
+    enterprise_p.add_argument("--dmz-servers", type=int, default=2)
+    enterprise_p.add_argument("--internet-hosts", type=int, default=1)
+    enterprise_p.add_argument("--campus-pool", default="192.168.0.0/21")
+    enterprise_p.add_argument("--campus-prefix", type=int, default=24)
+    enterprise_p.add_argument("--server-network", default="172.16.1.0/26")
+    enterprise_p.add_argument("--server-vlan", type=int, default=10)
+    enterprise_p.add_argument("--vlan-base", type=int, default=20)
+    enterprise_p.add_argument("--branch-pool", default="10.40.0.0/22")
+    enterprise_p.add_argument("--branch-prefix", type=int, default=24)
+    enterprise_p.add_argument("--wan-pool", default="10.60.0.0/28")
+    enterprise_p.add_argument("--dmz-network", default="172.16.10.0/24")
+    enterprise_p.add_argument("--isp-wan-network", default="203.0.113.0/30")
+    enterprise_p.add_argument("--internet-network", default="198.51.100.0/24")
+    enterprise_p.add_argument("--domain", default="enterprise.local")
+    enterprise_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="ospf")
+    enterprise_p.add_argument("--layout-style", choices=STYLES, default="campus")
+    enterprise_p.add_argument("--no-layout", action="store_true")
+    enterprise_p.add_argument("--output", type=Path)
 
     args = parser.parse_args(argv)
     try:
@@ -1665,6 +2172,37 @@ def main(argv: list[str] | None = None) -> int:
                     server_network=args.server_network,
                     server_vlan=args.server_vlan,
                     vlan_base=args.vlan_base,
+                    routing=args.routing,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "enterprise-edge":
+            _emit(
+                enterprise_edge(
+                    name=args.name,
+                    campus_vlans=args.campus_vlans,
+                    hosts_per_vlan=args.hosts_per_vlan,
+                    campus_servers=args.campus_servers,
+                    branches=args.branches,
+                    branch_hosts=args.branch_hosts,
+                    dmz_servers=args.dmz_servers,
+                    internet_hosts=args.internet_hosts,
+                    campus_pool=args.campus_pool,
+                    campus_prefix=args.campus_prefix,
+                    server_network=args.server_network,
+                    server_vlan=args.server_vlan,
+                    vlan_base=args.vlan_base,
+                    branch_pool=args.branch_pool,
+                    branch_prefix=args.branch_prefix,
+                    wan_pool=args.wan_pool,
+                    dmz_network=args.dmz_network,
+                    isp_wan_network=args.isp_wan_network,
+                    internet_network=args.internet_network,
+                    domain=args.domain,
                     routing=args.routing,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,

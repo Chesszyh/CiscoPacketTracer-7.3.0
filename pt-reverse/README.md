@@ -30,6 +30,7 @@ pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
+pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-pipeline schema
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan schema
@@ -78,10 +79,10 @@ exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
 Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
 VLAN, edge-security, router-ring, WAN-ring, campus, and redundant-campus
-template options including DNS, SSID, 802.1Q, NAT/ACL, DMZ, HSRP/STP,
-DHCP relay, RIP/OSPF/static WAN and campus L3 routing, layout, no-layout,
-compact, router DHCP pools, DHCP client hosts, and naming controls from the
-underlying `pt730-template` CLI.
+plus enterprise-edge template options including DNS, SSID, 802.1Q, NAT/ACL,
+DMZ, HSRP/STP, DHCP relay, branch WAN, ISP/Internet, RIP/OSPF/static WAN and
+campus L3 routing, layout, no-layout, compact, router DHCP pools, DHCP client
+hosts, and naming controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls
@@ -194,6 +195,7 @@ pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
+pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
@@ -319,9 +321,9 @@ devices, safe ports, links, static host IPs, server services, and default layout
 coordinates before touching Packet Tracer.
 Use `pt730-template lan-star ...`, `pt730-template wireless-lan ...`,
 `pt730-template vlan-router-on-stick ...`, `pt730-template edge-security ...`,
-`pt730-template router-ring ...`, `pt730-template wan-ring ...`, and
-`pt730-template campus ...` when an agent needs a common lab topology without
-first writing a topology JSON file.
+`pt730-template router-ring ...`, `pt730-template wan-ring ...`,
+`pt730-template campus ...`, and `pt730-template enterprise-edge ...` when an
+agent needs a common lab topology without first writing a topology JSON file.
 Wireless-LAN templates use locally verified `AccessPoint-PT` and `Laptop-PT`
 models, emit AP/SSID metadata, and keep wireless cable code `8109` as a
 non-strict safety warning until live validation is explicitly requested.
@@ -337,6 +339,9 @@ services, and optional L3 IOS configs with RIP, OSPF, or static routing.
 Redundant-campus templates generate dual-core, dual-homed access/server
 topologies with HSRP gateways, STP root roles, DHCP relay, IOS DHCP pools,
 NTP/Syslog/SNMP, server services, and optional RIP/OSPF configs.
+Enterprise-edge templates combine HQ VLANs, server zone, DMZ, ISP/Internet
+test LAN, branch serial WAN routers, NAT overload, outside ACL metadata, and
+service configs into one render-friendly integrated topology.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing ospf` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered
