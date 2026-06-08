@@ -62,6 +62,11 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_live_server_service", names)
         self.assertIn("pt730_live_server_dns_add", names)
         self.assertIn("pt730_live_server_ftp_add", names)
+        self.assertIn("pt730_live_server_ftp_remove", names)
+        self.assertIn("pt730_live_server_email_add", names)
+        self.assertIn("pt730_live_server_email_remove", names)
+        self.assertIn("pt730_live_server_ntp_config", names)
+        self.assertIn("pt730_live_server_syslog_config", names)
         self.assertIn("pt730_live_server_dhcp_config", names)
         self.assertIn("pt730_live_ftp", names)
         self.assertIn("pt730_live_sim", names)
@@ -384,6 +389,121 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("lab", ftp_add_command)
         self.assertIn("dhcp-config", dhcp_config_command)
         self.assertIn("--enable", dhcp_config_command)
+
+    def test_live_server_account_and_service_config_dry_run_return_command_previews(self) -> None:
+        blocked = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_email_add",
+                        "arguments": {
+                            "device": "SRV1",
+                            "username": "student",
+                            "password": "packet",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(blocked[0]["error"]["code"], -32602)
+        self.assertIn("allow_live", blocked[0]["error"]["message"])
+
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_email_add",
+                        "arguments": {
+                            "device": "SRV1",
+                            "username": "student",
+                            "password": "packet",
+                            "domain": "example.local",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_email_remove",
+                        "arguments": {
+                            "device": "SRV1",
+                            "username": "student",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_ftp_remove",
+                        "arguments": {
+                            "device": "SRV1",
+                            "username": "lab",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_ntp_config",
+                        "arguments": {
+                            "device": "SRV1",
+                            "enabled": True,
+                            "auth": "on",
+                            "key_id": "1",
+                            "md5": "cisco",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_syslog_config",
+                        "arguments": {
+                            "device": "SRV1",
+                            "enabled": False,
+                            "port": 514,
+                            "dry_run": True,
+                        },
+                    },
+                },
+            ]
+        )
+        email_add_command = responses[0]["result"]["structuredContent"]["command"]
+        email_remove_command = responses[1]["result"]["structuredContent"]["command"]
+        ftp_remove_command = responses[2]["result"]["structuredContent"]["command"]
+        ntp_config_command = responses[3]["result"]["structuredContent"]["command"]
+        syslog_config_command = responses[4]["result"]["structuredContent"]["command"]
+        self.assertIn("email-add", email_add_command)
+        self.assertIn("--domain", email_add_command)
+        self.assertIn("example.local", email_add_command)
+        self.assertIn("email-remove", email_remove_command)
+        self.assertIn("student", email_remove_command)
+        self.assertIn("ftp-remove", ftp_remove_command)
+        self.assertIn("lab", ftp_remove_command)
+        self.assertIn("ntp-config", ntp_config_command)
+        self.assertIn("--auth", ntp_config_command)
+        self.assertIn("--key-id", ntp_config_command)
+        self.assertIn("syslog-config", syslog_config_command)
+        self.assertIn("--disable", syslog_config_command)
+        self.assertIn("--port", syslog_config_command)
 
     def test_live_ftp_and_sim_dry_run_return_command_previews(self) -> None:
         responses = self.run_mcp(

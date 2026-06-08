@@ -86,7 +86,7 @@ def manifest() -> dict[str, Any]:
         "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "svg_render", "drawio_render", "html_render", "config_file_export"],
         "render_features": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course_audit"],
         "template_features": ["schema", "lan_star", "router_ring", "static_host_ips", "server_http", "serial_modules", "ripv2", "auto_layout"],
-        "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "catalog_wrappers", "safety_js_wrappers", "allow_live_gated_live_tools", "allow_live_gated_device_tools", "write_gated_model_records", "topo_query_export_wrappers", "model_registry_wrappers", "live_lifecycle_dry_run", "live_eval_dry_run", "live_smoke_dry_run", "live_apply_dry_run", "live_device_dry_run", "live_pc_dhcp_dry_run", "live_server_service_dry_run", "live_ftp_dry_run", "live_sim_dry_run"],
+        "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "catalog_wrappers", "safety_js_wrappers", "allow_live_gated_live_tools", "allow_live_gated_device_tools", "write_gated_model_records", "topo_query_export_wrappers", "model_registry_wrappers", "live_lifecycle_dry_run", "live_eval_dry_run", "live_smoke_dry_run", "live_apply_dry_run", "live_device_dry_run", "live_pc_dhcp_dry_run", "live_server_service_dry_run", "live_server_account_config_dry_run", "live_ftp_dry_run", "live_sim_dry_run"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
             "pt-reverse/bin/pt730-selftest",
@@ -95,7 +95,7 @@ def manifest() -> dict[str, Any]:
             "MCP pt730_catalog exposes devices/device/ports/modules/module/cables/infer_cable/aliases",
             "MCP pt730_safety_js and pt730_safety_policy expose JavaScript safety checks and policy",
             "MCP pt730_live_ios/pt730_live_pc_static/pt730_live_term/pt730_live_ping/pt730_live_server_inspect support dry_run=true command previews",
-            "MCP pt730_live_pc_inspect/pt730_live_pc_dhcp/pt730_live_server_service/pt730_live_server_dns_add/pt730_live_server_ftp_add/pt730_live_server_dhcp_config/pt730_live_ftp/pt730_live_sim support dry_run=true command previews",
+            "MCP pt730_live_pc_inspect/pt730_live_pc_dhcp/pt730_live_server_service/pt730_live_server_dns_add/pt730_live_server_ftp_add/pt730_live_server_ftp_remove/pt730_live_server_email_add/pt730_live_server_email_remove/pt730_live_server_ntp_config/pt730_live_server_syslog_config/pt730_live_server_dhcp_config/pt730_live_ftp/pt730_live_sim support dry_run=true command previews",
             "MCP pt730_topo_summarize_query/pt730_topo_export expose saved-query summarization/export; live export requires allow_live=true",
             "MCP pt730_models_manifest/pt730_models_queue/pt730_models_probe_plan/pt730_models_validate/pt730_models_validate_batch/pt730_models_record expose model validation workflows; record requires allow_write=true",
             "MCP pt730_live_app/pt730_live_bridge/pt730_live_launch/pt730_live_recover support dry_run=true command previews for lifecycle operations",

@@ -69,6 +69,12 @@ def optional_int_arg(args: dict[str, Any], name: str) -> int | None:
     return int_arg(args, name, default=0)
 
 
+def optional_bool_arg(args: dict[str, Any], name: str) -> bool | None:
+    if name not in args or args.get(name) is None:
+        return None
+    return bool_arg(args, name)
+
+
 def enum_arg(args: dict[str, Any], name: str, allowed: set[str], *, default: str | None = None) -> str:
     value = str_arg(args, name, required=default is None, default=default or "")
     if value not in allowed:
@@ -790,6 +796,78 @@ def tool_live_server_ftp_add(root: Path, args: dict[str, Any]) -> dict[str, Any]
     return run_live_cli(root, args, "pt730_live_server_ftp_add", command)
 
 
+def tool_live_server_ftp_remove(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["ftp-remove", str_arg(args, "device"), str_arg(args, "username")])
+    return run_live_cli(root, args, "pt730_live_server_ftp_remove", command)
+
+
+def tool_live_server_email_add(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["email-add", str_arg(args, "device"), str_arg(args, "username"), str_arg(args, "password")])
+    domain = str_arg(args, "domain", required=False)
+    if domain:
+        command.extend(["--domain", domain])
+    if bool_arg(args, "no_enable", default=False):
+        command.append("--no-enable")
+    return run_live_cli(root, args, "pt730_live_server_email_add", command)
+
+
+def tool_live_server_email_remove(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["email-remove", str_arg(args, "device"), str_arg(args, "username")])
+    return run_live_cli(root, args, "pt730_live_server_email_remove", command)
+
+
+def tool_live_server_ntp_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["ntp-config", str_arg(args, "device")])
+    enabled = optional_bool_arg(args, "enabled")
+    if enabled is True:
+        command.append("--enable")
+    elif enabled is False:
+        command.append("--disable")
+    auth = str_arg(args, "auth", required=False)
+    if auth:
+        if auth not in {"on", "off"}:
+            raise ToolError("auth must be one of: off, on")
+        command.extend(["--auth", auth])
+    for key, flag in (("key_id", "--key-id"), ("md5", "--md5")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    return run_live_cli(root, args, "pt730_live_server_ntp_config", command)
+
+
+def tool_live_server_syslog_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["syslog-config", str_arg(args, "device")])
+    enabled = optional_bool_arg(args, "enabled")
+    if enabled is True:
+        command.append("--enable")
+    elif enabled is False:
+        command.append("--disable")
+    port = optional_int_arg(args, "port")
+    if port is not None:
+        command.extend(["--port", str(port)])
+    return run_live_cli(root, args, "pt730_live_server_syslog_config", command)
+
+
 def tool_live_server_dhcp_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
     bridge = str_arg(args, "bridge", required=False)
@@ -924,6 +1002,11 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_live_server_service", "Enable or disable a live Server-PT service, or return a safe dry_run command preview.", schema({"device": string, "service": {"type": "string", "enum": ["http", "dns", "ftp", "tftp", "ntp", "syslog", "smtp", "pop3", "email", "dhcp"]}, "enabled": boolean, "domain": string, "port": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "service", "enabled"]), tool_live_server_service),
         tool("pt730_live_server_dns_add", "Add a live Server-PT DNS A record, or return a safe dry_run command preview.", schema({"device": string, "hostname": string, "ip": string, "no_enable": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "hostname", "ip"]), tool_live_server_dns_add),
         tool("pt730_live_server_ftp_add", "Add or replace a live Server-PT FTP user, or return a safe dry_run command preview.", schema({"device": string, "username": string, "password": string, "permissions": string, "no_enable": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "username", "password"]), tool_live_server_ftp_add),
+        tool("pt730_live_server_ftp_remove", "Remove a live Server-PT FTP user, or return a safe dry_run command preview.", schema({"device": string, "username": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "username"]), tool_live_server_ftp_remove),
+        tool("pt730_live_server_email_add", "Add or replace a live Server-PT email user, or return a safe dry_run command preview.", schema({"device": string, "username": string, "password": string, "domain": string, "no_enable": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "username", "password"]), tool_live_server_email_add),
+        tool("pt730_live_server_email_remove", "Remove a live Server-PT email user, or return a safe dry_run command preview.", schema({"device": string, "username": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "username"]), tool_live_server_email_remove),
+        tool("pt730_live_server_ntp_config", "Configure live Server-PT NTP service/auth fields, or return a safe dry_run command preview.", schema({"device": string, "enabled": boolean, "auth": {"type": "string", "enum": ["on", "off"]}, "key_id": string, "md5": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_server_ntp_config),
+        tool("pt730_live_server_syslog_config", "Configure live Server-PT Syslog service/port, or return a safe dry_run command preview.", schema({"device": string, "enabled": boolean, "port": integer, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_server_syslog_config),
         tool("pt730_live_server_dhcp_config", "Configure a live Server-PT DHCP pool, or return a safe dry_run command preview.", schema({"device": string, "port": string, "pool_index": integer, "network": string, "mask": string, "start": string, "end": string, "gateway": string, "dns": string, "max_users": integer, "enable": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_server_dhcp_config),
         tool("pt730_live_ftp", "Run a Packet Tracer PC FTP client session, or return a safe dry_run command preview.", schema({"client": string, "server": string, "username": string, "password": string, "commands": string_array, "file": string, "keep_blank": boolean, "expect": string, "no_quit": boolean, "bridge": string, "connect_wait": integer, "command_wait": integer, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["client", "server"]), tool_live_ftp),
         tool("pt730_live_sim", "Control limited Packet Tracer simulation/PDU surfaces, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["status", "reset", "fast_forward", "event_list", "simple_pdu"]}, "source": string, "target": string, "enabled": boolean, "steps": integer, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["action"]), tool_live_sim),

@@ -24,7 +24,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
-The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. Catalog and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
+The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/email/NTP/Syslog/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. Catalog and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
 
 Example device preview:
 
@@ -37,6 +37,15 @@ Example lifecycle preview:
 
 ```bash
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_recover","arguments":{"wait":5,"notify":true,"dry_run":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
+Example Server-PT account/config preview:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_server_email_add","arguments":{"device":"SRV1","username":"student","password":"packet","domain":"example.local","dry_run":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_server_ntp_config","arguments":{"device":"SRV1","enabled":true,"auth":"on","key_id":"1","md5":"cisco","dry_run":true}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 

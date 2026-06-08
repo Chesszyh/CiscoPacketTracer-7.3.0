@@ -21,7 +21,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
    ```bash
    pt-reverse/bin/pt730-mcp
    ```
-   Use `pt-reverse/bin/pt730-mcp --list-tools` to inspect tools. Live MCP tools require `allow_live=true`; `pt730_live_apply`, `pt730_live_eval`, `pt730_live_smoke`, IOS/terminal/ping tools, PC static/DHCP tools, Server-PT service tools, FTP client tools, app/bridge/launch/recover lifecycle tools, and simulation/PDU tools support `dry_run=true` command previews without contacting Packet Tracer. Model metadata recording requires `allow_write=true` unless `dry_run=true`.
+   Use `pt-reverse/bin/pt730-mcp --list-tools` to inspect tools. Live MCP tools require `allow_live=true`; `pt730_live_apply`, `pt730_live_eval`, `pt730_live_smoke`, IOS/terminal/ping tools, PC static/DHCP tools, Server-PT service/account/config tools, FTP client tools, app/bridge/launch/recover lifecycle tools, and simulation/PDU tools support `dry_run=true` command previews without contacting Packet Tracer. Model metadata recording requires `allow_write=true` unless `dry_run=true`.
 
 4. Before live apply, run:
    ```bash
@@ -42,7 +42,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
 - Render outputs for review: use `pt730-render svg`, `drawio`, `html`, `markdown`, `summary`, and `course-audit`.
 - Export IOS configs: use `pt730-config-plan export-configs`.
 - Query catalog and JavaScript safety through MCP with `pt730_catalog`, `pt730_safety_js`, and `pt730_safety_policy`.
-- Preview live IOS/PC DHCP/server service/FTP/simulation/lifecycle MCP calls with `dry_run=true` before any `allow_live=true` execution.
+- Preview live IOS/PC DHCP/server service/account/config/FTP/simulation/lifecycle MCP calls with `dry_run=true` before any `allow_live=true` execution.
 - Inspect model safety metadata through MCP with `pt730_models_manifest`, `pt730_models_queue`, and `pt730_models_validate` dry runs; write records only when explicitly allowed.
 - Query or apply live Packet Tracer only after bridge recovery/safety checks.
 
