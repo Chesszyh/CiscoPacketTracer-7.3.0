@@ -25,6 +25,17 @@ COURSE_EXPECTED_SERVERS = 50
 COURSE_EXPECTED_PCS = 1900
 RENDER_THEMES = ("light", "dark", "paper")
 RENDER_GROUP_BY = ("none", "auto", "network", "vlan", "site", "category")
+BUNDLE_RENDER_FORMATS = ("mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit")
+BUNDLE_DEFAULT_FORMATS = ("svg", "drawio", "html", "markdown", "summary")
+BUNDLE_EXTENSIONS = {
+    "mermaid": "mmd",
+    "svg": "svg",
+    "drawio": "drawio",
+    "html": "html",
+    "markdown": "md",
+    "summary": "summary.json",
+    "course-audit": "audit.json",
+}
 
 
 @dataclass(frozen=True)
@@ -1139,6 +1150,107 @@ def course_audit(plan: dict[str, Any]) -> tuple[dict[str, Any], int]:
     return report, 0 if report["ok"] else 1
 
 
+def parse_bundle_formats(value: str) -> list[str]:
+    formats: list[str] = []
+    for raw in value.split(","):
+        fmt = raw.strip()
+        if not fmt:
+            continue
+        if fmt not in BUNDLE_RENDER_FORMATS:
+            raise ValueError(f"bundle format must be one of: {', '.join(BUNDLE_RENDER_FORMATS)}")
+        if fmt not in formats:
+            formats.append(fmt)
+    if not formats:
+        raise ValueError("bundle formats cannot be empty")
+    return formats
+
+
+def bundle_filename(basename: str, fmt: str) -> str:
+    return f"{basename}.{BUNDLE_EXTENSIONS[fmt]}"
+
+
+def render_format(plan: dict[str, Any], fmt: str, *, options: RenderOptions, direction: str) -> tuple[str, int]:
+    if fmt == "mermaid":
+        return mermaid(plan, direction=direction, link_labels=options.link_labels), 0
+    if fmt == "svg":
+        return svg(plan, options=options), 0
+    if fmt == "drawio":
+        return drawio(plan, options=options), 0
+    if fmt == "html":
+        return html_report(plan, options=options), 0
+    if fmt == "markdown":
+        return markdown(plan), 0
+    if fmt == "summary":
+        return summary(plan), 0
+    if fmt == "course-audit":
+        report, code = course_audit(plan)
+        return json.dumps(report, ensure_ascii=False, indent=2) + "\n", code
+    raise ValueError(f"unsupported render format: {fmt}")
+
+
+def render_bundle(
+    plan: dict[str, Any],
+    *,
+    plan_path: Path,
+    output_dir: Path,
+    basename: str,
+    formats: list[str],
+    options: RenderOptions,
+    direction: str = "LR",
+) -> tuple[dict[str, Any], int]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    artifacts: dict[str, str] = {}
+    paths: dict[str, str] = {}
+    bytes_written: dict[str, int] = {}
+    exit_codes: dict[str, int] = {}
+
+    for fmt in formats:
+        text, code = render_format(plan, fmt, options=options, direction=direction)
+        path = output_dir / bundle_filename(basename, fmt)
+        path.write_text(text, encoding="utf-8")
+        artifacts[fmt] = path.name
+        paths[fmt] = str(path)
+        bytes_written[fmt] = path.stat().st_size
+        exit_codes[fmt] = code
+
+    try:
+        summary_data = json.loads(summary(plan))
+    except json.JSONDecodeError:
+        summary_data = {}
+
+    manifest_path = output_dir / f"{basename}.manifest.json"
+    artifacts["manifest"] = manifest_path.name
+    paths["manifest"] = str(manifest_path)
+    manifest = {
+        "kind": "pt730-render-bundle",
+        "plan": str(plan_path),
+        "output_dir": str(output_dir),
+        "basename": basename,
+        "formats": formats,
+        "artifacts": artifacts,
+        "paths": paths,
+        "bytes": bytes_written,
+        "exit_codes": exit_codes,
+        "options": {
+            "theme": options.theme,
+            "link_labels": options.link_labels,
+            "model_labels": options.model_labels,
+            "group_by": options.group_by,
+            "direction": direction,
+        },
+        "counts": summary_data.get("counts", {}),
+    }
+    if "course-audit" in formats:
+        audit_path = output_dir / artifacts["course-audit"]
+        try:
+            audit_data = json.loads(audit_path.read_text(encoding="utf-8"))
+            manifest["course_audit"] = {"ok": bool(audit_data.get("ok")), "exit_code": exit_codes["course-audit"]}
+        except (OSError, json.JSONDecodeError):
+            manifest["course_audit"] = {"ok": False, "exit_code": exit_codes["course-audit"]}
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return manifest, max(exit_codes.values(), default=0)
+
+
 def emit(text: str, output: Path | None) -> None:
     if output is None:
         print(text, end="")
@@ -1205,6 +1317,14 @@ def main(argv: list[str] | None = None) -> int:
     audit_p.add_argument("plan", type=Path)
     audit_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
 
+    bundle_p = sub.add_parser("bundle", help="render one plan into multiple offline review artifacts and a manifest")
+    bundle_p.add_argument("plan", type=Path)
+    bundle_p.add_argument("--output-dir", type=Path, required=True, help="directory for generated artifacts")
+    bundle_p.add_argument("--basename", default="topology", help="artifact filename prefix")
+    bundle_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit")
+    bundle_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"], help="Mermaid direction when mermaid is included")
+    add_visual_options(bundle_p)
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "mermaid":
@@ -1242,6 +1362,20 @@ def main(argv: list[str] | None = None) -> int:
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             report, code = course_audit(plan)
             emit(json.dumps(report, ensure_ascii=False, indent=2) + "\n", args.output)
+            return code
+        if args.cmd == "bundle":
+            plan = _load_plan(args.plan)
+            _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
+            manifest, code = render_bundle(
+                plan,
+                plan_path=args.plan,
+                output_dir=args.output_dir,
+                basename=args.basename,
+                formats=parse_bundle_formats(args.formats),
+                options=render_options(args),
+                direction=args.direction,
+            )
+            print(json.dumps(manifest, ensure_ascii=False, indent=2))
             return code
     except (OSError, ValueError) as exc:
         print(f"pt730-render: {exc}", file=sys.stderr)

@@ -358,6 +358,70 @@ class RenderCliTest(unittest.TestCase):
         finally:
             out.unlink(missing_ok=True)
 
+    def test_bundle_writes_default_artifacts_and_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "bundle"
+            result = self.run_render(
+                "bundle",
+                str(ROOT / "examples" / "simple-lan.json"),
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "simple",
+                "--theme",
+                "paper",
+                "--group-by",
+                "network",
+                "--no-link-labels",
+                "--no-model-labels",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["kind"], "pt730-render-bundle")
+            self.assertEqual(manifest["basename"], "simple")
+            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary"])
+            self.assertEqual(manifest["options"]["theme"], "paper")
+            self.assertEqual(manifest["options"]["link_labels"], False)
+            self.assertEqual(manifest["options"]["model_labels"], False)
+            self.assertEqual(manifest["options"]["group_by"], "network")
+            self.assertEqual(manifest["counts"]["devices"], 3)
+            self.assertEqual(manifest["artifacts"]["svg"], "simple.svg")
+            self.assertEqual(manifest["artifacts"]["drawio"], "simple.drawio")
+            self.assertEqual(manifest["artifacts"]["html"], "simple.html")
+            self.assertEqual(manifest["artifacts"]["markdown"], "simple.md")
+            self.assertEqual(manifest["artifacts"]["summary"], "simple.summary.json")
+            self.assertEqual(manifest["artifacts"]["manifest"], "simple.manifest.json")
+            for filename in manifest["artifacts"].values():
+                self.assertTrue((out_dir / filename).exists(), filename)
+            svg_text = (out_dir / "simple.svg").read_text(encoding="utf-8")
+            self.assertIn("192.168.50.0/24 gw 192.168.50.1", svg_text)
+            self.assertNotIn("GigabitEthernet0/0", svg_text)
+            self.assertNotIn("2911", svg_text)
+            summary_data = json.loads((out_dir / "simple.summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary_data["counts"]["links"], 2)
+            saved_manifest = json.loads((out_dir / "simple.manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved_manifest["artifacts"], manifest["artifacts"])
+
+    def test_bundle_formats_option_limits_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "bundle"
+            result = self.run_render(
+                "bundle",
+                str(ROOT / "examples" / "simple-lan.json"),
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "small",
+                "--formats",
+                "summary,markdown",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["formats"], ["summary", "markdown"])
+            self.assertTrue((out_dir / "small.summary.json").exists())
+            self.assertTrue((out_dir / "small.md").exists())
+            self.assertFalse((out_dir / "small.svg").exists())
+
     def test_course_audit_accepts_course_design_plan(self) -> None:
         result = self.run_render("course-audit", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))
         self.assertEqual(result.returncode, 0, result.stderr)

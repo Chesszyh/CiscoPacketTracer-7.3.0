@@ -19,6 +19,7 @@ LAYOUT_STYLES = {"auto", "hierarchical", "campus", "lan", "ring", "grid"}
 RENDER_THEMES = {"light", "dark", "paper"}
 VISUAL_RENDER_FORMATS = {"svg", "drawio", "html"}
 RENDER_GROUP_BY = {"none", "auto", "network", "vlan", "site", "category"}
+BUNDLE_RENDER_FORMATS = {"mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit"}
 
 
 class ToolError(ValueError):
@@ -95,6 +96,28 @@ def list_str_arg(args: dict[str, Any], name: str, *, required: bool = True) -> l
     if required and not value:
         raise ToolError(f"missing required argument: {name}")
     return value
+
+
+def optional_render_formats_arg(args: dict[str, Any], name: str) -> list[str]:
+    if name not in args or args.get(name) is None:
+        return []
+    value = args.get(name)
+    if isinstance(value, str):
+        formats = [item.strip() for item in value.split(",") if item.strip()]
+    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+        formats = value
+    else:
+        raise ToolError(f"{name} must be an array of strings or a comma-separated string")
+    if not formats:
+        raise ToolError(f"{name} cannot be empty")
+    unknown = [fmt for fmt in formats if fmt not in BUNDLE_RENDER_FORMATS]
+    if unknown:
+        raise ToolError(f"{name} contains unsupported formats: {', '.join(unknown)}")
+    deduped: list[str] = []
+    for fmt in formats:
+        if fmt not in deduped:
+            deduped.append(fmt)
+    return deduped
 
 
 def run_cli(root: Path, command: list[str]) -> dict[str, Any]:
@@ -219,6 +242,40 @@ def tool_render(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     if group_by:
         if fmt not in VISUAL_RENDER_FORMATS:
             raise ToolError("group_by is supported only for svg, drawio, or html renders")
+        if group_by not in RENDER_GROUP_BY:
+            raise ToolError("group_by must be one of: auto, category, network, none, site, vlan")
+        command.extend(["--group-by", group_by])
+    return run_cli(root, command)
+
+
+def tool_render_bundle(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-render"))]
+    if bool_arg(args, "strict_safety", default=False):
+        command.append("--strict-safety")
+    if bool_arg(args, "allow_risky", default=False):
+        command.append("--allow-risky")
+    command.extend(["bundle", str_arg(args, "plan"), "--output-dir", str_arg(args, "output_dir")])
+    basename = str_arg(args, "basename", required=False)
+    if basename:
+        command.extend(["--basename", basename])
+    formats = optional_render_formats_arg(args, "formats")
+    if formats:
+        command.extend(["--formats", ",".join(formats)])
+    direction = enum_arg(args, "direction", {"LR", "TD", "TB", "RL", "BT"}, default="LR")
+    command.extend(["--direction", direction])
+    theme = str_arg(args, "theme", required=False)
+    if theme:
+        if theme not in RENDER_THEMES:
+            raise ToolError("theme must be one of: dark, light, paper")
+        command.extend(["--theme", theme])
+    link_labels = optional_bool_arg(args, "link_labels")
+    if link_labels is not None and not link_labels:
+        command.append("--no-link-labels")
+    model_labels = optional_bool_arg(args, "model_labels")
+    if model_labels is not None and not model_labels:
+        command.append("--no-model-labels")
+    group_by = str_arg(args, "group_by", required=False)
+    if group_by:
         if group_by not in RENDER_GROUP_BY:
             raise ToolError("group_by must be one of: auto, category, network, none, site, vlan")
         command.extend(["--group-by", group_by])
@@ -1286,6 +1343,7 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
         tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, or course-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
+        tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),
         tool("pt730_safety_policy", "Print the current PT 7.3 automation safety policy.", schema({}), tool_safety_policy),

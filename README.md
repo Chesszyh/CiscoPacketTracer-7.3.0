@@ -66,6 +66,7 @@ pt-reverse/bin/pt730-render svg pt-reverse/course-design/college-network-topolog
 pt-reverse/bin/pt730-render drawio pt-reverse/course-design/college-network-topology-pt73-safe.json --output college-network-topology-pt73-safe.drawio
 pt-reverse/bin/pt730-render html pt-reverse/course-design/college-network-topology-pt73-safe.json --output college-network-topology-pt73-safe.html
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json
+pt-reverse/bin/pt730-render bundle pt-reverse/course-design/college-network-topology-pt73-safe.json --output-dir college-network-render --basename college-network --formats svg,drawio,html,markdown,summary
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```
 
@@ -94,6 +95,9 @@ Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls
 through `pt730_render` for SVG, draw.io, HTML, and Mermaid where supported.
+Use `pt730_render_bundle` when an agent should create SVG, draw.io, HTML,
+Markdown, summary, optional course-audit output, and a manifest in one offline
+call.
 The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
 JSON controls for denser or cleaner topology diagrams.
 Config planning MCP tools expose IOS-only output, source filtering, and compact

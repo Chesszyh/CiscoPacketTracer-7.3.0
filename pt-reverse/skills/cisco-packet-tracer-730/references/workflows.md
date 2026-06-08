@@ -75,6 +75,8 @@ Example visual render control through MCP:
 ```bash
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"svg","plan":"pt-reverse/examples/simple-lan.json","theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' \
   | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_render_bundle","arguments":{"plan":"pt-reverse/examples/simple-lan.json","output_dir":"simple-lan-render","basename":"simple-lan","formats":["svg","drawio","html","markdown","summary"],"theme":"paper","group_by":"network"}}}' \
+  | pt-reverse/bin/pt730-mcp
 ```
 
 Example config planning through MCP:
@@ -154,6 +156,7 @@ pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
 pt-reverse/bin/pt730-render html lan-star.json --group-by network --output lan-star.html
+pt-reverse/bin/pt730-render bundle lan-star.json --output-dir lan-star-render --basename lan-star --formats svg,drawio,html,markdown,summary
 ```
 
 `wireless-lan` uses verified `AccessPoint-PT` and `Laptop-PT` models and writes
@@ -222,6 +225,7 @@ pt-reverse/bin/pt730-safety plan topology.layout.json
 pt-reverse/bin/pt730-render markdown topology.layout.json --output topology.md
 pt-reverse/bin/pt730-render drawio topology.layout.json --theme paper --output topology.drawio
 pt-reverse/bin/pt730-render svg topology.layout.json --theme dark --no-link-labels --output topology.clean.svg
+pt-reverse/bin/pt730-render bundle topology.layout.json --output-dir topology-render --basename topology --formats svg,drawio,html,markdown,summary --theme paper --group-by vlan
 pt-reverse/bin/pt730-config-plan --compact export-configs topology.configured.json --output-dir configs --source "pt730-config-plan campus"
 ```
 

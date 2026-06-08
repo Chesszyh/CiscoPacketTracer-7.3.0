@@ -104,6 +104,8 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_config_plan_campus","arguments":{"plan":"pt-reverse/course-design/college-network-topology-pt73-safe.json","ios_only":true,"compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"svg","plan":"pt-reverse/examples/simple-lan.json","theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"summary","plan":"pt-reverse/examples/simple-lan.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render_bundle","arguments":{"plan":"pt-reverse/examples/simple-lan.json","output_dir":"'"$tmp"'/mcp-render-bundle","basename":"simple","formats":["svg","summary"],"theme":"dark","link_labels":false,"model_labels":false,"group_by":"network"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+test -s "$tmp/mcp-render-bundle/simple.manifest.json"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_catalog","arguments":{"action":"ports","model":"2911"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_safety_js","arguments":{"code":"ipc.network().getDeviceCount()"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_apply","arguments":{"plan":"pt-reverse/examples/simple-lan.json","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
@@ -205,6 +207,13 @@ ok "layout checks"
 "$BIN/pt730-render" html "$ROOT/pt-reverse/examples/simple-lan.json" --group-by network >/dev/null
 "$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" summary "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" bundle "$ROOT/pt-reverse/examples/simple-lan.json" --output-dir "$tmp/render-bundle" --basename simple --formats svg,drawio,html,markdown,summary --group-by network >/dev/null
+test -s "$tmp/render-bundle/simple.svg"
+test -s "$tmp/render-bundle/simple.drawio"
+test -s "$tmp/render-bundle/simple.html"
+test -s "$tmp/render-bundle/simple.md"
+test -s "$tmp/render-bundle/simple.summary.json"
+test -s "$tmp/render-bundle/simple.manifest.json"
 "$BIN/pt730-render" course-audit "$ROOT/pt-reverse/course-design/college-network-topology-pt73-safe.json" >/dev/null
 "$BIN/pt730-models" manifest >/dev/null
 "$BIN/pt730-models" queue >/dev/null
