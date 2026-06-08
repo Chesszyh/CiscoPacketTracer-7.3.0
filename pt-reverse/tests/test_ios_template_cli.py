@@ -37,9 +37,11 @@ class IosTemplateCliTest(unittest.TestCase):
             {
                 "device": "R1",
                 "hostname": "R1",
+                "ip_routing": True,
                 "vlans": [{"id": 10, "name": "SERVER"}],
                 "interfaces": [
                     {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "description": "LAN", "acl_in": 10},
+                    {"name": "GigabitEthernet0/3", "mode": "routed", "ip": "10.10.12.1", "mask": "255.255.255.252"},
                     {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
                     {"name": "Vlan10", "ip": "192.168.10.1", "mask": "255.255.255.0"},
                 ],
@@ -61,7 +63,9 @@ class IosTemplateCliTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("hostname R1", result.stdout)
+        self.assertIn("ip routing", result.stdout)
         self.assertIn("vlan 10", result.stdout)
+        self.assertIn("no switchport", result.stdout)
         self.assertIn("switchport trunk allowed vlan 10,20", result.stdout)
         self.assertIn("router rip", result.stdout)
         self.assertIn("ip route 0.0.0.0 0.0.0.0 10.0.0.254", result.stdout)
@@ -113,6 +117,8 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("vlans", fields)
         self.assertIn("interfaces[].mode=trunk", fields)
         self.assertIn("interfaces[].acl_in", fields)
+        self.assertIn("interfaces[].mode=routed", fields)
+        self.assertIn("ip_routing", fields)
         self.assertIn("rip.networks", fields)
         self.assertIn("static_routes", fields)
         self.assertIn("acls[].type=extended", fields)

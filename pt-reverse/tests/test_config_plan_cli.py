@@ -35,6 +35,29 @@ class ConfigPlanCliTest(unittest.TestCase):
             "ios_configs": [{"device": "MLS1", "source": "manual", "commands": ["enable", "show version"]}],
         }
 
+    def l3_topology(self) -> dict[str, Any]:
+        return {
+            "devices": [
+                {"name": "MLS1", "category": "switch", "model": "2960-24TT"},
+                {"name": "MLS2", "category": "switch", "model": "2960-24TT"},
+                {"name": "SW-OFFICE", "category": "switch", "model": "2960-24TT"},
+                {"name": "SW-TEACH", "category": "switch", "model": "2960-24TT"},
+                {"name": "PC-OFFICE-1", "category": "pc", "model": "PC-PT"},
+                {"name": "PC-TEACH-1", "category": "pc", "model": "PC-PT"},
+            ],
+            "links": [
+                {"a": "MLS1", "pa": "GigabitEthernet0/1", "b": "MLS2", "pb": "GigabitEthernet0/1", "cable": "cross", "note": "10.10.12.0/30"},
+                {"a": "MLS1", "pa": "FastEthernet0/1", "b": "SW-OFFICE", "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": 20},
+                {"a": "SW-OFFICE", "pa": "FastEthernet0/1", "b": "PC-OFFICE-1", "pb": "FastEthernet0", "cable": "straight", "vlan": 20},
+                {"a": "MLS2", "pa": "FastEthernet0/1", "b": "SW-TEACH", "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": 30},
+                {"a": "SW-TEACH", "pa": "FastEthernet0/1", "b": "PC-TEACH-1", "pb": "FastEthernet0", "cable": "straight", "vlan": 30},
+            ],
+            "pc_configs": [
+                {"name": "PC-OFFICE-1", "port": "FastEthernet0", "ip": "192.168.0.1", "mask": "255.255.255.192", "gateway": "192.168.0.62"},
+                {"name": "PC-TEACH-1", "port": "FastEthernet0", "ip": "192.168.0.65", "mask": "255.255.255.192", "gateway": "192.168.0.126"},
+            ],
+        }
+
     def run_config_plan(self, plan: dict[str, Any], *args: str) -> subprocess.CompletedProcess[str]:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
             json.dump(plan, f)
@@ -101,6 +124,32 @@ class ConfigPlanCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(set(data), {"ios_configs"})
         self.assertEqual(len(data["ios_configs"]), 3)
+
+    def test_campus_l3_generates_svis_routed_links_and_rip(self) -> None:
+        result = self.run_config_plan(self.l3_topology(), "--l3", "--routing", "rip")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        configs = {config["device"]: config for config in data["ios_configs"] if config.get("source") == "pt730-config-plan campus"}
+
+        mls1_commands = [command.strip() for command in configs["MLS1"]["commands"]]
+        self.assertIn("ip routing", mls1_commands)
+        self.assertIn("interface Vlan20", mls1_commands)
+        self.assertIn("ip address 192.168.0.62 255.255.255.192", mls1_commands)
+        self.assertIn("interface GigabitEthernet0/1", mls1_commands)
+        self.assertIn("no switchport", mls1_commands)
+        self.assertIn("ip address 10.10.12.1 255.255.255.252", mls1_commands)
+        self.assertIn("router rip", mls1_commands)
+        self.assertIn("network 10.0.0.0", mls1_commands)
+        self.assertIn("network 192.168.0.0", mls1_commands)
+
+        mls2_commands = [command.strip() for command in configs["MLS2"]["commands"]]
+        self.assertIn("interface Vlan30", mls2_commands)
+        self.assertIn("ip address 192.168.0.126 255.255.255.192", mls2_commands)
+        self.assertIn("ip address 10.10.12.2 255.255.255.252", mls2_commands)
+
+        access_commands = [command.strip() for command in configs["SW-OFFICE"]["commands"]]
+        self.assertNotIn("ip routing", access_commands)
+        self.assertNotIn("interface Vlan20", access_commands)
 
     def test_output_file_can_be_safety_checked(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

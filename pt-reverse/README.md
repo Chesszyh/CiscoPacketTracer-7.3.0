@@ -128,7 +128,7 @@ pt-reverse/bin/pt730-topo query --summary
 pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
-pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --output compose-campus.configured.json
+pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --l3 --routing rip --output compose-campus.configured.json
 pt-reverse/bin/pt730-topo apply --dry-run pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan --output simple-lan.layout.json
 pt-reverse/bin/pt730-topo apply pt-reverse/examples/simple-lan.json
@@ -245,6 +245,8 @@ devices, safe ports, links, static host IPs, server services, and default layout
 coordinates before touching Packet Tracer.
 Use `pt730-config-plan campus <plan.json> --output <configured-plan.json>` to
 derive switch VLAN/access/trunk IOS configs from the topology link metadata.
+Add `--l3 --routing rip` to derive SVI gateways, routed switch interlinks, and
+RIPv2 from host gateway/mask values plus CIDR metadata on core links.
 Use `pt730-layout <plan.json> --output <layout.json>` to assign deterministic
 coordinates before safety checks, rendering, or live apply.  Supported styles
 are `auto`, `hierarchical`, `campus`, `lan`, `ring`, and `grid`; use

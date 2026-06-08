@@ -38,10 +38,12 @@ def schema_doc() -> dict[str, Any]:
     example = {
         "device": "R1",
         "hostname": "R1",
+        "ip_routing": True,
         "vlans": [{"id": 10, "name": "SERVER"}],
         "interfaces": [
             {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "acl_in": 10, "nat": "inside"},
             {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
+            {"name": "GigabitEthernet0/2", "mode": "routed", "ip": "10.10.12.1", "mask": "255.255.255.252"},
             {"name": "FastEthernet0/1", "mode": "access", "vlan": 10},
         ],
         "rip": {"version": 2, "networks": ["10.0.0.0"], "no_auto_summary": True},
@@ -60,10 +62,12 @@ def schema_doc() -> dict[str, Any]:
         "fields": {
             "device": "Target Packet Tracer IOS device name.",
             "hostname": "Optional IOS hostname command.",
+            "ip_routing": "True adds global ip routing for multilayer switches/routers.",
             "vlans": "Array of {id, name?}.",
             "interfaces": "Array of routed, access, or trunk interface declarations.",
             "interfaces[].mode=access": "Adds switchport mode access and switchport access vlan.",
             "interfaces[].mode=trunk": "Adds switchport mode trunk and switchport trunk allowed vlan.",
+            "interfaces[].mode=routed": "Adds no switchport before interface IP configuration.",
             "interfaces[].ip": "Adds ip address; mask is required.",
             "interfaces[].acl_in": "Adds ip access-group <value> in.",
             "interfaces[].acl_out": "Adds ip access-group <value> out.",
@@ -85,6 +89,10 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
     hostname = spec.get("hostname")
     if hostname:
         commands.append(f"hostname {hostname}")
+    if spec.get("ip_routing"):
+        commands.append("ip routing")
+    if spec.get("no_ip_domain_lookup"):
+        commands.append("no ip domain-lookup")
 
     for vlan in as_list(spec.get("vlans")):
         if not isinstance(vlan, dict):
@@ -103,6 +111,8 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
         if interface.get("description"):
             commands.append(f" description {interface['description']}")
         mode = str(interface.get("mode", "")).lower()
+        if mode in ("routed", "l3") or interface.get("switchport") is False:
+            commands.append(" no switchport")
         if mode == "trunk":
             commands.extend([" switchport mode trunk", f" switchport trunk allowed vlan {vlan_list(interface.get('allowed_vlans', 'all'))}"])
         elif mode == "access":
