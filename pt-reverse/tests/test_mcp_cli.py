@@ -45,6 +45,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_render_bundle", names)
         self.assertIn("pt730_lab_template", names)
         self.assertIn("pt730_lab_plan", names)
+        self.assertIn("pt730_lab_report", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
         self.assertIn("pt730_template_wireless_lan", names)
@@ -114,6 +115,9 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("title", lab_plan["inputSchema"]["properties"])
         self.assertIn("legend", lab_plan["inputSchema"]["properties"])
         self.assertIn("diagram-audit", lab_plan["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
+        lab_report = next(tool for tool in tools if tool["name"] == "pt730_lab_report")
+        self.assertIn("manifest", lab_report["inputSchema"]["required"])
+        self.assertIn("output", lab_report["inputSchema"]["properties"])
         roas = next(tool for tool in tools if tool["name"] == "pt730_template_vlan_router_on_stick")
         self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
@@ -529,6 +533,74 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "render" / "mcp-serial.svg").exists())
             self.assertTrue((out_dir / "render" / "mcp-serial.diagram-audit.json").exists())
             self.assertTrue((out_dir / "configs" / "R_AUTO1.cfg").exists())
+
+    def test_tools_call_lab_report_generates_markdown_or_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "mcp-plan-lab"
+            plan_response = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_lab_plan",
+                            "arguments": {
+                                "plan": "pt-reverse/examples/two-router-serial-configured.json",
+                                "output_dir": str(out_dir),
+                                "basename": "mcp-serial",
+                                "formats": ["svg", "summary", "diagram-audit"],
+                                "title": "MCP Serial",
+                                "legend": True,
+                                "compact": True,
+                            },
+                        },
+                    }
+                ]
+            )
+            self.assertEqual(plan_response[0]["result"]["isError"], False)
+
+            report_path = out_dir / "deliverable.md"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_lab_report",
+                            "arguments": {
+                                "manifest": str(out_dir / "manifest.json"),
+                                "title": "MCP Deliverable",
+                            },
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_lab_report",
+                            "arguments": {
+                                "manifest": str(out_dir / "manifest.json"),
+                                "output": str(report_path),
+                                "compact": True,
+                            },
+                        },
+                    },
+                ]
+            )
+            stdout_result = responses[0]["result"]
+            file_result = responses[1]["result"]
+            self.assertEqual(stdout_result["isError"], False)
+            self.assertIn("# MCP Deliverable", stdout_result["structuredContent"]["stdout"])
+            self.assertIn("Suggested Recording Checklist", stdout_result["structuredContent"]["stdout"])
+            self.assertEqual(file_result["isError"], False)
+            self.assertNotIn("\n  ", file_result["structuredContent"]["stdout"])
+            payload = json.loads(file_result["structuredContent"]["stdout"])
+            self.assertEqual(payload["kind"], "pt730-lab-report")
+            self.assertTrue(report_path.exists())
+            self.assertIn("mcp-serial.svg", report_path.read_text(encoding="utf-8"))
 
     def test_tools_call_pipeline_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

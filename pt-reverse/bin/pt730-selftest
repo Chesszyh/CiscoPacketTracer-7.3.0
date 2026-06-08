@@ -219,6 +219,8 @@ test -s "$tmp/lab/render/selftest-enterprise.manifest.json"
 test -s "$tmp/lab/render/selftest-enterprise.svg"
 test -s "$tmp/lab/render/selftest-enterprise.diagram-audit.json"
 test -s "$tmp/lab/configs/R-SELF-EDGE.cfg"
+"$BIN/pt730-lab" report "$tmp/lab/manifest.json" --output "$tmp/lab/deliverable.md" >/dev/null
+test -s "$tmp/lab/deliverable.md"
 "$BIN/pt730-lab" plan "$ROOT/pt-reverse/examples/two-router-serial-configured.json" --output-dir "$tmp/plan-lab" --basename serial --formats svg,summary,diagram-audit --group-by category --title "Selftest Serial" --legend >/dev/null
 test -s "$tmp/plan-lab/topology.json"
 test -s "$tmp/plan-lab/safety.json"
@@ -229,6 +231,8 @@ test -s "$tmp/plan-lab/render/serial.diagram-audit.json"
 test -s "$tmp/plan-lab/configs/R_AUTO1.cfg"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_template","arguments":{"spec":"'"$tmp"'/lab-spec.json","output_dir":"'"$tmp"'/mcp-lab","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 test -s "$tmp/mcp-lab/manifest.json"
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_report","arguments":{"manifest":"'"$tmp"'/mcp-lab/manifest.json","output":"'"$tmp"'/mcp-lab/deliverable.md","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+test -s "$tmp/mcp-lab/deliverable.md"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"'"$tmp"'/mcp-plan-lab","basename":"mcp-serial","formats":["svg","summary","diagram-audit"],"group_by":"category","title":"Selftest Serial","legend":true,"compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 test -s "$tmp/mcp-plan-lab/manifest.json"
 test -s "$tmp/mcp-plan-lab/render/mcp-serial.svg"

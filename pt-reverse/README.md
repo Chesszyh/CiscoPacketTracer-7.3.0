@@ -34,6 +34,7 @@ pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dm
 pt-reverse/bin/pt730-lab schema
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
 pt-reverse/bin/pt730-lab plan pt-reverse/examples/two-router-serial-configured.json --output-dir plan-lab --basename serial --formats svg,summary,diagram-audit --title "Serial Lab" --legend
+pt-reverse/bin/pt730-lab report plan-lab/manifest.json --output plan-lab/deliverable.md
 pt-reverse/bin/pt730-pipeline schema
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan schema
@@ -100,6 +101,9 @@ and manifest.
 The `pt730_lab_plan` MCP tool writes the same bundle from an existing topology
 plan JSON, which is useful after an agent has composed or hand-authored a custom
 topology.
+The `pt730_lab_report` MCP tool writes a Markdown coursework/deliverable index
+from an existing lab bundle `manifest.json`, including artifact status, safety
+status, render outputs, config files, and suggested recording checks.
 The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
 JSON controls for denser or cleaner topology diagrams.
 Config planning MCP tools expose IOS-only output, source filtering, and compact
@@ -209,6 +213,7 @@ pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
 pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit --title "Campus Topology" --legend
+pt-reverse/bin/pt730-lab report topology-lab/manifest.json --output topology-lab/deliverable.md
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
@@ -363,7 +368,10 @@ should start from one compact JSON spec and write a complete deliverable bundle:
 `template_options`, and can control render `formats`, `theme`, title, legend,
 labels, and `group_by` in the same file. Use `pt730-lab plan <plan.json> --output-dir
 <out-dir>` for the same bundle workflow after an agent has already generated or
-composed a custom topology JSON.
+composed a custom topology JSON. Use `pt730-lab report <out-dir>/manifest.json
+--output <out-dir>/deliverable.md` to generate a Markdown coursework index with
+artifact paths, safety status, render outputs, config files, and suggested
+recording checks.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing ospf` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered

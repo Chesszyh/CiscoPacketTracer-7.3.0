@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate complete offline Packet Tracer 7.3.0 lab bundles from one JSON spec."""
+"""Generate complete offline Packet Tracer 7.3.0 lab bundles and reports."""
 
 from __future__ import annotations
 
@@ -215,6 +215,180 @@ def rel(base: Path, path: Path) -> str:
         return str(path)
 
 
+def markdown_cell(value: Any) -> str:
+    text = "" if value is None else str(value)
+    return text.replace("|", "\\|").replace("\n", "<br>")
+
+
+def markdown_table(headers: list[str], rows: list[list[Any]]) -> list[str]:
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    lines.extend("| " + " | ".join(markdown_cell(value) for value in row) + " |" for row in rows)
+    return lines
+
+
+def manifest_base_dir(manifest: dict[str, Any], manifest_path: Path) -> Path:
+    output_dir = manifest.get("output_dir")
+    if isinstance(output_dir, str) and output_dir:
+        path = Path(output_dir)
+        if path.is_absolute():
+            return path
+        return (manifest_path.parent / path).resolve()
+    return manifest_path.parent.resolve()
+
+
+def resolve_manifest_path(base_dir: Path, value: Any) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else base_dir / path
+
+
+def display_manifest_path(base_dir: Path, value: Any) -> str:
+    path = resolve_manifest_path(base_dir, value)
+    if path is None:
+        return ""
+    return rel(base_dir, path)
+
+
+def path_status(path: Path | None) -> str:
+    return "present" if path is not None and path.exists() else "missing"
+
+
+def _title_from_manifest(manifest: dict[str, Any], title: str) -> str:
+    if title:
+        return title
+    name = manifest.get("name")
+    template = manifest.get("template")
+    if isinstance(name, str) and name:
+        return f"{name} Packet Tracer lab bundle"
+    if isinstance(template, str) and template:
+        return f"{template} Packet Tracer lab bundle"
+    return "Packet Tracer lab bundle"
+
+
+def lab_report_markdown(manifest: dict[str, Any], *, manifest_path: Path, title: str = "") -> str:
+    base_dir = manifest_base_dir(manifest, manifest_path)
+    render_bundle = manifest.get("render_bundle") if isinstance(manifest.get("render_bundle"), dict) else {}
+    safety = manifest.get("safety") if isinstance(manifest.get("safety"), dict) else {}
+    config_files = manifest.get("config_files") if isinstance(manifest.get("config_files"), dict) else {}
+    artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), dict) else {}
+
+    lines: list[str] = [f"# {_title_from_manifest(manifest, title)}", ""]
+
+    lines.extend(["## Bundle Summary", ""])
+    summary_rows = [
+        ["Kind", manifest.get("kind", "")],
+        ["Name", manifest.get("name", "")],
+        ["Template", manifest.get("template", "")],
+        ["Packet Tracer", manifest.get("packet_tracer_version", "7.3.0")],
+        ["Output directory", str(base_dir)],
+        ["Safety", "ok" if safety.get("ok") is True else "failed" if safety.get("ok") is False else "unknown"],
+        ["Render formats", ", ".join(render_bundle.get("formats", [])) if isinstance(render_bundle.get("formats"), list) else ""],
+        ["Config files", config_files.get("count", 0)],
+    ]
+    lines.extend(markdown_table(["Field", "Value"], summary_rows))
+    lines.append("")
+
+    artifact_rows = []
+    for key in ("topology", "safety", "render", "render_manifest", "configs", "manifest"):
+        if key not in artifacts:
+            continue
+        artifact_path = resolve_manifest_path(base_dir, artifacts[key])
+        artifact_rows.append([key, display_manifest_path(base_dir, artifacts[key]), path_status(artifact_path)])
+    if artifact_rows:
+        lines.extend(["## Artifact Checklist", ""])
+        lines.extend(markdown_table(["Artifact", "Path", "Status"], artifact_rows))
+        lines.append("")
+
+    render_rows = []
+    render_paths = render_bundle.get("paths") if isinstance(render_bundle.get("paths"), dict) else {}
+    render_bytes = render_bundle.get("bytes") if isinstance(render_bundle.get("bytes"), dict) else {}
+    render_exit_codes = render_bundle.get("exit_codes") if isinstance(render_bundle.get("exit_codes"), dict) else {}
+    for fmt in render_bundle.get("formats", []) if isinstance(render_bundle.get("formats"), list) else []:
+        value = render_paths.get(fmt)
+        path = resolve_manifest_path(base_dir, value)
+        render_rows.append([fmt, display_manifest_path(base_dir, value), render_bytes.get(fmt, ""), render_exit_codes.get(fmt, ""), path_status(path)])
+    if render_rows:
+        lines.extend(["## Render Outputs", ""])
+        lines.extend(markdown_table(["Format", "Path", "Bytes", "Exit Code", "Status"], render_rows))
+        lines.append("")
+
+    counts = render_bundle.get("counts") if isinstance(render_bundle.get("counts"), dict) else {}
+    if counts:
+        count_order = [
+            "devices",
+            "modules",
+            "links",
+            "pc_configs",
+            "ap_configs",
+            "vlan_configs",
+            "dhcp_pools",
+            "server_configs",
+            "security_policies",
+            "ios_configs",
+        ]
+        count_rows = [[key, counts[key]] for key in count_order if key in counts]
+        count_rows.extend([[key, value] for key, value in counts.items() if key not in count_order])
+        lines.extend(["## Topology Counts", ""])
+        lines.extend(markdown_table(["Item", "Count"], count_rows))
+        lines.append("")
+
+    lines.extend(["## Safety Report", ""])
+    lines.extend(markdown_table(["Field", "Value"], [["OK", safety.get("ok", "")], ["Strict", safety.get("strict", "")], ["Errors", len(safety.get("errors", [])) if isinstance(safety.get("errors"), list) else ""], ["Warnings", len(safety.get("warnings", [])) if isinstance(safety.get("warnings"), list) else ""]]))
+    for label_name, items in (("Errors", safety.get("errors")), ("Warnings", safety.get("warnings"))):
+        if isinstance(items, list) and items:
+            lines.append("")
+            lines.append(f"### {label_name}")
+            lines.append("")
+            for item in items:
+                lines.append(f"- {item}")
+    lines.append("")
+
+    config_rows = []
+    for item in config_files.get("files", []) if isinstance(config_files.get("files"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        path = resolve_manifest_path(base_dir, item.get("path"))
+        config_rows.append([item.get("device", ""), item.get("source", ""), display_manifest_path(base_dir, item.get("path")), item.get("bytes", ""), path_status(path)])
+    if config_rows:
+        lines.extend(["## Config Files", ""])
+        lines.extend(markdown_table(["Device", "Source", "Path", "Bytes", "Status"], config_rows))
+        lines.append("")
+
+    options = render_bundle.get("options") if isinstance(render_bundle.get("options"), dict) else {}
+    if options:
+        option_rows = [[key, value] for key, value in options.items()]
+        lines.extend(["## Render Options", ""])
+        lines.extend(markdown_table(["Option", "Value"], option_rows))
+        lines.append("")
+
+    video_rows = [
+        ["Topology", "Open or show topology.json / SVG / draw.io and explain core, access, server, WAN, or DMZ areas."],
+        ["Safety", "Show safety.json and explain any warnings before live Packet Tracer work."],
+        ["Configs", "Paste or inspect generated .cfg files on matching routers/switches."],
+        ["Routing", "Run show ip interface brief and show ip route on L3 devices when IOS configs exist."],
+        ["Connectivity", "Ping gateways and servers from representative hosts; test DNS/HTTP/FTP/email when configured."],
+    ]
+    if counts.get("vlan_configs"):
+        video_rows.append(["VLAN", "Run show vlan brief and show interfaces trunk on switches."])
+    if counts.get("dhcp_pools"):
+        video_rows.append(["DHCP", "Show DHCP pool configuration and verify one DHCP client lease."])
+    if render_bundle.get("diagram_audit"):
+        audit = render_bundle.get("diagram_audit")
+        video_rows.append(["Diagram audit", f"Review diagram-audit result: ok={audit.get('ok') if isinstance(audit, dict) else audit}."])
+    if render_bundle.get("course_audit"):
+        audit = render_bundle.get("course_audit")
+        video_rows.append(["Course audit", f"Review course-audit result: ok={audit.get('ok') if isinstance(audit, dict) else audit}."])
+    lines.extend(["## Suggested Recording Checklist", ""])
+    lines.extend(markdown_table(["Step", "What To Show"], video_rows))
+    lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _normalize_object_keys(raw: dict[str, Any], allowed: set[str], *, section: str) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for key, value in raw.items():
@@ -332,7 +506,7 @@ def _template_kwargs(spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
 def schema() -> dict[str, Any]:
     source_schema = template_schema()
     return {
-        "commands": ["schema", "template", "plan"],
+        "commands": ["schema", "template", "plan", "report"],
         "template": {
             "description": "Generate a full offline lab bundle from one compact JSON spec.",
             "required": ["template"],
@@ -355,6 +529,12 @@ def schema() -> dict[str, Any]:
             "required": ["plan", "--output-dir"],
             "optional": ["--name", "--basename", "--formats", "--direction", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--title", "--legend", "--strict-safety", "--no-configs", "--config-source", "--compact"],
             "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
+        },
+        "report": {
+            "description": "Generate a Markdown coursework/deliverable index from a lab bundle manifest.json.",
+            "required": ["manifest"],
+            "optional": ["--output", "--title"],
+            "outputs": ["Markdown report to stdout or --output"],
         },
         "templates": {
             name: {
@@ -544,6 +724,15 @@ def lab_plan(
     )
 
 
+def lab_report(manifest_path: Path, *, output: Path | None, title: str) -> str:
+    manifest = load_json(manifest_path)
+    report = lab_report_markdown(manifest, manifest_path=manifest_path, title=title)
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(report, encoding="utf-8")
+    return report
+
+
 def emit_json(value: Any, *, compact: bool) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=None if compact else 2, separators=(",", ":") if compact else None))
 
@@ -577,6 +766,11 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--no-configs", action="store_false", dest="export_configs", default=True, help="skip per-device .cfg export")
     plan_p.add_argument("--config-source", default="", help="only export ios_configs matching this source")
 
+    report_p = sub.add_parser("report", help="generate a Markdown deliverable index from a lab bundle manifest")
+    report_p.add_argument("manifest", type=Path)
+    report_p.add_argument("--output", type=Path, help="write Markdown to this path instead of stdout")
+    report_p.add_argument("--title", default="", help="override the report H1")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "schema":
@@ -607,6 +801,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             emit_json(manifest, compact=args.compact)
             return code
+        if args.cmd == "report":
+            report = lab_report(args.manifest, output=args.output, title=args.title)
+            if args.output is None:
+                print(report, end="")
+            else:
+                emit_json({"kind": "pt730-lab-report", "manifest": str(args.manifest), "output": str(args.output)}, compact=args.compact)
+            return 0
         raise ValueError(f"unknown command: {args.cmd}")
     except Exception as exc:  # noqa: BLE001
         print(f"pt730-lab: {exc}", file=sys.stderr)

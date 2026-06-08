@@ -81,6 +81,8 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_lab_plan","arguments":{"plan":"pt-reverse/examples/two-router-serial-configured.json","output_dir":"serial-plan-lab","basename":"serial","formats":["svg","summary","diagram-audit"],"group_by":"category","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pt730_lab_report","arguments":{"manifest":"enterprise-demo-lab/manifest.json","output":"enterprise-demo-lab/deliverable.md","title":"Enterprise Demo Deliverable","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
 ```
 
 Example campus workflow steps through MCP:
@@ -188,6 +190,7 @@ pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf --output enterprise-edge.json
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir enterprise-demo-lab
 pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit --title "Campus Topology" --legend
+pt-reverse/bin/pt730-lab report topology-lab/manifest.json --output topology-lab/deliverable.md
 pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --title "LAN Star" --legend --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
@@ -246,7 +249,10 @@ output directory contains `topology.json`, `safety.json`,
 gate for empty diagrams, missing coordinates, overlaps, disconnected
 components, oversized canvases, and dense label/grouping advice. Template specs
 use snake_case `template_options`; both paths can set render `formats`,
-`theme`, title, legend, labels, and `group_by`.
+`theme`, title, legend, labels, and `group_by`. Use `pt730-lab report
+<out-dir>/manifest.json --output <out-dir>/deliverable.md` to add a Markdown
+coursework index with artifact status, safety summary, render outputs, config
+files, and suggested recording checks. Through MCP, call `pt730_lab_report`.
 
 ## Campus Pipeline
 
