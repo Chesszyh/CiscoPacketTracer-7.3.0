@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Tests for the PT 7.3.0 MCP stdio wrapper."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MCP = ROOT / "bin" / "pt730-mcp"
+
+
+class McpCliTest(unittest.TestCase):
+    def run_mcp(self, messages: list[dict]) -> list[dict]:
+        payload = "\n".join(json.dumps(message) for message in messages) + "\n"
+        result = subprocess.run(
+            [str(MCP)],
+            cwd=ROOT.parent,
+            input=payload,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+
+    def test_initialize_and_tools_list(self) -> None:
+        responses = self.run_mcp(
+            [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            ]
+        )
+        self.assertEqual(responses[0]["result"]["capabilities"]["tools"]["listChanged"], False)
+        tools = responses[1]["result"]["tools"]
+        names = [tool["name"] for tool in tools]
+        self.assertIn("pt730_render", names)
+        self.assertIn("pt730_pipeline_campus", names)
+        self.assertIn("pt730_template_lan_star", names)
+        render = next(tool for tool in tools if tool["name"] == "pt730_render")
+        self.assertIn("format", render["inputSchema"]["required"])
+
+    def test_tools_call_render_summary_returns_text_and_structured_content(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "summary",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        self.assertIn('"devices": 3', result["content"][0]["text"])
+        self.assertEqual(result["structuredContent"]["exitCode"], 0)
+        self.assertIn("192.168.50.0/24", result["structuredContent"]["stdout"])
+
+    def test_tools_call_pipeline_generates_manifest_and_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "mcp-pipeline"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_pipeline_campus",
+                            "arguments": {
+                                "ip_plan": "pt-reverse/examples/ip-plan-campus.json",
+                                "compose_spec": "pt-reverse/examples/compose-campus.json",
+                                "output_dir": str(out_dir),
+                                "routing": "rip",
+                            },
+                        },
+                    }
+                ]
+            )
+            result = responses[0]["result"]
+            self.assertEqual(result["isError"], False)
+            manifest = json.loads(result["structuredContent"]["stdout"])
+            self.assertEqual(manifest["kind"], "pt730-campus-pipeline")
+            self.assertEqual(manifest["artifacts"]["drawio"], "topology.drawio")
+            self.assertTrue((out_dir / "topology.drawio").exists())
+
+    def test_unknown_tool_returns_protocol_error(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_apply", "arguments": {}},
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("Unknown tool", responses[0]["error"]["message"])
+
+
+if __name__ == "__main__":
+    unittest.main()

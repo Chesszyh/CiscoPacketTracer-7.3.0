@@ -14,8 +14,8 @@ Tracer separately and keep the application files outside Git.
 ## Contents
 
 - `pt-reverse/bin/`: command wrappers for launch, bridge, topology, templates,
-  IP planning, pipeline, compose, config planning, layout, render, safety, app,
-  IOS, PC, server, FTP, and terminal helpers.
+  MCP, IP planning, pipeline, compose, config planning, layout, render, safety,
+  app, IOS, PC, server, FTP, and terminal helpers.
 - `pt-reverse/pt730/`: Python implementations for offline validation, rendering,
   catalog lookup, and bridge helpers.
 - `pt-reverse/examples/`: topology JSON examples and locally generated Packet
@@ -32,6 +32,7 @@ Tracer separately and keep the application files outside Git.
 ```bash
 git submodule update --init --recursive
 pt-reverse/bin/pt730-selftest
+pt-reverse/bin/pt730-mcp --list-tools
 ```
 
 Optional Codex skill install:
@@ -57,6 +58,12 @@ pt-reverse/bin/pt730-render drawio pt-reverse/course-design/college-network-topo
 pt-reverse/bin/pt730-render html pt-reverse/course-design/college-network-topology-pt73-safe.json --output college-network-topology-pt73-safe.html
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
+```
+
+Run the MCP stdio wrapper for agent tool calls:
+
+```bash
+pt-reverse/bin/pt730-mcp
 ```
 
 Read `pt-reverse/SAFETY.md` before running live Packet Tracer operations.

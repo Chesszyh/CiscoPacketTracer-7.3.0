@@ -17,6 +17,7 @@ pt-reverse/bin/pt730-launch start
 pt-reverse/bin/pt730-launch status
 pt-reverse/bin/pt730-recover --notify
 pt-reverse/bin/pt730-selftest
+pt-reverse/bin/pt730-mcp --list-tools
 pt-reverse/bin/pt730-capabilities
 pt-reverse/bin/pt730-models manifest
 pt-reverse/bin/pt730-template schema
@@ -46,6 +47,12 @@ workflow automatically:
 
 ```bash
 ln -sfn "$PWD/pt-reverse/skills/cisco-packet-tracer-730" "$HOME/.codex/skills/cisco-packet-tracer-730"
+```
+
+Run the MCP stdio wrapper when an MCP client should call the offline tools:
+
+```bash
+pt-reverse/bin/pt730-mcp
 ```
 
 The known-good launch path is:

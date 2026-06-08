@@ -1,11 +1,11 @@
 ---
 name: cisco-packet-tracer-730
-description: Use Cisco Packet Tracer 7.3.0 automation CLI workflows for agent-friendly network topology planning, rendering, configuration generation, safety checks, and cautious live Packet Tracer bridge operations. Trigger when asked to draw Packet Tracer topologies, design campus/college networks, generate PT 7.3 topology JSON, render SVG/draw.io/HTML/Markdown reports, export IOS configs, run pt730-* CLI commands, or prepare Packet Tracer coursework deliverables.
+description: Use Cisco Packet Tracer 7.3.0 automation CLI and MCP workflows for agent-friendly network topology planning, rendering, configuration generation, safety checks, and cautious live Packet Tracer bridge operations. Trigger when asked to draw Packet Tracer topologies, design campus/college networks, generate PT 7.3 topology JSON, render SVG/draw.io/HTML/Markdown reports, export IOS configs, run pt730-* CLI commands, expose PT 7.3.0 tools through MCP, or prepare Packet Tracer coursework deliverables.
 ---
 
 # Cisco Packet Tracer 7.3 CLI
 
-Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit through `pt-reverse/bin/pt730-*` commands.
+Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit through `pt-reverse/bin/pt730-*` commands or the `pt730-mcp` stdio server.
 
 ## Default Workflow
 
@@ -17,13 +17,19 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
 
 2. Prefer offline CLI first. Do not start live Packet Tracer unless the user explicitly asks or offline outputs must be applied to a `.pkt` file.
 
-3. Before live apply, run:
+3. For MCP clients, start:
+   ```bash
+   pt-reverse/bin/pt730-mcp
+   ```
+   Use `pt-reverse/bin/pt730-mcp --list-tools` to inspect exposed offline tools.
+
+4. Before live apply, run:
    ```bash
    pt-reverse/bin/pt730-safety plan <plan.json>
    pt-reverse/bin/pt730-topo --timeout 1 apply --dry-run <plan.json>
    ```
 
-4. For substantial changes to the toolkit, run:
+5. For substantial changes to the toolkit, run:
    ```bash
    pt-reverse/bin/pt730-selftest
    python3 -m unittest discover -s pt-reverse/tests -p 'test_*.py'

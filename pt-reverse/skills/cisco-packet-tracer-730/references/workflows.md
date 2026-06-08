@@ -6,7 +6,25 @@
 pt-reverse/bin/pt730-selftest
 python3 -m unittest discover -s pt-reverse/tests -p 'test_*.py'
 pt-reverse/bin/pt730-capabilities
+pt-reverse/bin/pt730-mcp --list-tools
 ```
+
+## MCP Stdio Wrapper
+
+Start the server:
+
+```bash
+pt-reverse/bin/pt730-mcp
+```
+
+Minimal JSON-RPC smoke call:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"summary","plan":"pt-reverse/examples/simple-lan.json"}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
+The MCP wrapper exposes offline tools by default: capabilities, templates, IP plan, compose, config plan, layout, render, safety, IOS template render, config export, and campus pipeline.
 
 ## Built-In Templates
 

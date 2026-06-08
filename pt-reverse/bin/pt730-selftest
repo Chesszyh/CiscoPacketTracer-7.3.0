@@ -88,6 +88,8 @@ expect_fail risky-plan "$BIN/pt730-safety" plan "$tmp/risky-plan.json"
 expect_fail risky-js "$BIN/pt730-safety" js 'x.getProcess("DhcpClientProcess").dhcpRun("FastEthernet0")'
 expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientProcess").dhcpRun("FastEthernet0")'
 "$BIN/pt730-topo" --timeout 1 apply --dry-run "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-mcp" --list-tools | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"summary","plan":"pt-reverse/examples/simple-lan.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" campus "$ROOT/pt-reverse/examples/ip-plan-campus.json" --output "$tmp/ip-plan.json"
 python3 -m json.tool "$tmp/ip-plan.json" >/dev/null
