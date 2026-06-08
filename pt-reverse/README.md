@@ -70,6 +70,8 @@ Built-in template MCP tools expose the same DNS, layout, no-layout, compact,
 and naming options as the underlying `pt730-template` CLI.
 The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
 JSON controls for denser or cleaner topology diagrams.
+Config planning MCP tools expose IOS-only output, source filtering, and compact
+JSON controls through `pt730_config_plan_campus` and `pt730_export_configs`.
 
 The known-good launch path is:
 
@@ -305,6 +307,8 @@ instead of RIP.
 Use `pt730-config-plan export-configs <configured-plan.json> --output-dir
 <configs-dir>` to write the generated `ios_configs` into per-device `.cfg`
 files for reports or manual paste-in.
+Add `--source "pt730-config-plan campus"` to export only generated records, and
+put `--compact` before the subcommand for compact JSON output.
 Use `pt730-layout <plan.json> --output <layout.json>` to assign deterministic
 coordinates before safety checks, rendering, or live apply.  Supported styles
 are `auto`, `hierarchical`, `campus`, `lan`, `ring`, and `grid`; use

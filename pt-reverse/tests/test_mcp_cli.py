@@ -195,6 +195,99 @@ class McpCliTest(unittest.TestCase):
             self.assertEqual(manifest["artifacts"]["drawio"], "topology.drawio")
             self.assertTrue((out_dir / "topology.drawio").exists())
 
+    def test_config_plan_and_export_tools_expose_ios_only_source_and_compact_options(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_path = Path(tmpdir) / "topology.json"
+            configured_path = Path(tmpdir) / "configured.json"
+            config_dir = Path(tmpdir) / "configs"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "devices": [
+                            {"name": "SW1", "category": "switch", "model": "2960-24TT"},
+                            {"name": "PC1", "category": "pc", "model": "PC-PT"},
+                        ],
+                        "links": [
+                            {
+                                "a": "SW1",
+                                "pa": "FastEthernet0/1",
+                                "b": "PC1",
+                                "pb": "FastEthernet0",
+                                "cable": "straight",
+                                "vlan": 20,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_config_plan_campus",
+                            "arguments": {
+                                "plan": str(plan_path),
+                                "ios_only": True,
+                                "compact": True,
+                            },
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_config_plan_campus",
+                            "arguments": {
+                                "plan": str(plan_path),
+                                "output": str(configured_path),
+                            },
+                        },
+                    },
+                ]
+            )
+            ios_only_result = responses[0]["result"]
+            configured_result = responses[1]["result"]
+            self.assertEqual(ios_only_result["isError"], False)
+            self.assertIn("--ios-only", ios_only_result["structuredContent"]["command"])
+            self.assertIn("--compact", ios_only_result["structuredContent"]["command"])
+            self.assertNotIn("\n  ", ios_only_result["structuredContent"]["stdout"])
+            self.assertEqual(set(json.loads(ios_only_result["structuredContent"]["stdout"])), {"ios_configs"})
+            self.assertEqual(configured_result["isError"], False)
+            self.assertTrue(configured_path.exists())
+
+            export_response = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_export_configs",
+                            "arguments": {
+                                "plan": str(configured_path),
+                                "output_dir": str(config_dir),
+                                "source": "pt730-config-plan campus",
+                                "compact": True,
+                            },
+                        },
+                    }
+                ]
+            )
+            export_result = export_response[0]["result"]
+            self.assertEqual(export_result["isError"], False)
+            export_command = export_result["structuredContent"]["command"]
+            self.assertIn("--source", export_command)
+            self.assertIn("pt730-config-plan campus", export_command)
+            self.assertIn("--compact", export_command)
+            manifest = json.loads(export_result["structuredContent"]["stdout"])
+            self.assertGreater(manifest["count"], 0)
+            self.assertTrue(any(Path(item["path"]).exists() for item in manifest["files"]))
+
     def test_template_tools_expose_full_cli_options(self) -> None:
         responses = self.run_mcp(
             [

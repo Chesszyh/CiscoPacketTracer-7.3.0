@@ -79,6 +79,8 @@ Built-in template MCP tools expose the same DNS, layout, no-layout, compact, and
 naming options as the underlying `pt730-template` CLI.
 The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
 JSON controls for denser or cleaner topology diagrams.
+Config planning MCP tools expose IOS-only output, source filtering, and compact
+JSON controls through `pt730_config_plan_campus` and `pt730_export_configs`.
 
 Read `pt-reverse/SAFETY.md` before running live Packet Tracer operations.
 

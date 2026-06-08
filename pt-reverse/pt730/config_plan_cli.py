@@ -420,7 +420,7 @@ def schema() -> dict[str, Any]:
             "--routing static adds static routes between derived SVI networks",
             "existing ios_configs with other sources are preserved",
         ],
-        "options": ["--l3", "--routing none|rip|static", "--ios-only", "--compact", "--output", "export-configs --output-dir"],
+        "options": ["--l3", "--routing none|rip|static", "--ios-only", "--compact", "--output", "export-configs --output-dir", "export-configs --source"],
         "output": "full topology JSON by default; use --ios-only for {ios_configs:[...]}",
     }
 

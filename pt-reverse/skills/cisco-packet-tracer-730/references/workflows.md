@@ -47,6 +47,20 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
+Example config planning through MCP:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_config_plan_campus","arguments":{"plan":"pt-reverse/course-design/college-network-topology-pt73-safe.json","ios_only":true,"compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
+Example config export through MCP:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_export_configs","arguments":{"plan":"topology.configured.json","output_dir":"configs","source":"pt730-config-plan campus","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
 Example device preview:
 
 ```bash
@@ -118,11 +132,12 @@ Expected key outputs:
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output topology.composed.json
 pt-reverse/bin/pt730-config-plan campus topology.composed.json --l3 --routing rip --output topology.configured.json
+pt-reverse/bin/pt730-config-plan --compact campus topology.composed.json --ios-only
 pt-reverse/bin/pt730-layout topology.configured.json --style campus --output topology.layout.json
 pt-reverse/bin/pt730-safety plan topology.layout.json
 pt-reverse/bin/pt730-render markdown topology.layout.json --output topology.md
 pt-reverse/bin/pt730-render drawio topology.layout.json --output topology.drawio
-pt-reverse/bin/pt730-config-plan export-configs topology.configured.json --output-dir configs
+pt-reverse/bin/pt730-config-plan --compact export-configs topology.configured.json --output-dir configs --source "pt730-config-plan campus"
 ```
 
 ## Course Audit

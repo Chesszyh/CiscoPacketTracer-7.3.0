@@ -90,6 +90,7 @@ class ConfigPlanCliTest(unittest.TestCase):
         self.assertIn("campus", data["commands"])
         self.assertIn("switch-switch links become trunk interfaces", data["rules"])
         self.assertIn("--routing none|rip|static", data["options"])
+        self.assertIn("export-configs --source", data["options"])
 
     def test_campus_generates_switch_ios_configs_from_vlan_links(self) -> None:
         result = self.run_config_plan(self.topology())
