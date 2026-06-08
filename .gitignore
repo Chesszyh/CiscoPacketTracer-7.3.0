@@ -24,6 +24,8 @@ pt-reverse/screenshots/
 # Runtime query/apply snapshots.
 pt-reverse/course-design/current-query.json
 pt-reverse/course-design/last-apply.json
+*.layout.json
+*.layout.md
 pt-reverse/.tmp/
 pt-reverse/live-exports/
 

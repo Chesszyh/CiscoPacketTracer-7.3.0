@@ -21,6 +21,7 @@ pt-reverse/bin/pt730-capabilities
 pt-reverse/bin/pt730-models manifest
 pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
+pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
@@ -121,6 +122,7 @@ pt-reverse/bin/pt730-topo query
 pt-reverse/bin/pt730-topo query --summary
 pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
 pt-reverse/bin/pt730-topo apply --dry-run pt-reverse/examples/simple-lan.json
+pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan --output simple-lan.layout.json
 pt-reverse/bin/pt730-topo apply pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-topo apply --replace pt-reverse/examples/four-router-ring.json
 pt-reverse/bin/pt730-topo apply --replace pt-reverse/examples/two-router-serial.json
@@ -226,6 +228,10 @@ configured interfaces that omit `no shutdown`, and serial links where neither
 endpoint config includes a `clock rate`.
 Use `pt730-topo apply --dry-run <plan.json>` to run those checks and print a
 plan summary without contacting Packet Tracer.
+Use `pt730-layout <plan.json> --output <layout.json>` to assign deterministic
+coordinates before safety checks, rendering, or live apply.  Supported styles
+are `auto`, `hierarchical`, `campus`, `lan`, `ring`, and `grid`; use
+`--preserve-existing` when a human has already placed some devices.
 Use `pt730-render markdown <plan.json>` for report-ready offline tables.  It
 includes link VLAN/notes, configured host IPs, inferred address groups, server
 service details, and IOS config counts.  Use `pt730-render summary <plan.json>`

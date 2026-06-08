@@ -2,8 +2,8 @@
 
 Local tooling for controlling and auditing Cisco Packet Tracer 7.3.0 through a
 Script Module bridge.  The repository focuses on reproducible offline checks,
-safe topology-plan rendering, and small guarded live operations for the fixed
-7.3.0 version used in the coursework.
+deterministic topology auto-layout, safe topology-plan rendering, and small
+guarded live operations for the fixed 7.3.0 version used in the coursework.
 
 This source release does **not** include Cisco Packet Tracer binaries, DLLs,
 crash dumps, or extracted Cisco application documentation.  Install Packet
@@ -11,8 +11,8 @@ Tracer separately and keep the application files outside Git.
 
 ## Contents
 
-- `pt-reverse/bin/`: command wrappers for launch, bridge, topology, render,
-  safety, app, IOS, PC, server, FTP, and terminal helpers.
+- `pt-reverse/bin/`: command wrappers for launch, bridge, topology, layout,
+  render, safety, app, IOS, PC, server, FTP, and terminal helpers.
 - `pt-reverse/pt730/`: Python implementations for offline validation, rendering,
   catalog lookup, and bridge helpers.
 - `pt-reverse/examples/`: topology JSON examples and locally generated Packet
@@ -33,6 +33,7 @@ Use the offline tools first:
 
 ```bash
 pt-reverse/bin/pt730-safety plan pt-reverse/course-design/college-network-topology-pt73-safe.json
+pt-reverse/bin/pt730-layout pt-reverse/course-design/college-network-topology-pt73-safe.json --style campus --preserve-existing --output college-network-topology-pt73-safe.layout.json
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```
