@@ -61,12 +61,15 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("wireless_link_styling", data["render_features"])
         self.assertIn("ap_config_summary", data["render_features"])
         self.assertIn("vlan_config_summary", data["render_features"])
+        self.assertIn("router_dhcp_pool_summary", data["render_features"])
         self.assertIn("security_policy_summary", data["render_features"])
         self.assertIn("lan_star", data["template_features"])
         self.assertIn("wireless_lan", data["template_features"])
         self.assertIn("vlan_router_on_stick", data["template_features"])
         self.assertIn("edge_security", data["template_features"])
         self.assertIn("ospf", data["template_features"])
+        self.assertIn("dhcp_client_hosts", data["template_features"])
+        self.assertIn("router_dhcp_pools", data["template_features"])
         self.assertIn("wireless_access_points", data["template_features"])
         self.assertIn("laptop_clients", data["template_features"])
         self.assertIn("ssid_metadata", data["template_features"])
@@ -109,6 +112,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10", data["recommended_workflow"])
+        self.assertIn("pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --client-addressing dhcp", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf", data["recommended_workflow"])
@@ -156,6 +160,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("wireless_lan", data["template_features"])
         self.assertIn("vlan_router_on_stick", data["template_features"])
         self.assertIn("edge_security", data["template_features"])
+        self.assertIn("router_dhcp_pools", data["template_features"])
 
 
 if __name__ == "__main__":

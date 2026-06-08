@@ -305,6 +305,40 @@ class RenderCliTest(unittest.TestCase):
         self.assertEqual(data["counts"]["vlan_configs"], 2)
         self.assertEqual(data["vlans"][1]["name"], "STUDENTS")
 
+    def test_markdown_and_summary_render_router_dhcp_pools(self) -> None:
+        plan = {
+            "devices": [{"name": "R1", "category": "router", "model": "2911"}],
+            "links": [],
+            "dhcp_pools": [
+                {
+                    "device": "R1",
+                    "name": "VLAN10",
+                    "vlan": 10,
+                    "network": "192.168.10.0",
+                    "mask": "255.255.255.0",
+                    "start": "192.168.10.20",
+                    "end": "192.168.10.200",
+                    "gateway": "192.168.10.1",
+                    "dns": "192.168.10.2",
+                }
+            ],
+        }
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            markdown_result = self.run_render("markdown", path)
+            summary_result = self.run_render("summary", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
+        self.assertIn("## Router DHCP Pools", markdown_result.stdout)
+        self.assertIn("| R1 | VLAN10 | 10 | 192.168.10.0 | 255.255.255.0 | 192.168.10.20 | 192.168.10.200 |", markdown_result.stdout)
+        self.assertEqual(summary_result.returncode, 0, summary_result.stderr)
+        data = json.loads(summary_result.stdout)
+        self.assertEqual(data["counts"]["dhcp_pools"], 1)
+        self.assertEqual(data["dhcp_pools"][0]["gateway"], "192.168.10.1")
+
     def test_summary_outputs_machine_readable_counts(self) -> None:
         result = self.run_render("summary", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))
         self.assertEqual(result.returncode, 0, result.stderr)

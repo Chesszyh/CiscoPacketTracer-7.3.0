@@ -91,6 +91,8 @@ class McpCliTest(unittest.TestCase):
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
         self.assertIn("group_by", render["inputSchema"]["properties"])
+        roas = next(tool for tool in tools if tool["name"] == "pt730_template_vlan_router_on_stick")
+        self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
         self.assertIn("ospf", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
@@ -493,6 +495,7 @@ class McpCliTest(unittest.TestCase):
                             "vlan_base": 10,
                             "native_vlan": 10,
                             "domain": "roas.local",
+                            "client_addressing": "dhcp",
                             "layout_style": "hierarchical",
                             "compact": True,
                         },
@@ -580,6 +583,8 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("--dns", wireless_command)
         self.assertIn("vlan-router-on-stick", roas_command)
         self.assertIn("--native-vlan", roas_command)
+        self.assertIn("--client-addressing", roas_command)
+        self.assertIn("dhcp", roas_command)
         self.assertIn("10", roas_command)
         self.assertIn("edge-security", edge_command)
         self.assertIn("--domain", edge_command)
@@ -603,8 +608,11 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(len(wireless_plan["ap_configs"]), 2)
         self.assertEqual(wireless_plan["pc_configs"][0]["dns"], "192.168.80.254")
         self.assertEqual(roas_plan["metadata"]["source"], "pt730-template vlan-router-on-stick")
+        self.assertEqual(roas_plan["metadata"]["client_addressing"], "dhcp")
         self.assertEqual(len(roas_plan["vlan_configs"]), 2)
+        self.assertEqual(len(roas_plan["dhcp_pools"]), 2)
         self.assertIn("encapsulation dot1Q 10 native", "\n".join(command for config in roas_plan["ios_configs"] for command in config["commands"]))
+        self.assertIn("ip dhcp pool VLAN10", "\n".join(command for config in roas_plan["ios_configs"] for command in config["commands"]))
         self.assertEqual(edge_plan["metadata"]["source"], "pt730-template edge-security")
         self.assertEqual(edge_plan["metadata"]["domain"], "sec.local")
         self.assertEqual(len(edge_plan["security_policies"]), 2)

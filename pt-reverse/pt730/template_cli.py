@@ -58,8 +58,8 @@ def schema() -> dict[str, Any]:
                 "options": ["--name", "--aps", "--laptops", "--servers", "--network", "--gateway", "--dns", "--ssid", "--layout-style", "--no-layout"],
             },
             "vlan-router-on-stick": {
-                "description": "One 2911 router, one 2960 switch, 802.1Q trunk, router subinterfaces, access VLANs, static hosts, and optional HTTP/DNS servers.",
-                "options": ["--name", "--vlans", "--hosts-per-vlan", "--servers-per-vlan", "--address-pool", "--vlan-prefix", "--vlan-base", "--native-vlan", "--domain", "--layout-style", "--no-layout"],
+                "description": "One 2911 router, one 2960 switch, 802.1Q trunk, router subinterfaces, access VLANs, static/DHCP hosts, optional router DHCP pools, and optional HTTP/DNS servers.",
+                "options": ["--name", "--vlans", "--hosts-per-vlan", "--servers-per-vlan", "--address-pool", "--vlan-prefix", "--vlan-base", "--native-vlan", "--domain", "--client-addressing static|dhcp", "--layout-style", "--no-layout"],
             },
             "edge-security": {
                 "description": "ISP edge router, inside LAN, DMZ servers, Internet test host, NAT overload, outside ACL, and static routes.",
@@ -314,6 +314,8 @@ def _last_gateway(network: ipaddress.IPv4Network) -> ipaddress.IPv4Address:
 
 
 def _host_list(network: ipaddress.IPv4Network, *, count: int, skip: set[ipaddress.IPv4Address]) -> list[ipaddress.IPv4Address]:
+    if count <= 0:
+        return []
     result: list[ipaddress.IPv4Address] = []
     for address in network.hosts():
         if address in skip:
@@ -335,6 +337,7 @@ def vlan_router_on_stick(
     vlan_base: int,
     native_vlan: int | None,
     domain: str,
+    client_addressing: str,
     layout_style: str,
     no_layout: bool,
 ) -> dict[str, Any]:
@@ -389,6 +392,7 @@ def vlan_router_on_stick(
         ],
         "pc_configs": [],
         "server_configs": [],
+        "dhcp_pools": [],
         "vlan_configs": [],
         "ios_configs": [],
         "metadata": {
@@ -398,6 +402,7 @@ def vlan_router_on_stick(
             "vlan_base": vlan_base,
             "native_vlan": native_vlan,
             "domain": domain,
+            "client_addressing": client_addressing,
         },
     }
 
@@ -405,10 +410,23 @@ def vlan_router_on_stick(
     first_server_by_vlan: dict[int, str] = {}
     for index, (vlan_id, network) in enumerate(zip(vlan_ids, networks), start=1):
         gateway = _host(network, 1)
-        addresses = _host_list(network, count=hosts_per_vlan + servers_per_vlan, skip={gateway})
+        if client_addressing == "dhcp":
+            server_addresses = _host_list(network, count=servers_per_vlan, skip={gateway})
+            dhcp_addresses = _host_list(network, count=hosts_per_vlan, skip={gateway, *server_addresses})
+            host_addresses: list[ipaddress.IPv4Address] = []
+            dhcp_pool = {"start": str(dhcp_addresses[0]), "end": str(dhcp_addresses[-1])} if dhcp_addresses else {}
+        else:
+            addresses = _host_list(network, count=hosts_per_vlan + servers_per_vlan, skip={gateway})
+            host_addresses = addresses[:hosts_per_vlan]
+            server_addresses = addresses[hosts_per_vlan:]
+            dhcp_pool = {}
         vlan_name = f"VLAN{vlan_id}"
-        vlan_infos.append({"id": vlan_id, "name": vlan_name, "network": network, "gateway": gateway, "addresses": addresses})
-        plan["vlan_configs"].append({"id": vlan_id, "name": vlan_name, "network": str(network), "gateway": str(gateway)})
+        vlan_infos.append({"id": vlan_id, "name": vlan_name, "network": network, "gateway": gateway, "host_addresses": host_addresses, "server_addresses": server_addresses, "dhcp_pool": dhcp_pool})
+        vlan_config = {"id": vlan_id, "name": vlan_name, "network": str(network), "gateway": str(gateway), "client_addressing": client_addressing}
+        if dhcp_pool:
+            vlan_config["dhcp_start"] = dhcp_pool["start"]
+            vlan_config["dhcp_end"] = dhcp_pool["end"]
+        plan["vlan_configs"].append(vlan_config)
 
     for info in vlan_infos:
         vlan_id = info["id"]
@@ -439,7 +457,7 @@ def vlan_router_on_stick(
     next_port = 1
     dns_ip = ""
     if servers_per_vlan:
-        first_server_address = vlan_infos[0]["addresses"][hosts_per_vlan]
+        first_server_address = vlan_infos[0]["server_addresses"][0]
         dns_ip = str(first_server_address)
 
     dns_records: list[dict[str, str]] = []
@@ -448,8 +466,7 @@ def vlan_router_on_stick(
         vlan_id = info["id"]
         network = info["network"]
         gateway = info["gateway"]
-        addresses = info["addresses"]
-        for host_index, address in enumerate(addresses[:hosts_per_vlan], start=1):
+        for host_index, address in enumerate(info["host_addresses"], start=1):
             host = f"PC-{slug}-V{vlan_id}-{host_index}"
             port = f"FastEthernet0/{next_port}"
             next_port += 1
@@ -458,7 +475,17 @@ def vlan_router_on_stick(
             plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": str(gateway), "dns": dns_ip})
             switch_commands.extend(["interface " + port, f"description ACCESS_VLAN_{vlan_id}", "switchport mode access", f"switchport access vlan {vlan_id}", "spanning-tree portfast", "no shutdown", "exit"])
 
-        for server_index, address in enumerate(addresses[hosts_per_vlan:], start=1):
+        if client_addressing == "dhcp":
+            for host_index in range(1, hosts_per_vlan + 1):
+                host = f"PC-{slug}-V{vlan_id}-{host_index}"
+                port = f"FastEthernet0/{next_port}"
+                next_port += 1
+                plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT", "vlan": vlan_id})
+                plan["links"].append({"a": switch, "pa": port, "b": host, "pb": "FastEthernet0", "cable": "straight", "vlan": vlan_id, "note": f"DHCP client access VLAN {vlan_id}"})
+                plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "dhcp": True})
+                switch_commands.extend(["interface " + port, f"description DHCP_CLIENT_VLAN_{vlan_id}", "switchport mode access", f"switchport access vlan {vlan_id}", "spanning-tree portfast", "no shutdown", "exit"])
+
+        for server_index, address in enumerate(info["server_addresses"], start=1):
             server = f"SRV-{slug}-V{vlan_id}-{server_index}"
             port = f"FastEthernet0/{next_port}"
             next_port += 1
@@ -473,6 +500,40 @@ def vlan_router_on_stick(
             plan["server_configs"].append({"name": server, **services})
             first_server_by_vlan[vlan_id] = str(address)
             switch_commands.extend(["interface " + port, f"description SERVER_VLAN_{vlan_id}", "switchport mode access", f"switchport access vlan {vlan_id}", "spanning-tree portfast", "no shutdown", "exit"])
+
+    if client_addressing == "dhcp" and hosts_per_vlan:
+        for info in vlan_infos:
+            router_commands.append(f"ip dhcp excluded-address {info['gateway']}")
+            for address in info["server_addresses"]:
+                router_commands.append(f"ip dhcp excluded-address {address}")
+        for info in vlan_infos:
+            pool = info["dhcp_pool"]
+            if not pool:
+                continue
+            pool_name = info["name"]
+            router_commands.extend(
+                [
+                    f"ip dhcp pool {pool_name}",
+                    f"network {info['network'].network_address} {_mask(info['network'])}",
+                    f"default-router {info['gateway']}",
+                ]
+            )
+            if dns_ip:
+                router_commands.append(f"dns-server {dns_ip}")
+            router_commands.extend([f"domain-name {domain}", "exit"])
+            plan["dhcp_pools"].append(
+                {
+                    "device": router,
+                    "name": pool_name,
+                    "vlan": info["id"],
+                    "network": str(info["network"].network_address),
+                    "mask": _mask(info["network"]),
+                    "start": pool["start"],
+                    "end": pool["end"],
+                    "gateway": str(info["gateway"]),
+                    "dns": dns_ip,
+                }
+            )
 
     if dns_server_name:
         for config in plan["server_configs"]:
@@ -950,6 +1011,7 @@ def main(argv: list[str] | None = None) -> int:
     roas_p.add_argument("--vlan-base", type=int, default=10)
     roas_p.add_argument("--native-vlan", type=int)
     roas_p.add_argument("--domain", default="roas.local")
+    roas_p.add_argument("--client-addressing", choices=("static", "dhcp"), default="static")
     roas_p.add_argument("--layout-style", choices=STYLES, default="hierarchical")
     roas_p.add_argument("--no-layout", action="store_true")
     roas_p.add_argument("--output", type=Path)
@@ -1059,6 +1121,7 @@ def main(argv: list[str] | None = None) -> int:
                     vlan_base=args.vlan_base,
                     native_vlan=args.native_vlan,
                     domain=args.domain,
+                    client_addressing=args.client_addressing,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

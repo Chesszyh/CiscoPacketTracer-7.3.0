@@ -849,6 +849,25 @@ def markdown(plan: dict[str, Any]) -> str:
         lines.extend(markdown_table(["VLAN", "Name", "Network", "Gateway", "Note"], vlan_rows))
         lines.append("")
 
+    dhcp_pool_rows = []
+    for pool in plan.get("dhcp_pools", []):
+        if isinstance(pool, dict):
+            dhcp_pool_rows.append([
+                pick(pool, ("device", "router")),
+                pick(pool, ("name", "pool")),
+                pick(pool, ("vlan", "vlan_id")),
+                pick(pool, ("network",)),
+                pick(pool, ("mask", "subnet_mask", "netmask")),
+                pick(pool, ("start", "start_ip", "first_ip")),
+                pick(pool, ("end", "end_ip", "last_ip")),
+                pick(pool, ("gateway", "default_router", "default_gateway")),
+                pick(pool, ("dns", "dns_server")),
+            ])
+    if dhcp_pool_rows:
+        lines.extend(["## Router DHCP Pools", ""])
+        lines.extend(markdown_table(["Device", "Pool", "VLAN", "Network", "Mask", "Start", "End", "Gateway", "DNS"], dhcp_pool_rows))
+        lines.append("")
+
     ap_rows = []
     for config in plan.get("ap_configs", []):
         if isinstance(config, dict):
@@ -969,6 +988,7 @@ def summary(plan: dict[str, Any]) -> str:
             "pc_configs": len(plan.get("pc_configs", [])),
             "ap_configs": len(plan.get("ap_configs", [])),
             "vlan_configs": len(plan.get("vlan_configs", [])),
+            "dhcp_pools": len(plan.get("dhcp_pools", [])),
             "server_configs": len(plan.get("server_configs", [])),
             "security_policies": len(plan.get("security_policies", [])),
             "ios_configs": len(plan.get("ios_configs", [])),
@@ -993,6 +1013,21 @@ def summary(plan: dict[str, Any]) -> str:
             }
             for config in plan.get("vlan_configs", [])
             if isinstance(config, dict)
+        ],
+        "dhcp_pools": [
+            {
+                "device": pick(pool, ("device", "router")),
+                "name": pick(pool, ("name", "pool")),
+                "vlan": pick(pool, ("vlan", "vlan_id")),
+                "network": pick(pool, ("network",)),
+                "mask": pick(pool, ("mask", "subnet_mask", "netmask")),
+                "start": pick(pool, ("start", "start_ip", "first_ip")),
+                "end": pick(pool, ("end", "end_ip", "last_ip")),
+                "gateway": pick(pool, ("gateway", "default_router", "default_gateway")),
+                "dns": pick(pool, ("dns", "dns_server")),
+            }
+            for pool in plan.get("dhcp_pools", [])
+            if isinstance(pool, dict)
         ],
         "noted_links": noted_links,
         "wireless": {

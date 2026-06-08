@@ -75,6 +75,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
         self.assertIn("ospf", " ".join(data["templates"]["wan-ring"]["options"]))
+        self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
 
     def test_lan_star_generates_static_hosts_server_services_and_layout(self) -> None:
         result = self.run_template(
@@ -200,6 +201,74 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("switchport trunk allowed vlan 10,11,12", joined)
         self.assertIn("switchport access vlan 12", joined)
         self.assertNotIn("3560-24PS", json.dumps(plan))
+        self.assert_safe_and_renderable(plan)
+
+    def test_vlan_router_on_stick_supports_router_dhcp_client_addressing(self) -> None:
+        result = self.run_template(
+            "vlan-router-on-stick",
+            "--name",
+            "DHCP",
+            "--vlans",
+            "2",
+            "--hosts-per-vlan",
+            "2",
+            "--servers-per-vlan",
+            "1",
+            "--address-pool",
+            "192.168.40.0/23",
+            "--vlan-base",
+            "30",
+            "--client-addressing",
+            "dhcp",
+            "--domain",
+            "dhcp.local",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(plan["metadata"]["client_addressing"], "dhcp")
+        self.assertEqual(len(plan["dhcp_pools"]), 2)
+        self.assertEqual(plan["dhcp_pools"][0]["name"], "VLAN30")
+        self.assertEqual(plan["dhcp_pools"][0]["start"], "192.168.40.3")
+        self.assertEqual(plan["dhcp_pools"][0]["end"], "192.168.40.4")
+        self.assertEqual(plan["dhcp_pools"][0]["dns"], "192.168.40.2")
+        pc_configs = {config["name"]: config for config in plan["pc_configs"]}
+        self.assertEqual(pc_configs["PC-DHCP-V30-1"]["dhcp"], True)
+        self.assertNotIn("ip", pc_configs["PC-DHCP-V30-1"])
+        self.assertEqual(pc_configs["SRV-DHCP-V30-1"]["ip"], "192.168.40.2")
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ip dhcp excluded-address 192.168.40.1", joined)
+        self.assertIn("ip dhcp excluded-address 192.168.40.2", joined)
+        self.assertIn("ip dhcp pool VLAN30", joined)
+        self.assertIn("network 192.168.40.0 255.255.255.0", joined)
+        self.assertIn("default-router 192.168.40.1", joined)
+        self.assertIn("dns-server 192.168.40.2", joined)
+        self.assertIn("domain-name dhcp.local", joined)
+        self.assert_safe_and_renderable(plan)
+
+    def test_vlan_router_on_stick_dhcp_allows_no_servers(self) -> None:
+        result = self.run_template(
+            "vlan-router-on-stick",
+            "--name",
+            "NOSRV",
+            "--vlans",
+            "1",
+            "--hosts-per-vlan",
+            "2",
+            "--servers-per-vlan",
+            "0",
+            "--address-pool",
+            "192.168.50.0/24",
+            "--client-addressing",
+            "dhcp",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(len(plan["server_configs"]), 0)
+        self.assertEqual(len([device for device in plan["devices"] if device["category"] == "server"]), 0)
+        self.assertEqual(plan["dhcp_pools"][0]["start"], "192.168.50.2")
+        self.assertEqual(plan["dhcp_pools"][0]["end"], "192.168.50.3")
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertNotIn("dns-server", joined)
         self.assert_safe_and_renderable(plan)
 
     def test_edge_security_generates_nat_acl_dmz_and_static_routes(self) -> None:
