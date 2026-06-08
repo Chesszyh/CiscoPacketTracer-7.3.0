@@ -46,6 +46,7 @@ class LabCliTest(unittest.TestCase):
         self.assertIn("--title", data["plan"]["optional"])
         self.assertIn("--legend", data["plan"]["optional"])
         self.assertEqual(data["template"]["render_options"]["formats"], ["svg", "drawio", "html", "markdown", "summary"])
+        self.assertIn("preset", data["template"]["render_options"])
         self.assertIn("title", data["template"]["render_options"])
         self.assertIn("legend", data["template"]["render_options"])
 
@@ -134,6 +135,31 @@ class LabCliTest(unittest.TestCase):
             self.assertFalse((out_dir / "render" / "small.svg").exists())
             self.assertFalse((out_dir / "configs").exists())
 
+    def test_template_report_preset_sets_report_render_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec = self.write_spec(
+                tmpdir,
+                {
+                    "name": "preset-demo",
+                    "template": "lan-star",
+                    "template_options": {"name": "PRESET", "pcs": 1, "servers": 1},
+                    "render": {"preset": "report"},
+                    "export_configs": False,
+                },
+            )
+            out_dir = Path(tmpdir) / "lab"
+            result = self.run_lab("template", str(spec), "--output-dir", str(out_dir))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["render_bundle"]["options"]["preset"], "report")
+            self.assertEqual(manifest["render_bundle"]["options"]["theme"], "paper")
+            self.assertEqual(manifest["render_bundle"]["options"]["link_labels"], False)
+            self.assertEqual(manifest["render_bundle"]["options"]["group_by"], "auto")
+            self.assertEqual(manifest["render_bundle"]["options"]["title"], "preset-demo")
+            self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
+            self.assertTrue((out_dir / "render" / "preset-demo.diagram-audit.json").exists())
+
     def test_plan_generates_lab_bundle_from_existing_topology_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "plan-lab"
@@ -171,6 +197,30 @@ class LabCliTest(unittest.TestCase):
             topology = json.loads((out_dir / "topology.json").read_text(encoding="utf-8"))
             self.assertEqual(topology["metadata"]["lab_bundle"]["name"], "serial-lab")
             self.assertEqual(topology["metadata"]["lab_bundle"]["plan"], "pt-reverse/examples/two-router-serial-configured.json")
+
+    def test_plan_report_preset_sets_report_render_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "plan-lab"
+            result = self.run_lab(
+                "plan",
+                "pt-reverse/examples/two-router-serial-configured.json",
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "serial-report",
+                "--preset",
+                "report",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["render_bundle"]["options"]["preset"], "report")
+            self.assertEqual(manifest["render_bundle"]["options"]["theme"], "paper")
+            self.assertEqual(manifest["render_bundle"]["options"]["link_labels"], False)
+            self.assertEqual(manifest["render_bundle"]["options"]["group_by"], "auto")
+            self.assertEqual(manifest["render_bundle"]["options"]["title"], "serial-report")
+            self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
+            self.assertTrue((out_dir / "render" / "serial-report.diagram-audit.json").exists())
 
     def test_report_generates_coursework_deliverable_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

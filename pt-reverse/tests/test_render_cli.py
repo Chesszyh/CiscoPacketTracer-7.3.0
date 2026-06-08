@@ -85,6 +85,15 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("Switch", result.stdout)
         self.assertIn("PC/Laptop", result.stdout)
 
+    def test_svg_report_preset_uses_report_friendly_defaults(self) -> None:
+        result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--preset", "report")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("background: #fbf7ef", result.stdout)
+        self.assertIn('<title id="title">simple-lan</title>', result.stdout)
+        self.assertIn('class="legend"', result.stdout)
+        self.assertIn("192.168.50.0/24 gw 192.168.50.1", result.stdout)
+        self.assertNotIn("GigabitEthernet0/0", result.stdout)
+
     def test_svg_can_render_network_group_boxes(self) -> None:
         result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--group-by", "network")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -386,6 +395,15 @@ class RenderCliTest(unittest.TestCase):
         self.assertEqual(data["checks"]["counts"]["rendered_devices"], 3)
         self.assertEqual(data["checks"]["components"]["count"], 1)
 
+    def test_diagram_audit_accepts_report_preset_options(self) -> None:
+        result = self.run_render("diagram-audit", str(ROOT / "examples" / "simple-lan.json"), "--preset", "report")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["checks"]["render_options"]["preset"], "report")
+        self.assertEqual(data["checks"]["render_options"]["group_by"], "auto")
+        self.assertEqual(data["checks"]["render_options"]["legend"], True)
+
     def test_diagram_audit_reports_layout_warnings_without_failing(self) -> None:
         plan = {
             "devices": [
@@ -523,6 +541,31 @@ class RenderCliTest(unittest.TestCase):
             self.assertEqual(manifest["artifacts"]["diagram-audit"], "simple.diagram-audit.json")
             audit_data = json.loads((out_dir / "simple.diagram-audit.json").read_text(encoding="utf-8"))
             self.assertEqual(audit_data["kind"], "pt730-diagram-audit")
+
+    def test_bundle_report_preset_adds_report_defaults_and_diagram_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "bundle"
+            result = self.run_render(
+                "bundle",
+                str(ROOT / "examples" / "simple-lan.json"),
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "report-simple",
+                "--preset",
+                "report",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["options"]["preset"], "report")
+            self.assertEqual(manifest["options"]["theme"], "paper")
+            self.assertEqual(manifest["options"]["link_labels"], False)
+            self.assertEqual(manifest["options"]["group_by"], "auto")
+            self.assertEqual(manifest["options"]["title"], "report-simple")
+            self.assertEqual(manifest["options"]["legend"], True)
+            self.assertEqual(manifest["diagram_audit"], {"ok": True, "exit_code": 0})
+            self.assertTrue((out_dir / "report-simple.diagram-audit.json").exists())
 
     def test_course_audit_accepts_course_design_plan(self) -> None:
         result = self.run_render("course-audit", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))

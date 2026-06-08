@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from config_plan_cli import export_config_files
-from render_cli import BUNDLE_DEFAULT_FORMATS, RENDER_GROUP_BY, RENDER_THEMES, RenderOptions, parse_bundle_formats, render_bundle
+from render_cli import BUNDLE_DEFAULT_FORMATS, RENDER_GROUP_BY, RENDER_PRESETS, RENDER_THEMES, RenderOptions, default_bundle_formats, parse_bundle_formats, preset_render_defaults, render_bundle
 from safety_cli import check_plan, summarize
 from template_cli import (
     campus,
@@ -192,7 +192,7 @@ TEMPLATES: dict[str, TemplateDefinition] = {
 }
 
 TOP_LEVEL_KEYS = {"name", "template", "template_options", "render", "strict_safety", "export_configs", "config_source", "compact"}
-RENDER_KEYS = {"basename", "formats", "direction", "theme", "link_labels", "model_labels", "group_by", "title", "legend"}
+RENDER_KEYS = {"basename", "formats", "direction", "theme", "link_labels", "model_labels", "group_by", "title", "legend", "preset"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -412,6 +412,15 @@ def _bool_value(spec: dict[str, Any], key: str, *, default: bool) -> bool:
     return value
 
 
+def _optional_bool_value(spec: dict[str, Any], key: str) -> bool | None:
+    if key not in spec:
+        return None
+    value = spec[key]
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
 def _string_value(spec: dict[str, Any], key: str, *, default: str = "") -> str:
     if key not in spec or spec[key] is None:
         return default
@@ -443,25 +452,40 @@ def _render_settings_from_values(
     basename: str,
     formats: Any,
     direction: str,
-    theme: str,
-    link_labels: bool,
-    model_labels: bool,
-    group_by: str,
+    preset: str,
+    theme: str | None,
+    link_labels: bool | None,
+    model_labels: bool | None,
+    group_by: str | None,
     title: str,
-    legend: bool,
+    legend: bool | None,
 ) -> dict[str, Any]:
     safe_basename = _safe_basename(basename)
+    if preset not in RENDER_PRESETS:
+        raise ValueError(f"render.preset must be one of: {', '.join(RENDER_PRESETS)}")
+    defaults = preset_render_defaults(preset)
+    resolved_theme = theme or defaults["theme"]
+    resolved_group_by = group_by or defaults["group_by"]
     if direction not in {"LR", "TD", "TB", "RL", "BT"}:
         raise ValueError("render.direction must be one of: LR, TD, TB, RL, BT")
-    if theme not in RENDER_THEMES:
+    if resolved_theme not in RENDER_THEMES:
         raise ValueError(f"render.theme must be one of: {', '.join(RENDER_THEMES)}")
-    if group_by not in RENDER_GROUP_BY:
+    if resolved_group_by not in RENDER_GROUP_BY:
         raise ValueError(f"render.group_by must be one of: {', '.join(RENDER_GROUP_BY)}")
+    resolved_title = title or (safe_basename if preset == "report" else "")
     return {
         "basename": safe_basename,
-        "formats": _parse_formats(formats),
+        "formats": _parse_formats(formats if formats is not None else default_bundle_formats(preset)),
         "direction": direction,
-        "options": RenderOptions(theme=theme, link_labels=link_labels, model_labels=model_labels, group_by=group_by, title=title, legend=legend),
+        "options": RenderOptions(
+            theme=resolved_theme,
+            link_labels=defaults["link_labels"] if link_labels is None else link_labels,
+            model_labels=defaults["model_labels"] if model_labels is None else model_labels,
+            group_by=resolved_group_by,
+            title=resolved_title,
+            legend=defaults["legend"] if legend is None else legend,
+            preset=preset,
+        ),
     }
 
 
@@ -476,12 +500,13 @@ def _render_settings(spec: dict[str, Any], *, lab_name: str, template_name: str)
         basename=_string_value(render, "basename", default=lab_name or template_name),
         formats=render.get("formats"),
         direction=_string_value(render, "direction", default="LR"),
-        theme=_string_value(render, "theme", default="light"),
-        link_labels=_bool_value(render, "link_labels", default=True),
-        model_labels=_bool_value(render, "model_labels", default=True),
-        group_by=_string_value(render, "group_by", default="none"),
+        preset=_string_value(render, "preset", default="manual"),
+        theme=_string_value(render, "theme", default="") or None,
+        link_labels=_optional_bool_value(render, "link_labels"),
+        model_labels=_optional_bool_value(render, "model_labels"),
+        group_by=_string_value(render, "group_by", default="") or None,
         title=_string_value(render, "title", default=""),
-        legend=_bool_value(render, "legend", default=False),
+        legend=_optional_bool_value(render, "legend"),
     )
 
 
@@ -515,6 +540,7 @@ def schema() -> dict[str, Any]:
                 "basename": "file stem for render artifacts; defaults to name or template",
                 "formats": list(BUNDLE_DEFAULT_FORMATS),
                 "direction": ["LR", "TD", "TB", "RL", "BT"],
+                "preset": list(RENDER_PRESETS),
                 "theme": list(RENDER_THEMES),
                 "link_labels": True,
                 "model_labels": True,
@@ -527,7 +553,7 @@ def schema() -> dict[str, Any]:
         "plan": {
             "description": "Generate the same offline lab bundle from an existing topology plan JSON.",
             "required": ["plan", "--output-dir"],
-            "optional": ["--name", "--basename", "--formats", "--direction", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--title", "--legend", "--strict-safety", "--no-configs", "--config-source", "--compact"],
+            "optional": ["--name", "--basename", "--formats", "--direction", "--preset", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--title", "--legend", "--strict-safety", "--no-configs", "--config-source", "--compact"],
             "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
         },
         "report": {
@@ -558,7 +584,7 @@ def schema() -> dict[str, Any]:
                 "routing": "ospf",
                 "layout_style": "campus",
             },
-            "render": {"basename": "enterprise-demo", "formats": ["svg", "drawio", "html", "markdown", "summary"], "theme": "paper", "group_by": "auto"},
+            "render": {"basename": "enterprise-demo", "preset": "report"},
             "strict_safety": False,
             "export_configs": True,
         },
@@ -682,14 +708,15 @@ def lab_plan(
     output_dir: Path,
     name: str,
     basename: str,
-    formats: str,
+    formats: Any,
     direction: str,
-    theme: str,
-    link_labels: bool,
-    model_labels: bool,
-    group_by: str,
+    preset: str,
+    theme: str | None,
+    link_labels: bool | None,
+    model_labels: bool | None,
+    group_by: str | None,
     title: str,
-    legend: bool,
+    legend: bool | None,
     strict_safety: bool,
     export_configs: bool,
     config_source: str,
@@ -701,6 +728,7 @@ def lab_plan(
         basename=basename or lab_name,
         formats=formats,
         direction=direction,
+        preset=preset,
         theme=theme,
         link_labels=link_labels,
         model_labels=model_labels,
@@ -754,14 +782,15 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--output-dir", type=Path, required=True)
     plan_p.add_argument("--name", default="", help="logical lab name; defaults to the plan filename stem")
     plan_p.add_argument("--basename", default="", help="render artifact filename stem; defaults to --name or the plan filename stem")
-    plan_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit")
+    plan_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit; defaults depend on --preset")
     plan_p.add_argument("--direction", choices=("LR", "TD", "TB", "RL", "BT"), default="LR", help="Mermaid direction when mermaid is included")
-    plan_p.add_argument("--theme", choices=RENDER_THEMES, default="light", help="diagram color theme")
-    plan_p.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=True, help="hide link port/cable/VLAN labels")
-    plan_p.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=True, help="hide device model labels")
-    plan_p.add_argument("--group-by", choices=RENDER_GROUP_BY, default="none", help="draw visual group boxes by network, VLAN, site, category, or auto detection")
+    plan_p.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, auto grouping, legend, hidden link labels, and report bundle formats")
+    plan_p.add_argument("--theme", choices=RENDER_THEMES, default=None, help="diagram color theme")
+    plan_p.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=None, help="hide link port/cable/VLAN labels")
+    plan_p.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=None, help="hide device model labels")
+    plan_p.add_argument("--group-by", choices=RENDER_GROUP_BY, default=None, help="draw visual group boxes by network, VLAN, site, category, or auto detection")
     plan_p.add_argument("--title", default="", help="visible diagram title for SVG, draw.io, and HTML renders")
-    plan_p.add_argument("--legend", action="store_true", help="include a visible device/link legend in SVG, draw.io, and HTML renders")
+    plan_p.add_argument("--legend", action="store_true", default=None, help="include a visible device/link legend in SVG, draw.io, and HTML renders")
     plan_p.add_argument("--strict-safety", action="store_true", help="treat plan safety warnings as failures")
     plan_p.add_argument("--no-configs", action="store_false", dest="export_configs", default=True, help="skip per-device .cfg export")
     plan_p.add_argument("--config-source", default="", help="only export ios_configs matching this source")
@@ -788,6 +817,7 @@ def main(argv: list[str] | None = None) -> int:
                 basename=args.basename,
                 formats=args.formats,
                 direction=args.direction,
+                preset=args.preset,
                 theme=args.theme,
                 link_labels=args.link_labels,
                 model_labels=args.model_labels,

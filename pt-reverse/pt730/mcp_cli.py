@@ -18,7 +18,9 @@ SERVER_INFO = {"name": "pt730-mcp", "version": "0.1.0"}
 LAYOUT_STYLES = {"auto", "hierarchical", "campus", "lan", "ring", "grid"}
 RENDER_THEMES = {"light", "dark", "paper"}
 VISUAL_RENDER_FORMATS = {"svg", "drawio", "html"}
+RENDER_OPTION_FORMATS = VISUAL_RENDER_FORMATS | {"diagram-audit"}
 RENDER_GROUP_BY = {"none", "auto", "network", "vlan", "site", "category"}
+RENDER_PRESETS = {"manual", "report"}
 BUNDLE_RENDER_FORMATS = {"mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"}
 
 
@@ -220,41 +222,48 @@ def tool_render(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     if fmt == "mermaid":
         direction = enum_arg(args, "direction", {"LR", "TD", "TB", "RL", "BT"}, default="LR")
         command.extend(["--direction", direction])
+    preset = str_arg(args, "preset", required=False)
+    if preset:
+        if fmt not in VISUAL_RENDER_FORMATS and fmt not in {"mermaid", "diagram-audit"}:
+            raise ToolError("preset is supported only for mermaid, svg, drawio, html, or diagram-audit renders")
+        if preset not in RENDER_PRESETS:
+            raise ToolError("preset must be one of: manual, report")
+        command.extend(["--preset", preset])
     theme = str_arg(args, "theme", required=False)
     if theme:
-        if fmt not in VISUAL_RENDER_FORMATS:
-            raise ToolError("theme is supported only for svg, drawio, or html renders")
+        if fmt not in RENDER_OPTION_FORMATS:
+            raise ToolError("theme is supported only for svg, drawio, html, or diagram-audit renders")
         if theme not in RENDER_THEMES:
             raise ToolError("theme must be one of: dark, light, paper")
         command.extend(["--theme", theme])
     link_labels = optional_bool_arg(args, "link_labels")
     if link_labels is not None:
-        if fmt not in VISUAL_RENDER_FORMATS and fmt != "mermaid":
-            raise ToolError("link_labels is supported only for mermaid, svg, drawio, or html renders")
+        if fmt not in RENDER_OPTION_FORMATS and fmt != "mermaid":
+            raise ToolError("link_labels is supported only for mermaid, svg, drawio, html, or diagram-audit renders")
         if not link_labels:
             command.append("--no-link-labels")
     model_labels = optional_bool_arg(args, "model_labels")
     if model_labels is not None:
-        if fmt not in VISUAL_RENDER_FORMATS:
-            raise ToolError("model_labels is supported only for svg, drawio, or html renders")
+        if fmt not in RENDER_OPTION_FORMATS:
+            raise ToolError("model_labels is supported only for svg, drawio, html, or diagram-audit renders")
         if not model_labels:
             command.append("--no-model-labels")
     group_by = str_arg(args, "group_by", required=False)
     if group_by:
-        if fmt not in VISUAL_RENDER_FORMATS:
-            raise ToolError("group_by is supported only for svg, drawio, or html renders")
+        if fmt not in RENDER_OPTION_FORMATS:
+            raise ToolError("group_by is supported only for svg, drawio, html, or diagram-audit renders")
         if group_by not in RENDER_GROUP_BY:
             raise ToolError("group_by must be one of: auto, category, network, none, site, vlan")
         command.extend(["--group-by", group_by])
     title = str_arg(args, "title", required=False)
     if title:
-        if fmt not in VISUAL_RENDER_FORMATS:
-            raise ToolError("title is supported only for svg, drawio, or html renders")
+        if fmt not in RENDER_OPTION_FORMATS:
+            raise ToolError("title is supported only for svg, drawio, html, or diagram-audit renders")
         command.extend(["--title", title])
     legend = optional_bool_arg(args, "legend")
     if legend is not None:
-        if fmt not in VISUAL_RENDER_FORMATS:
-            raise ToolError("legend is supported only for svg, drawio, or html renders")
+        if fmt not in RENDER_OPTION_FORMATS:
+            raise ToolError("legend is supported only for svg, drawio, html, or diagram-audit renders")
         if legend:
             command.append("--legend")
     return run_cli(root, command)
@@ -275,6 +284,11 @@ def tool_render_bundle(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         command.extend(["--formats", ",".join(formats)])
     direction = enum_arg(args, "direction", {"LR", "TD", "TB", "RL", "BT"}, default="LR")
     command.extend(["--direction", direction])
+    preset = str_arg(args, "preset", required=False)
+    if preset:
+        if preset not in RENDER_PRESETS:
+            raise ToolError("preset must be one of: manual, report")
+        command.extend(["--preset", preset])
     theme = str_arg(args, "theme", required=False)
     if theme:
         if theme not in RENDER_THEMES:
@@ -324,6 +338,11 @@ def tool_lab_plan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         command.extend(["--formats", ",".join(formats)])
     direction = enum_arg(args, "direction", {"LR", "TD", "TB", "RL", "BT"}, default="LR")
     command.extend(["--direction", direction])
+    preset = str_arg(args, "preset", required=False)
+    if preset:
+        if preset not in RENDER_PRESETS:
+            raise ToolError("preset must be one of: manual, report")
+        command.extend(["--preset", preset])
     theme = str_arg(args, "theme", required=False)
     if theme:
         if theme not in RENDER_THEMES:
@@ -1473,10 +1492,10 @@ def tools() -> list[dict[str, Any]]:
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
         tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
-        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, or diagram-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
-        tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
+        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, or diagram-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
+        tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_lab_template", "Generate a full offline lab bundle from one template spec JSON: topology, safety report, render bundle, configs, and manifest.", schema({"spec": string, "output_dir": string, "strict_safety": boolean, "compact": boolean}, ["spec", "output_dir"]), tool_lab_template),
-        tool("pt730_lab_plan", "Generate a full offline lab bundle from an existing topology plan JSON: topology copy, safety report, render bundle, configs, and manifest.", schema({"plan": string, "output_dir": string, "name": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "export_configs": boolean, "config_source": string, "compact": boolean}, ["plan", "output_dir"]), tool_lab_plan),
+        tool("pt730_lab_plan", "Generate a full offline lab bundle from an existing topology plan JSON: topology copy, safety report, render bundle, configs, and manifest.", schema({"plan": string, "output_dir": string, "name": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "export_configs": boolean, "config_source": string, "compact": boolean}, ["plan", "output_dir"]), tool_lab_plan),
         tool("pt730_lab_report", "Generate a Markdown coursework/deliverable index from a pt730-lab manifest.json.", schema({"manifest": string, "output": string, "title": string, "compact": boolean}, ["manifest"]), tool_lab_report),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),

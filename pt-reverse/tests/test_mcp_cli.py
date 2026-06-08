@@ -96,6 +96,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_live_recover", names)
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
+        self.assertIn("preset", render["inputSchema"]["properties"])
         self.assertIn("group_by", render["inputSchema"]["properties"])
         self.assertIn("title", render["inputSchema"]["properties"])
         self.assertIn("legend", render["inputSchema"]["properties"])
@@ -103,6 +104,7 @@ class McpCliTest(unittest.TestCase):
         bundle = next(tool for tool in tools if tool["name"] == "pt730_render_bundle")
         self.assertIn("output_dir", bundle["inputSchema"]["required"])
         self.assertIn("formats", bundle["inputSchema"]["properties"])
+        self.assertIn("preset", bundle["inputSchema"]["properties"])
         self.assertIn("title", bundle["inputSchema"]["properties"])
         self.assertIn("legend", bundle["inputSchema"]["properties"])
         self.assertIn("diagram-audit", bundle["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
@@ -112,6 +114,7 @@ class McpCliTest(unittest.TestCase):
         lab_plan = next(tool for tool in tools if tool["name"] == "pt730_lab_plan")
         self.assertIn("plan", lab_plan["inputSchema"]["required"])
         self.assertIn("formats", lab_plan["inputSchema"]["properties"])
+        self.assertIn("preset", lab_plan["inputSchema"]["properties"])
         self.assertIn("title", lab_plan["inputSchema"]["properties"])
         self.assertIn("legend", lab_plan["inputSchema"]["properties"])
         self.assertIn("diagram-audit", lab_plan["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
@@ -316,6 +319,50 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("R_DEMO --- SW_DEMO", mermaid_result["structuredContent"]["stdout"])
         self.assertNotIn("GigabitEthernet0/0", mermaid_result["structuredContent"]["stdout"])
 
+    def test_render_tool_exposes_report_preset(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "svg",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "preset": "report",
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "diagram-audit",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "preset": "report",
+                        },
+                    },
+                },
+            ]
+        )
+        svg_result = responses[0]["result"]
+        audit_result = responses[1]["result"]
+        self.assertEqual(svg_result["isError"], False)
+        self.assertIn("--preset", svg_result["structuredContent"]["command"])
+        self.assertIn("report", svg_result["structuredContent"]["command"])
+        self.assertIn("background: #fbf7ef", svg_result["structuredContent"]["stdout"])
+        self.assertIn("simple-lan", svg_result["structuredContent"]["stdout"])
+        self.assertNotIn("GigabitEthernet0/0", svg_result["structuredContent"]["stdout"])
+        self.assertEqual(audit_result["isError"], False)
+        audit = json.loads(audit_result["structuredContent"]["stdout"])
+        self.assertEqual(audit["checks"]["render_options"]["preset"], "report")
+        self.assertEqual(audit["checks"]["render_options"]["group_by"], "auto")
+
     def test_render_tool_rejects_visual_options_for_non_visual_formats(self) -> None:
         responses = self.run_mcp(
             [
@@ -379,6 +426,27 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(responses[0]["error"]["code"], -32602)
         self.assertIn("legend is supported only", responses[0]["error"]["message"])
 
+    def test_render_tool_rejects_preset_for_non_visual_formats(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "summary",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "preset": "report",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("preset is supported only", responses[0]["error"]["message"])
+
     def test_tools_call_render_bundle_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "mcp-render-bundle"
@@ -429,6 +497,39 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "mcp-simple.summary.json").exists())
             self.assertTrue((out_dir / "mcp-simple.diagram-audit.json").exists())
             self.assertTrue((out_dir / "mcp-simple.manifest.json").exists())
+
+    def test_tools_call_render_bundle_report_preset_generates_report_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "mcp-render-bundle"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_render_bundle",
+                            "arguments": {
+                                "plan": "pt-reverse/examples/simple-lan.json",
+                                "output_dir": str(out_dir),
+                                "basename": "mcp-report",
+                                "preset": "report",
+                            },
+                        },
+                    }
+                ]
+            )
+            result = responses[0]["result"]
+            self.assertEqual(result["isError"], False)
+            self.assertIn("--preset", result["structuredContent"]["command"])
+            manifest = json.loads(result["structuredContent"]["stdout"])
+            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["options"]["preset"], "report")
+            self.assertEqual(manifest["options"]["theme"], "paper")
+            self.assertEqual(manifest["options"]["link_labels"], False)
+            self.assertEqual(manifest["options"]["group_by"], "auto")
+            self.assertEqual(manifest["options"]["legend"], True)
+            self.assertTrue((out_dir / "mcp-report.diagram-audit.json").exists())
 
     def test_tools_call_lab_template_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -533,6 +634,40 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "render" / "mcp-serial.svg").exists())
             self.assertTrue((out_dir / "render" / "mcp-serial.diagram-audit.json").exists())
             self.assertTrue((out_dir / "configs" / "R_AUTO1.cfg").exists())
+
+    def test_tools_call_lab_plan_report_preset_generates_report_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "mcp-plan-lab"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_lab_plan",
+                            "arguments": {
+                                "plan": "pt-reverse/examples/two-router-serial-configured.json",
+                                "output_dir": str(out_dir),
+                                "basename": "mcp-serial-report",
+                                "preset": "report",
+                                "compact": True,
+                            },
+                        },
+                    }
+                ]
+            )
+            result = responses[0]["result"]
+            self.assertEqual(result["isError"], False)
+            self.assertIn("--preset", result["structuredContent"]["command"])
+            manifest = json.loads(result["structuredContent"]["stdout"])
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["render_bundle"]["options"]["preset"], "report")
+            self.assertEqual(manifest["render_bundle"]["options"]["theme"], "paper")
+            self.assertEqual(manifest["render_bundle"]["options"]["link_labels"], False)
+            self.assertEqual(manifest["render_bundle"]["options"]["group_by"], "auto")
+            self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
+            self.assertTrue((out_dir / "render" / "mcp-serial-report.diagram-audit.json").exists())
 
     def test_tools_call_lab_report_generates_markdown_or_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

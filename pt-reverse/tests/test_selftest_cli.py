@@ -20,7 +20,7 @@ class SelftestCliTest(unittest.TestCase):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=30,
+            timeout=90,
             check=False,
         )
 

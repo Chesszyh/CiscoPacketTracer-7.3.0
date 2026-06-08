@@ -34,6 +34,7 @@ pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dm
 pt-reverse/bin/pt730-lab schema
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
 pt-reverse/bin/pt730-lab plan pt-reverse/examples/two-router-serial-configured.json --output-dir plan-lab --basename serial --formats svg,summary,diagram-audit --title "Serial Lab" --legend
+pt-reverse/bin/pt730-lab plan pt-reverse/examples/two-router-serial-configured.json --output-dir report-lab --basename serial --preset report
 pt-reverse/bin/pt730-lab report plan-lab/manifest.json --output plan-lab/deliverable.md
 pt-reverse/bin/pt730-pipeline schema
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
@@ -55,6 +56,7 @@ pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --title "Simple LAN" --legend
+pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-report --basename simple-lan --preset report
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```
 
@@ -90,9 +92,11 @@ campus L3 routing, layout, no-layout, compact, router DHCP pools, DHCP client
 hosts, and naming controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
-Render MCP tools expose visual theme, title, legend, label, and visual grouping
+Render MCP tools expose visual preset, theme, title, legend, label, and visual grouping
 controls through `pt730_render` for SVG, draw.io, HTML, and Mermaid where
 supported, plus JSON summary, course audit, and diagram-quality audit outputs.
+Use `preset=report` for paper theme, automatic grouping, a visible legend,
+hidden link labels, and report bundle defaults that include `diagram-audit`.
 The `pt730_render_bundle` MCP tool writes a multi-format render bundle plus a
 manifest in one offline call.
 The `pt730_lab_template` MCP tool writes a complete offline lab bundle from one
@@ -371,7 +375,9 @@ labels, and `group_by` in the same file. Use `pt730-lab plan <plan.json> --outpu
 composed a custom topology JSON. Use `pt730-lab report <out-dir>/manifest.json
 --output <out-dir>/deliverable.md` to generate a Markdown coursework index with
 artifact paths, safety status, render outputs, config files, and suggested
-recording checks.
+recording checks. Add `--preset report` or set `render.preset` to `report` when
+the agent should use paper theme, automatic grouping, a legend, hidden link
+labels, and default render formats that include `diagram-audit`.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing ospf` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered
@@ -410,6 +416,9 @@ For cleaner large diagrams, add `--theme light|dark|paper`, `--title <title>`,
 `--legend`, `--no-link-labels`, `--no-model-labels`, or
 `--group-by auto|network|vlan|site|category` to SVG/draw.io/HTML renders;
 Mermaid supports `--no-link-labels`.
+Use `--preset report` on SVG/draw.io/HTML, `diagram-audit`, `bundle`, or
+`pt730-lab plan` when a report-ready default is preferred over hand-picking each
+visual option.
 Use `pt730-render diagram-audit <plan.json>` before final screenshots to catch
 empty plans, missing coordinates, close device overlaps, disconnected
 components, oversized canvases, and dense-label/grouping issues without opening

@@ -25,8 +25,10 @@ COURSE_EXPECTED_SERVERS = 50
 COURSE_EXPECTED_PCS = 1900
 RENDER_THEMES = ("light", "dark", "paper")
 RENDER_GROUP_BY = ("none", "auto", "network", "vlan", "site", "category")
+RENDER_PRESETS = ("manual", "report")
 BUNDLE_RENDER_FORMATS = ("mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit")
 BUNDLE_DEFAULT_FORMATS = ("svg", "drawio", "html", "markdown", "summary")
+BUNDLE_REPORT_FORMATS = ("svg", "drawio", "html", "markdown", "summary", "diagram-audit")
 DIAGRAM_AUDIT_OVERLAP_X = 120.0
 DIAGRAM_AUDIT_OVERLAP_Y = 90.0
 DIAGRAM_AUDIT_MAX_WIDTH = 1800.0
@@ -53,6 +55,7 @@ class RenderOptions:
     group_by: str = "none"
     title: str = ""
     legend: bool = False
+    preset: str = "manual"
 
 
 def render_palette(theme: str) -> dict[str, str]:
@@ -1532,6 +1535,7 @@ def diagram_audit(plan: dict[str, Any], *, options: RenderOptions = RenderOption
                 "components": components,
             },
             "render_options": {
+                "preset": options.preset,
                 "link_labels": options.link_labels,
                 "model_labels": options.model_labels,
                 "group_by": options.group_by,
@@ -1558,6 +1562,32 @@ def parse_bundle_formats(value: str) -> list[str]:
     if not formats:
         raise ValueError("bundle formats cannot be empty")
     return formats
+
+
+def default_bundle_formats(preset: str) -> str:
+    if preset == "report":
+        return ",".join(BUNDLE_REPORT_FORMATS)
+    return ",".join(BUNDLE_DEFAULT_FORMATS)
+
+
+def preset_render_defaults(preset: str) -> dict[str, Any]:
+    if preset == "report":
+        return {
+            "theme": "paper",
+            "link_labels": False,
+            "model_labels": True,
+            "group_by": "auto",
+            "title": "",
+            "legend": True,
+        }
+    return {
+        "theme": "light",
+        "link_labels": True,
+        "model_labels": True,
+        "group_by": "none",
+        "title": "",
+        "legend": False,
+    }
 
 
 def bundle_filename(basename: str, fmt: str) -> str:
@@ -1630,6 +1660,7 @@ def render_bundle(
         "bytes": bytes_written,
         "exit_codes": exit_codes,
         "options": {
+            "preset": options.preset,
             "theme": options.theme,
             "link_labels": options.link_labels,
             "model_labels": options.model_labels,
@@ -1666,26 +1697,35 @@ def emit(text: str, output: Path | None) -> None:
 
 
 def add_link_label_option(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=True, help="hide link port/cable/VLAN labels")
+    parser.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=None, help="hide link port/cable/VLAN labels")
+
+
+def add_preset_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, auto grouping, legend, hidden link labels, and report bundle formats")
 
 
 def add_visual_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--theme", choices=RENDER_THEMES, default="light", help="diagram color theme")
+    add_preset_option(parser)
+    parser.add_argument("--theme", choices=RENDER_THEMES, default=None, help="diagram color theme")
     add_link_label_option(parser)
-    parser.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=True, help="hide device model labels")
-    parser.add_argument("--group-by", choices=RENDER_GROUP_BY, default="none", help="draw visual group boxes by network, VLAN, site, category, or auto detection")
+    parser.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=None, help="hide device model labels")
+    parser.add_argument("--group-by", choices=RENDER_GROUP_BY, default=None, help="draw visual group boxes by network, VLAN, site, category, or auto detection")
     parser.add_argument("--title", default="", help="visible diagram title for SVG, draw.io, and HTML renders")
-    parser.add_argument("--legend", action="store_true", help="include a visible device/link legend in SVG, draw.io, and HTML renders")
+    parser.add_argument("--legend", action="store_true", default=None, help="include a visible device/link legend in SVG, draw.io, and HTML renders")
 
 
-def render_options(args: argparse.Namespace) -> RenderOptions:
+def render_options(args: argparse.Namespace, *, default_title: str = "") -> RenderOptions:
+    preset = getattr(args, "preset", "manual")
+    defaults = preset_render_defaults(preset)
+    title = getattr(args, "title", "") or (default_title if preset == "report" else "")
     return RenderOptions(
-        theme=getattr(args, "theme", "light"),
-        link_labels=getattr(args, "link_labels", True),
-        model_labels=getattr(args, "model_labels", True),
-        group_by=getattr(args, "group_by", "none"),
-        title=getattr(args, "title", ""),
-        legend=getattr(args, "legend", False),
+        theme=getattr(args, "theme", None) or defaults["theme"],
+        link_labels=defaults["link_labels"] if getattr(args, "link_labels", None) is None else getattr(args, "link_labels"),
+        model_labels=defaults["model_labels"] if getattr(args, "model_labels", None) is None else getattr(args, "model_labels"),
+        group_by=getattr(args, "group_by", None) or defaults["group_by"],
+        title=title,
+        legend=defaults["legend"] if getattr(args, "legend", None) is None else getattr(args, "legend"),
+        preset=preset,
     )
 
 
@@ -1699,6 +1739,7 @@ def main(argv: list[str] | None = None) -> int:
     mermaid_p.add_argument("plan", type=Path)
     mermaid_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"])
     mermaid_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_preset_option(mermaid_p)
     add_link_label_option(mermaid_p)
 
     svg_p = sub.add_parser("svg", help="render a plan as an offline SVG topology diagram")
@@ -1731,12 +1772,13 @@ def main(argv: list[str] | None = None) -> int:
     diagram_audit_p = sub.add_parser("diagram-audit", help="audit offline diagram readability and render suitability")
     diagram_audit_p.add_argument("plan", type=Path)
     diagram_audit_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_visual_options(diagram_audit_p)
 
     bundle_p = sub.add_parser("bundle", help="render one plan into multiple offline review artifacts and a manifest")
     bundle_p.add_argument("plan", type=Path)
     bundle_p.add_argument("--output-dir", type=Path, required=True, help="directory for generated artifacts")
     bundle_p.add_argument("--basename", default="topology", help="artifact filename prefix")
-    bundle_p.add_argument("--formats", default=",".join(BUNDLE_DEFAULT_FORMATS), help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit")
+    bundle_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit; defaults depend on --preset")
     bundle_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"], help="Mermaid direction when mermaid is included")
     add_visual_options(bundle_p)
 
@@ -1745,22 +1787,23 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "mermaid":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(mermaid(plan, direction=args.direction, link_labels=args.link_labels), args.output)
+            link_labels = preset_render_defaults(args.preset)["link_labels"] if args.link_labels is None else args.link_labels
+            emit(mermaid(plan, direction=args.direction, link_labels=link_labels), args.output)
             return 0
         if args.cmd == "svg":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(svg(plan, options=render_options(args)), args.output)
+            emit(svg(plan, options=render_options(args, default_title=args.plan.stem)), args.output)
             return 0
         if args.cmd == "drawio":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(drawio(plan, options=render_options(args)), args.output)
+            emit(drawio(plan, options=render_options(args, default_title=args.plan.stem)), args.output)
             return 0
         if args.cmd == "html":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(html_report(plan, options=render_options(args)), args.output)
+            emit(html_report(plan, options=render_options(args, default_title=args.plan.stem)), args.output)
             return 0
         if args.cmd == "markdown":
             plan = _load_plan(args.plan)
@@ -1781,7 +1824,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "diagram-audit":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            report, code = diagram_audit(plan)
+            report, code = diagram_audit(plan, options=render_options(args, default_title=args.plan.stem))
             emit(json.dumps(report, ensure_ascii=False, indent=2) + "\n", args.output)
             return code
         if args.cmd == "bundle":
@@ -1792,8 +1835,8 @@ def main(argv: list[str] | None = None) -> int:
                 plan_path=args.plan,
                 output_dir=args.output_dir,
                 basename=args.basename,
-                formats=parse_bundle_formats(args.formats),
-                options=render_options(args),
+                formats=parse_bundle_formats(args.formats or default_bundle_formats(args.preset)),
+                options=render_options(args, default_title=args.basename),
                 direction=args.direction,
             )
             print(json.dumps(manifest, ensure_ascii=False, indent=2))
