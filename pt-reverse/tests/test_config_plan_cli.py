@@ -89,7 +89,7 @@ class ConfigPlanCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertIn("campus", data["commands"])
         self.assertIn("switch-switch links become trunk interfaces", data["rules"])
-        self.assertIn("--routing none|rip|static", data["options"])
+        self.assertIn("--routing none|rip|ospf|static", data["options"])
         self.assertIn("export-configs --source", data["options"])
 
     def test_campus_generates_switch_ios_configs_from_vlan_links(self) -> None:
@@ -152,6 +152,28 @@ class ConfigPlanCliTest(unittest.TestCase):
         access_commands = [command.strip() for command in configs["SW-OFFICE"]["commands"]]
         self.assertNotIn("ip routing", access_commands)
         self.assertNotIn("interface Vlan20", access_commands)
+
+    def test_campus_l3_can_generate_ospf_between_svis_and_routed_links(self) -> None:
+        result = self.run_config_plan(self.l3_topology(), "--l3", "--routing", "ospf")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        configs = {config["device"]: config for config in data["ios_configs"] if config.get("source") == "pt730-config-plan campus"}
+
+        mls1_commands = [command.strip() for command in configs["MLS1"]["commands"]]
+        self.assertIn("ip routing", mls1_commands)
+        self.assertIn("router ospf 1", mls1_commands)
+        self.assertIn("router-id 10.255.0.1", mls1_commands)
+        self.assertIn("passive-interface Vlan20", mls1_commands)
+        self.assertIn("network 192.168.0.0 0.0.0.63 area 0", mls1_commands)
+        self.assertIn("network 10.10.12.0 0.0.0.3 area 0", mls1_commands)
+        self.assertNotIn("router rip", mls1_commands)
+        self.assertNotIn("ip route 192.168.0.64 255.255.255.192 10.10.12.2", mls1_commands)
+
+        mls2_commands = [command.strip() for command in configs["MLS2"]["commands"]]
+        self.assertIn("router-id 10.255.0.2", mls2_commands)
+        self.assertIn("passive-interface Vlan30", mls2_commands)
+        self.assertIn("network 192.168.0.64 0.0.0.63 area 0", mls2_commands)
+        self.assertIn("network 10.10.12.0 0.0.0.3 area 0", mls2_commands)
 
     def test_campus_l3_can_generate_static_routes_between_svi_networks(self) -> None:
         result = self.run_config_plan(self.l3_topology(), "--l3", "--routing", "static")

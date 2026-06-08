@@ -75,6 +75,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
         self.assertIn("ospf", " ".join(data["templates"]["wan-ring"]["options"]))
+        self.assertIn("--routing none|rip|ospf|static", data["templates"]["campus"]["options"])
         self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
 
     def test_lan_star_generates_static_hosts_server_services_and_layout(self) -> None:
@@ -447,6 +448,34 @@ class TemplateCliTest(unittest.TestCase):
         joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
         self.assertIn("ip routing", joined)
         self.assertIn("router rip", joined)
+        self.assert_safe_and_renderable(plan)
+
+    def test_campus_supports_ospf_l3_configs(self) -> None:
+        result = self.run_template(
+            "campus",
+            "--name",
+            "OSPF",
+            "--cores",
+            "2",
+            "--segments",
+            "3",
+            "--hosts-per-segment",
+            "1",
+            "--servers",
+            "2",
+            "--l3",
+            "--routing",
+            "ospf",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("router ospf 1", joined)
+        self.assertIn("router-id 10.255.0.1", joined)
+        self.assertIn("passive-interface Vlan10", joined)
+        self.assertIn("network 172.16.1.0 0.0.0.63 area 0", joined)
+        self.assertIn("network 10.10.0.0 0.0.0.3 area 0", joined)
+        self.assertNotIn("router rip", joined)
         self.assert_safe_and_renderable(plan)
 
 

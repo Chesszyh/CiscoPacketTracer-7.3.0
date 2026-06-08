@@ -28,6 +28,7 @@ class PipelineCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertIn("--compact", data["campus"]["optional"])
+        self.assertIn("--routing none|rip|ospf|static", data["campus"]["optional"])
 
     def test_campus_pipeline_generates_agent_ready_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -85,6 +86,35 @@ class PipelineCliTest(unittest.TestCase):
             self.assertGreater(len(layout["devices"]), 0)
             self.assertGreater(len(layout["ios_configs"]), 0)
             self.assertIn("router rip", (out_dir / "configs" / "MLS1.cfg").read_text(encoding="utf-8"))
+
+    def test_campus_pipeline_supports_ospf_routing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "out"
+            result = subprocess.run(
+                [
+                    str(PIPELINE),
+                    "campus",
+                    "--compose-spec",
+                    str(ROOT / "examples" / "compose-campus.json"),
+                    "--output-dir",
+                    str(out_dir),
+                    "--routing",
+                    "ospf",
+                ],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["routing"], "ospf")
+            self.assertTrue(manifest["safety"]["ok"])
+            mls1_cfg = (out_dir / "configs" / "MLS1.cfg").read_text(encoding="utf-8")
+            self.assertIn("router ospf 1", mls1_cfg)
+            self.assertIn("passive-interface", mls1_cfg)
 
 
 if __name__ == "__main__":

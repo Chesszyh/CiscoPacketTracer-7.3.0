@@ -46,6 +46,12 @@ class IosTemplateCliTest(unittest.TestCase):
                     {"name": "Vlan10", "ip": "192.168.10.1", "mask": "255.255.255.0"},
                 ],
                 "rip": {"version": 2, "networks": ["10.0.0.0", "192.168.10.0"], "no_auto_summary": True},
+                "ospf": {
+                    "process_id": 1,
+                    "router_id": "10.255.0.1",
+                    "passive_interfaces": ["Vlan10"],
+                    "networks": [{"network": "192.168.10.0", "wildcard": "0.0.0.255", "area": 0}],
+                },
                 "static_routes": [{"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "10.0.0.254"}],
                 "acls": [
                     {
@@ -68,6 +74,10 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("no switchport", result.stdout)
         self.assertIn("switchport trunk allowed vlan 10,20", result.stdout)
         self.assertIn("router rip", result.stdout)
+        self.assertIn("router ospf 1", result.stdout)
+        self.assertIn("router-id 10.255.0.1", result.stdout)
+        self.assertIn("passive-interface Vlan10", result.stdout)
+        self.assertIn("network 192.168.10.0 0.0.0.255 area 0", result.stdout)
         self.assertIn("ip route 0.0.0.0 0.0.0.0 10.0.0.254", result.stdout)
         self.assertIn("access-list 10 permit 192.168.10.0 0.0.0.255", result.stdout)
         self.assertIn("ip access-group 10 in", result.stdout)
@@ -120,6 +130,8 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("interfaces[].mode=routed", fields)
         self.assertIn("ip_routing", fields)
         self.assertIn("rip.networks", fields)
+        self.assertIn("ospf.networks", fields)
+        self.assertIn("ospf.passive_interfaces", fields)
         self.assertIn("static_routes", fields)
         self.assertIn("acls[].type=extended", fields)
         self.assertIn("nat.overloads", fields)

@@ -28,9 +28,9 @@ pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
-pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip
+pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
 pt-reverse/bin/pt730-pipeline schema
-pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing rip
+pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan schema
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json
 pt-reverse/bin/pt730-compose schema
@@ -74,9 +74,9 @@ exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
 Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
 VLAN, edge-security, router-ring, WAN-ring, and campus template options
-including DNS, SSID, 802.1Q, NAT/ACL, DMZ, RIP/OSPF/static WAN routing, layout,
-no-layout, compact, router DHCP pools, DHCP client hosts, L3 routing, and naming
-controls from the underlying `pt730-template` CLI.
+including DNS, SSID, 802.1Q, NAT/ACL, DMZ, RIP/OSPF/static WAN and campus L3
+routing, layout, no-layout, compact, router DHCP pools, DHCP client hosts, and
+naming controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls
@@ -185,10 +185,11 @@ pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
-pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing rip
+pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
+pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
-pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --l3 --routing rip --output compose-campus.configured.json
+pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --l3 --routing ospf --output compose-campus.configured.json
 pt-reverse/bin/pt730-topo apply --dry-run pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan --output simple-lan.layout.json
 pt-reverse/bin/pt730-topo apply pt-reverse/examples/simple-lan.json
@@ -323,9 +324,9 @@ ISP edge, inside LAN, DMZ, Internet test host, NAT overload, outside ACL, and
 static routes. WAN-ring templates generate multi-site router WANs with per-site
 LANs, static host IPs, server services, and RIP/OSPF/static IOS configs. Campus
 templates generate core/access/server topology, representative hosts, server
-services, and optional L3 IOS configs.
+services, and optional L3 IOS configs with RIP, OSPF, or static routing.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
-<campus-spec.json> --output-dir <out-dir> --routing rip` to run the offline
+<campus-spec.json> --output-dir <out-dir> --routing ospf` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered
 tables, SVG topology diagram, diagrams.net/draw.io file, HTML review page,
 topology JSON files, and per-device configs.
@@ -335,8 +336,10 @@ Use `pt730-config-plan campus <plan.json> --output <configured-plan.json>` to
 derive switch VLAN/access/trunk IOS configs from the topology link metadata.
 Add `--l3 --routing rip` to derive SVI gateways, routed switch interlinks, and
 RIPv2 from host gateway/mask values plus CIDR metadata on core links.  Use
-`--l3 --routing static` to emit static routes between the derived SVI networks
-instead of RIP.
+`--l3 --routing ospf` to emit OSPF process 1, router IDs, passive SVI
+interfaces, and per-interface network statements.  Use `--l3 --routing static`
+to emit static routes between the derived SVI networks instead of dynamic
+routing.
 Use `pt730-config-plan export-configs <configured-plan.json> --output-dir
 <configs-dir>` to write the generated `ios_configs` into per-device `.cfg`
 files for reports or manual paste-in.

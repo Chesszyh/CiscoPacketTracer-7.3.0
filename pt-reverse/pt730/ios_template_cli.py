@@ -47,6 +47,12 @@ def schema_doc() -> dict[str, Any]:
             {"name": "FastEthernet0/1", "mode": "access", "vlan": 10},
         ],
         "rip": {"version": 2, "networks": ["10.0.0.0"], "no_auto_summary": True},
+        "ospf": {
+            "process_id": 1,
+            "router_id": "10.255.0.1",
+            "passive_interfaces": ["Vlan10"],
+            "networks": [{"network": "10.0.0.0", "wildcard": "0.0.0.255", "area": 0}],
+        },
         "static_routes": [{"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "10.0.0.254"}],
         "acls": [
             {"type": "standard", "number": 10, "rules": [{"action": "permit", "source": "10.0.0.0", "wildcard": "0.0.0.255"}]},
@@ -73,6 +79,8 @@ def schema_doc() -> dict[str, Any]:
             "interfaces[].acl_out": "Adds ip access-group <value> out.",
             "interfaces[].nat": "inside or outside; adds ip nat inside/outside.",
             "rip.networks": "RIPv2 network statements.",
+            "ospf.networks": "OSPF network statements; each entry is {network, wildcard, area}.",
+            "ospf.passive_interfaces": "Optional passive-interface commands for OSPF.",
             "static_routes": "Array of {destination, mask, next_hop|interface}.",
             "acls[].type=standard": "Numbered or named standard ACL rules.",
             "acls[].type=extended": "Extended ACL rules with protocol/source/destination wildcards.",
@@ -142,6 +150,24 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
             commands.append(" no auto-summary")
         for network in as_list(rip.get("networks")):
             commands.append(f" network {network}")
+        commands.append("exit")
+
+    ospf = spec.get("ospf")
+    if isinstance(ospf, dict):
+        process_id = ospf.get("process_id", ospf.get("process", 1))
+        commands.append(f"router ospf {process_id}")
+        if ospf.get("router_id"):
+            commands.append(f" router-id {ospf['router_id']}")
+        for interface_name in as_list(ospf.get("passive_interfaces")):
+            commands.append(f" passive-interface {interface_name}")
+        for network in as_list(ospf.get("networks")):
+            if not isinstance(network, dict):
+                raise ValueError("ospf network entries must be objects")
+            area = network.get("area", 0)
+            commands.append(
+                f" network {require(network.get('network'), 'ospf network is required')} "
+                f"{require(network.get('wildcard'), 'ospf wildcard is required')} area {area}"
+            )
         commands.append("exit")
 
     for route in as_list(spec.get("static_routes")):

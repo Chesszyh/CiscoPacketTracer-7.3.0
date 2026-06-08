@@ -48,7 +48,7 @@ def schema() -> dict[str, Any]:
         "campus": {
             "description": "Offline IP plan -> topology compose -> L3 config planning -> layout -> render -> cfg export.",
             "required": ["--compose-spec", "--output-dir"],
-            "optional": ["--compact", "--ip-plan", "--routing none|rip|static", "--layout-style", "--course-audit", "--strict-safety"],
+            "optional": ["--compact", "--ip-plan", "--routing none|rip|ospf|static", "--layout-style", "--course-audit", "--strict-safety"],
             "outputs": [
                 "ip-plan.json",
                 "topology.composed.json",
@@ -185,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--compose-spec", type=Path, required=True)
     campus_p.add_argument("--ip-plan", type=Path)
     campus_p.add_argument("--output-dir", type=Path, required=True)
-    campus_p.add_argument("--routing", choices=("none", "rip", "static"), default="rip")
+    campus_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="rip")
     campus_p.add_argument("--layout-style", choices=STYLES, default="campus")
     campus_p.add_argument("--strict-safety", action="store_true")
     campus_p.add_argument("--course-audit", action="store_true")

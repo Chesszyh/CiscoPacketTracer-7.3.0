@@ -95,6 +95,12 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
         self.assertIn("ospf", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
+        campus = next(tool for tool in tools if tool["name"] == "pt730_template_campus")
+        self.assertIn("ospf", campus["inputSchema"]["properties"]["routing"]["enum"])
+        config_plan = next(tool for tool in tools if tool["name"] == "pt730_config_plan_campus")
+        self.assertIn("ospf", config_plan["inputSchema"]["properties"]["routing"]["enum"])
+        pipeline = next(tool for tool in tools if tool["name"] == "pt730_pipeline_campus")
+        self.assertIn("ospf", pipeline["inputSchema"]["properties"]["routing"]["enum"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
         self.assertIn("allow_live", live_count["inputSchema"]["required"])
 
@@ -639,7 +645,7 @@ class McpCliTest(unittest.TestCase):
                             "hosts_per_segment": 2,
                             "servers": 4,
                             "l3": True,
-                            "routing": "rip",
+                            "routing": "ospf",
                             "layout_style": "campus",
                             "compact": True,
                         },
@@ -653,13 +659,13 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("campus", command)
         self.assertIn("--compact", command)
         self.assertIn("--l3", command)
-        self.assertIn("rip", command)
+        self.assertIn("ospf", command)
         self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
         plan = json.loads(result["structuredContent"]["stdout"])
         self.assertEqual(plan["metadata"]["source"], "pt730-template campus")
         self.assertEqual(len(plan["server_configs"]), 4)
         self.assertTrue(any(config["device"] == "MLS1" for config in plan["ios_configs"]))
-        self.assertIn("router rip", "\n".join(command for config in plan["ios_configs"] for command in config["commands"]))
+        self.assertIn("router ospf 1", "\n".join(command for config in plan["ios_configs"] for command in config["commands"]))
 
     def test_template_tool_rejects_unknown_layout_style(self) -> None:
         responses = self.run_mcp(

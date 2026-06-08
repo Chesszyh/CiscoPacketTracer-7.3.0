@@ -74,8 +74,8 @@ def schema() -> dict[str, Any]:
                 "options": ["--name", "--sites", "--hosts-per-site", "--servers-per-site", "--interconnect-pool", "--lan-pool", "--lan-prefix", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
             },
             "campus": {
-                "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs.",
-                "options": ["--name", "--cores", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--interconnect-pool", "--l3", "--routing none|rip|static", "--layout-style", "--no-layout"],
+                "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs, and optional RIP/OSPF/static routing.",
+                "options": ["--name", "--cores", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--interconnect-pool", "--l3", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
             },
         },
     }
@@ -1065,7 +1065,7 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--vlan-base", type=int, default=20)
     campus_p.add_argument("--interconnect-pool", default="10.10.0.0/24")
     campus_p.add_argument("--l3", action="store_true")
-    campus_p.add_argument("--routing", choices=("none", "rip", "static"), default="none")
+    campus_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="none")
     campus_p.add_argument("--layout-style", choices=STYLES, default="campus")
     campus_p.add_argument("--no-layout", action="store_true")
     campus_p.add_argument("--output", type=Path)

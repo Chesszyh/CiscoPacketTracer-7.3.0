@@ -46,7 +46,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_wan_ring","arguments":{"name":"AGENT","sites":3,"hosts_per_site":2,"servers_per_site":1,"routing":"ospf","layout_style":"ring","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_campus","arguments":{"name":"AGENT","cores":2,"segments":4,"hosts_per_segment":2,"servers":4,"l3":true,"routing":"rip","layout_style":"campus","compact":true}}}' \
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_campus","arguments":{"name":"AGENT","cores":2,"segments":4,"hosts_per_segment":2,"servers":4,"l3":true,"routing":"ospf","layout_style":"campus","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 
@@ -57,7 +57,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_compose_campus","arguments":{"spec":"pt-reverse/examples/compose-campus.json","layout_style":"grid","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_pipeline_campus","arguments":{"ip_plan":"pt-reverse/examples/ip-plan-campus.json","compose_spec":"pt-reverse/examples/compose-campus.json","output_dir":"compose-campus-out","routing":"rip","layout_style":"grid","compact":true}}}' \
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_pipeline_campus","arguments":{"ip_plan":"pt-reverse/examples/ip-plan-campus.json","compose_spec":"pt-reverse/examples/compose-campus.json","output_dir":"compose-campus-out","routing":"ospf","layout_style":"grid","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 
@@ -130,7 +130,7 @@ pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local --output edge-security.json
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28 --output router-ring.json
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf --output wan-ring.json
-pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip --output campus.json
+pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf --output campus.json
 pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
@@ -153,6 +153,11 @@ rendering are safe.
 per-router `network ... area 0` statements for each direct LAN/serial subnet.
 Use `rip`, `static`, or `none` when that better matches the lab.
 
+`campus --l3 --routing ospf` writes OSPF process 1, deterministic router IDs,
+SVI passive-interface commands, and direct SVI/core-link `network ... area 0`
+statements for multi-core campus L3 labs. Use `rip`, `static`, or `none` when
+that better matches the assignment.
+
 `edge-security` uses verified `2911`, `2960-24TT`, `PC-PT`, and `Server-PT`
 models to generate an ISP edge, inside LAN, DMZ, Internet test host, NAT
 overload, outside ACL, static routes, and `security_policies` metadata. Use it
@@ -165,7 +170,7 @@ pt-reverse/bin/pt730-pipeline campus \
   --ip-plan pt-reverse/examples/ip-plan-campus.json \
   --compose-spec pt-reverse/examples/compose-campus.json \
   --output-dir compose-campus-out \
-  --routing rip
+  --routing ospf
 ```
 
 Expected key outputs:
@@ -185,7 +190,7 @@ Expected key outputs:
 ```bash
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output topology.composed.json
-pt-reverse/bin/pt730-config-plan campus topology.composed.json --l3 --routing rip --output topology.configured.json
+pt-reverse/bin/pt730-config-plan campus topology.composed.json --l3 --routing ospf --output topology.configured.json
 pt-reverse/bin/pt730-config-plan --compact campus topology.composed.json --ios-only
 pt-reverse/bin/pt730-layout topology.configured.json --style campus --output topology.layout.json
 pt-reverse/bin/pt730-safety plan topology.layout.json
