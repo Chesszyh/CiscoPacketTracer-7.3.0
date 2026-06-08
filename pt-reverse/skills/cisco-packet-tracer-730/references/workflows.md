@@ -40,6 +40,13 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
+Example layout control through MCP:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_layout","arguments":{"plan":"pt-reverse/examples/simple-lan.json","style":"grid","canvas_width":400,"canvas_height":300,"spacing_x":120,"spacing_y":100,"margin":20,"compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
 Example device preview:
 
 ```bash

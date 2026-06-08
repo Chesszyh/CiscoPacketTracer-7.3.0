@@ -273,6 +273,78 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(responses[0]["error"]["code"], -32602)
         self.assertIn("layout_style must be one of", responses[0]["error"]["message"])
 
+    def test_layout_tool_exposes_canvas_spacing_and_compact_options(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_layout",
+                        "arguments": {
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "style": "grid",
+                            "canvas_width": 400,
+                            "canvas_height": 300,
+                            "spacing_x": 120,
+                            "spacing_y": 100,
+                            "margin": 20,
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("--canvas-width", command)
+        self.assertIn("400", command)
+        self.assertIn("--spacing-x", command)
+        self.assertIn("--compact", command)
+        self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+        plan = json.loads(result["structuredContent"]["stdout"])
+        for device in plan["devices"]:
+            self.assertGreaterEqual(device["x"], 0)
+            self.assertLessEqual(device["x"], 400)
+            self.assertGreaterEqual(device["y"], 0)
+            self.assertLessEqual(device["y"], 300)
+
+    def test_layout_tool_rejects_invalid_style_or_dimensions(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_layout",
+                        "arguments": {
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "style": "diagonal",
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_layout",
+                        "arguments": {
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "canvas_width": 0,
+                        },
+                    },
+                },
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("style must be one of", responses[0]["error"]["message"])
+        self.assertEqual(responses[1]["error"]["code"], -32602)
+        self.assertIn("canvas_width must be a positive integer", responses[1]["error"]["message"])
+
     def test_live_tool_without_allow_live_returns_protocol_error(self) -> None:
         responses = self.run_mcp(
             [

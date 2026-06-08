@@ -86,7 +86,7 @@ def manifest() -> dict[str, Any]:
         "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "svg_render", "drawio_render", "html_render", "config_file_export"],
         "render_features": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course_audit"],
         "template_features": ["schema", "lan_star", "router_ring", "static_host_ips", "server_http", "serial_modules", "ripv2", "auto_layout"],
-        "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "schema_wrappers", "template_option_wrappers", "catalog_wrappers", "safety_js_wrappers", "allow_live_gated_live_tools", "allow_live_gated_device_tools", "write_gated_model_records", "topo_query_export_wrappers", "model_registry_wrappers", "live_lifecycle_dry_run", "live_eval_dry_run", "live_smoke_dry_run", "live_apply_dry_run", "live_device_dry_run", "live_pc_dhcp_dry_run", "live_server_service_dry_run", "live_server_account_config_dry_run", "live_ftp_dry_run", "live_sim_dry_run"],
+        "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "schema_wrappers", "template_option_wrappers", "layout_option_wrappers", "catalog_wrappers", "safety_js_wrappers", "allow_live_gated_live_tools", "allow_live_gated_device_tools", "write_gated_model_records", "topo_query_export_wrappers", "model_registry_wrappers", "live_lifecycle_dry_run", "live_eval_dry_run", "live_smoke_dry_run", "live_apply_dry_run", "live_device_dry_run", "live_pc_dhcp_dry_run", "live_server_service_dry_run", "live_server_account_config_dry_run", "live_ftp_dry_run", "live_sim_dry_run"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
             "pt-reverse/bin/pt730-selftest",
@@ -94,6 +94,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-mcp  # stdio MCP server; live tools require allow_live=true",
             "MCP pt730_schema exposes template/ip_plan/compose/config_plan/pipeline/ios_template input schemas",
             "MCP pt730_template_lan_star/pt730_template_router_ring expose full template CLI options including layout_style/no_layout/compact",
+            "MCP pt730_layout exposes canvas_width/canvas_height/spacing_x/spacing_y/margin/compact layout controls",
             "MCP pt730_catalog exposes devices/device/ports/modules/module/cables/infer_cable/aliases",
             "MCP pt730_safety_js and pt730_safety_policy expose JavaScript safety checks and policy",
             "MCP pt730_live_ios/pt730_live_pc_static/pt730_live_term/pt730_live_ping/pt730_live_server_inspect support dry_run=true command previews",

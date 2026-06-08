@@ -68,6 +68,8 @@ exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
 Built-in template MCP tools expose the same DNS, layout, no-layout, compact,
 and naming options as the underlying `pt730-template` CLI.
+The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
+JSON controls for denser or cleaner topology diagrams.
 
 The known-good launch path is:
 
