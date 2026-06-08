@@ -33,7 +33,7 @@ pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-lab schema
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
-pt-reverse/bin/pt730-lab plan pt-reverse/examples/two-router-serial-configured.json --output-dir plan-lab --basename serial --formats svg,summary
+pt-reverse/bin/pt730-lab plan pt-reverse/examples/two-router-serial-configured.json --output-dir plan-lab --basename serial --formats svg,summary,diagram-audit --title "Serial Lab" --legend
 pt-reverse/bin/pt730-pipeline schema
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan schema
@@ -47,13 +47,13 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switch
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
-pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json
+pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json --title "Simple LAN" --legend
 pt-reverse/bin/pt730-render drawio pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render html pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
-pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan
+pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --title "Simple LAN" --legend
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```
 
@@ -89,9 +89,9 @@ campus L3 routing, layout, no-layout, compact, router DHCP pools, DHCP client
 hosts, and naming controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
-Render MCP tools expose visual theme, label, and visual grouping controls
-through `pt730_render` for SVG, draw.io, HTML, and Mermaid where supported,
-plus JSON summary, course audit, and diagram-quality audit outputs.
+Render MCP tools expose visual theme, title, legend, label, and visual grouping
+controls through `pt730_render` for SVG, draw.io, HTML, and Mermaid where
+supported, plus JSON summary, course audit, and diagram-quality audit outputs.
 The `pt730_render_bundle` MCP tool writes a multi-format render bundle plus a
 manifest in one offline call.
 The `pt730_lab_template` MCP tool writes a complete offline lab bundle from one
@@ -208,7 +208,7 @@ pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
-pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary
+pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit --title "Campus Topology" --legend
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
@@ -238,12 +238,12 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus
 pt-reverse/bin/pt730-capabilities --compact
 pt-reverse/bin/pt730-capabilities --table
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
-pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json --output simple-lan.svg
+pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json --title "Simple LAN" --legend --output simple-lan.svg
 pt-reverse/bin/pt730-render drawio pt-reverse/examples/simple-lan.json --output simple-lan.drawio
 pt-reverse/bin/pt730-render html pt-reverse/examples/simple-lan.json --output simple-lan.html
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
-pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --formats svg,drawio,html,markdown,summary,diagram-audit
+pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --formats svg,drawio,html,markdown,summary,diagram-audit --title "Simple LAN" --legend
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.generated.md
 pt-reverse/bin/pt730-render summary pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.summary.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.audit.json
@@ -360,8 +360,8 @@ Use `pt730-lab template <lab-spec.json> --output-dir <out-dir>` when an agent
 should start from one compact JSON spec and write a complete deliverable bundle:
 `topology.json`, `safety.json`, `render/<basename>.*`, `configs/*.cfg`, and
 `manifest.json`. The spec selects any built-in template, passes snake_case
-`template_options`, and can control render `formats`, `theme`, labels, and
-`group_by` in the same file. Use `pt730-lab plan <plan.json> --output-dir
+`template_options`, and can control render `formats`, `theme`, title, legend,
+labels, and `group_by` in the same file. Use `pt730-lab plan <plan.json> --output-dir
 <out-dir>` for the same bundle workflow after an agent has already generated or
 composed a custom topology JSON.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
@@ -392,15 +392,16 @@ Use `pt730-render markdown <plan.json>` for report-ready offline tables.  It
 includes link VLAN/notes, configured host IPs, inferred address groups, server
 service details, and IOS config counts.  Use `pt730-render summary <plan.json>`
 for a compact JSON summary that agents can consume before any live operation.
-Use `pt730-render svg <plan.json> --output <diagram.svg>` for an offline
-topology diagram that respects existing `x`/`y` coordinates and falls back to a
-deterministic grid when coordinates are missing.
+Use `pt730-render svg <plan.json> --title <title> --legend --output <diagram.svg>`
+for an offline topology diagram that respects existing `x`/`y` coordinates and
+falls back to a deterministic grid when coordinates are missing.
 Use `pt730-render drawio <plan.json> --output <diagram.drawio>` for an
 importable diagrams.net/draw.io topology file that keeps device/link labels
 editable.
-For cleaner large diagrams, add `--theme light|dark|paper`,
-`--no-link-labels`, `--no-model-labels`, or `--group-by auto|network|vlan|site|category`
-to SVG/draw.io/HTML renders; Mermaid supports `--no-link-labels`.
+For cleaner large diagrams, add `--theme light|dark|paper`, `--title <title>`,
+`--legend`, `--no-link-labels`, `--no-model-labels`, or
+`--group-by auto|network|vlan|site|category` to SVG/draw.io/HTML renders;
+Mermaid supports `--no-link-labels`.
 Use `pt730-render diagram-audit <plan.json>` before final screenshots to catch
 empty plans, missing coordinates, close device overlaps, disconnected
 components, oversized canvases, and dense-label/grouping issues without opening
@@ -410,8 +411,9 @@ browser review page with the SVG diagram and Markdown report text embedded.
 Use `pt730-render bundle <plan.json> --output-dir <render-dir>` to write SVG,
 draw.io, HTML, Markdown, summary JSON, and a `<basename>.manifest.json` file
 from one existing plan.  Add `--formats svg,drawio,html,markdown,summary,course-audit`
-or `--formats svg,drawio,html,markdown,summary,diagram-audit` when a bundle
-should include or limit specific artifacts.
+or `--formats svg,drawio,html,markdown,summary,diagram-audit`, plus
+`--title <title> --legend`, when a bundle should include or limit specific
+artifacts.
 For this course assignment, `pt730-render course-audit <plan.json>` checks the
 required VLAN links, the server address space `172.16.1.0/26`, the PC address
 space `192.168.0.0/21`, and representative host coverage.

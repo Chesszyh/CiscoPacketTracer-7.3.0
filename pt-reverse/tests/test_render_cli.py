@@ -74,6 +74,17 @@ class RenderCliTest(unittest.TestCase):
         self.assertNotIn("GigabitEthernet0/0", result.stdout)
         self.assertNotIn("2911", result.stdout)
 
+    def test_svg_can_include_title_and_legend(self) -> None:
+        result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--title", "Demo LAN", "--legend")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('<title id="title">Demo LAN</title>', result.stdout)
+        self.assertIn('class="diagram-title"', result.stdout)
+        self.assertIn('class="legend"', result.stdout)
+        self.assertIn("Legend", result.stdout)
+        self.assertIn("Router", result.stdout)
+        self.assertIn("Switch", result.stdout)
+        self.assertIn("PC/Laptop", result.stdout)
+
     def test_svg_can_render_network_group_boxes(self) -> None:
         result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--group-by", "network")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -112,6 +123,15 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn('value="R_DEMO"', result.stdout)
         self.assertNotIn("GigabitEthernet0/0", result.stdout)
         self.assertNotIn("2911", result.stdout)
+
+    def test_drawio_can_include_title_and_legend(self) -> None:
+        result = self.run_render("drawio", str(ROOT / "examples" / "simple-lan.json"), "--title", "Demo LAN", "--legend")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('id="title" value="Demo LAN"', result.stdout)
+        self.assertIn('id="legend-panel" value="Legend"', result.stdout)
+        self.assertIn('value="Router"', result.stdout)
+        self.assertIn('value="Switch"', result.stdout)
+        self.assertIn('value="PC/Laptop"', result.stdout)
 
     def test_drawio_can_render_network_group_boxes(self) -> None:
         result = self.run_render("drawio", str(ROOT / "examples" / "simple-lan.json"), "--group-by", "network")
@@ -194,6 +214,14 @@ class RenderCliTest(unittest.TestCase):
         diagram = result.stdout.split("    </section>", 1)[0]
         self.assertNotIn("GigabitEthernet0/0", diagram)
         self.assertNotIn("2911", diagram)
+
+    def test_html_can_include_title_and_legend(self) -> None:
+        result = self.run_render("html", str(ROOT / "examples" / "simple-lan.json"), "--title", "Demo LAN", "--legend")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("<title>Demo LAN</title>", result.stdout)
+        self.assertIn("<h1>Demo LAN</h1>", result.stdout)
+        self.assertIn('class="legend"', result.stdout)
+        self.assertIn("PC/Laptop", result.stdout)
 
     def test_html_can_render_vlan_group_boxes(self) -> None:
         result = self.run_render("html", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"), "--group-by", "vlan")
@@ -435,6 +463,8 @@ class RenderCliTest(unittest.TestCase):
             self.assertEqual(manifest["options"]["link_labels"], False)
             self.assertEqual(manifest["options"]["model_labels"], False)
             self.assertEqual(manifest["options"]["group_by"], "network")
+            self.assertEqual(manifest["options"]["title"], "")
+            self.assertEqual(manifest["options"]["legend"], False)
             self.assertEqual(manifest["counts"]["devices"], 3)
             self.assertEqual(manifest["artifacts"]["svg"], "simple.svg")
             self.assertEqual(manifest["artifacts"]["drawio"], "simple.drawio")

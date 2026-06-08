@@ -192,7 +192,7 @@ TEMPLATES: dict[str, TemplateDefinition] = {
 }
 
 TOP_LEVEL_KEYS = {"name", "template", "template_options", "render", "strict_safety", "export_configs", "config_source", "compact"}
-RENDER_KEYS = {"basename", "formats", "direction", "theme", "link_labels", "model_labels", "group_by"}
+RENDER_KEYS = {"basename", "formats", "direction", "theme", "link_labels", "model_labels", "group_by", "title", "legend"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -273,6 +273,8 @@ def _render_settings_from_values(
     link_labels: bool,
     model_labels: bool,
     group_by: str,
+    title: str,
+    legend: bool,
 ) -> dict[str, Any]:
     safe_basename = _safe_basename(basename)
     if direction not in {"LR", "TD", "TB", "RL", "BT"}:
@@ -285,7 +287,7 @@ def _render_settings_from_values(
         "basename": safe_basename,
         "formats": _parse_formats(formats),
         "direction": direction,
-        "options": RenderOptions(theme=theme, link_labels=link_labels, model_labels=model_labels, group_by=group_by),
+        "options": RenderOptions(theme=theme, link_labels=link_labels, model_labels=model_labels, group_by=group_by, title=title, legend=legend),
     }
 
 
@@ -304,6 +306,8 @@ def _render_settings(spec: dict[str, Any], *, lab_name: str, template_name: str)
         link_labels=_bool_value(render, "link_labels", default=True),
         model_labels=_bool_value(render, "model_labels", default=True),
         group_by=_string_value(render, "group_by", default="none"),
+        title=_string_value(render, "title", default=""),
+        legend=_bool_value(render, "legend", default=False),
     )
 
 
@@ -341,13 +345,15 @@ def schema() -> dict[str, Any]:
                 "link_labels": True,
                 "model_labels": True,
                 "group_by": list(RENDER_GROUP_BY),
+                "title": "visible diagram title for SVG/draw.io/HTML",
+                "legend": False,
             },
             "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
         },
         "plan": {
             "description": "Generate the same offline lab bundle from an existing topology plan JSON.",
             "required": ["plan", "--output-dir"],
-            "optional": ["--name", "--basename", "--formats", "--direction", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--strict-safety", "--no-configs", "--config-source", "--compact"],
+            "optional": ["--name", "--basename", "--formats", "--direction", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--title", "--legend", "--strict-safety", "--no-configs", "--config-source", "--compact"],
             "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
         },
         "templates": {
@@ -502,6 +508,8 @@ def lab_plan(
     link_labels: bool,
     model_labels: bool,
     group_by: str,
+    title: str,
+    legend: bool,
     strict_safety: bool,
     export_configs: bool,
     config_source: str,
@@ -517,6 +525,8 @@ def lab_plan(
         link_labels=link_labels,
         model_labels=model_labels,
         group_by=group_by,
+        title=title,
+        legend=legend,
     )
     return _write_lab_bundle(
         plan,
@@ -561,6 +571,8 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=True, help="hide link port/cable/VLAN labels")
     plan_p.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=True, help="hide device model labels")
     plan_p.add_argument("--group-by", choices=RENDER_GROUP_BY, default="none", help="draw visual group boxes by network, VLAN, site, category, or auto detection")
+    plan_p.add_argument("--title", default="", help="visible diagram title for SVG, draw.io, and HTML renders")
+    plan_p.add_argument("--legend", action="store_true", help="include a visible device/link legend in SVG, draw.io, and HTML renders")
     plan_p.add_argument("--strict-safety", action="store_true", help="treat plan safety warnings as failures")
     plan_p.add_argument("--no-configs", action="store_false", dest="export_configs", default=True, help="skip per-device .cfg export")
     plan_p.add_argument("--config-source", default="", help="only export ios_configs matching this source")
@@ -586,6 +598,8 @@ def main(argv: list[str] | None = None) -> int:
                 link_labels=args.link_labels,
                 model_labels=args.model_labels,
                 group_by=args.group_by,
+                title=args.title,
+                legend=args.legend,
                 strict_safety=args.strict_safety,
                 export_configs=args.export_configs,
                 config_source=args.config_source,

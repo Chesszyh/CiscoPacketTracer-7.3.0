@@ -51,6 +51,8 @@ class RenderOptions:
     link_labels: bool = True
     model_labels: bool = True
     group_by: str = "none"
+    title: str = ""
+    legend: bool = False
 
 
 def render_palette(theme: str) -> dict[str, str]:
@@ -503,6 +505,99 @@ def visual_group_boxes(groups: list[dict[str, Any]], positions: dict[str, tuple[
     return boxes
 
 
+def shifted_positions(positions: dict[str, tuple[float, float]], *, dy: float) -> dict[str, tuple[float, float]]:
+    if dy == 0:
+        return positions
+    return {name: (x, y + dy) for name, (x, y) in positions.items()}
+
+
+def shifted_group_boxes(boxes: list[dict[str, Any]], *, dy: float) -> list[dict[str, Any]]:
+    if dy == 0:
+        return boxes
+    return [{**box, "y": box["y"] + dy} for box in boxes]
+
+
+def visible_title_height(options: RenderOptions) -> float:
+    return 58.0 if options.title else 0.0
+
+
+def present_device_kinds(devices: list[dict[str, Any]]) -> list[str]:
+    preferred = ["router", "switch", "server", "pc", "wireless", "device"]
+    present = {svg_device_kind(device) for device in devices}
+    return [kind for kind in preferred if kind in present]
+
+
+def legend_items(plan: dict[str, Any], devices: list[dict[str, Any]]) -> list[dict[str, str]]:
+    labels = {
+        "router": "Router",
+        "switch": "Switch",
+        "server": "Server",
+        "pc": "PC/Laptop",
+        "wireless": "Wireless AP",
+        "device": "Other Device",
+    }
+    items = [{"kind": kind, "label": labels[kind], "type": "device"} for kind in present_device_kinds(devices)]
+    if any(isinstance(link, dict) and is_wireless_link(link) for link in plan.get("links", [])):
+        items.append({"kind": "wireless-link", "label": "Wireless Link", "type": "link"})
+    return items
+
+
+def legend_height(plan: dict[str, Any], devices: list[dict[str, Any]], options: RenderOptions) -> float:
+    if not options.legend or not legend_items(plan, devices):
+        return 0.0
+    return 78.0
+
+
+def legend_required_width(plan: dict[str, Any], devices: list[dict[str, Any]], options: RenderOptions) -> float:
+    if not options.legend:
+        return 0.0
+    items = legend_items(plan, devices)
+    if not items:
+        return 0.0
+    width = 110.0
+    for item in items:
+        width += max(112.0, len(item["label"]) * 7.2 + 46.0)
+    return width + 24.0
+
+
+def svg_kind_colors(kind: str, palette: dict[str, str]) -> tuple[str, str]:
+    if kind == "router":
+        return palette["router_fill"], palette["router_stroke"]
+    if kind == "switch":
+        return palette["switch_fill"], palette["switch_stroke"]
+    if kind == "server":
+        return palette["server_fill"], palette["server_stroke"]
+    if kind == "pc":
+        return palette["pc_fill"], palette["pc_stroke"]
+    if kind == "wireless":
+        return palette["wireless_fill"], palette["wireless_stroke"]
+    return palette["device_fill"], palette["device_stroke"]
+
+
+def svg_legend(plan: dict[str, Any], devices: list[dict[str, Any]], *, options: RenderOptions, width: float, y: float, palette: dict[str, str]) -> list[str]:
+    items = legend_items(plan, devices)
+    if not options.legend or not items:
+        return []
+    lines = [
+        f'  <g class="legend" transform="translate(24 {y:.1f})">',
+        f'    <rect class="legend-panel" x="0" y="0" width="{max(280.0, width - 48.0):.1f}" height="58" rx="8" />',
+        '    <text class="legend-title" x="14" y="22">Legend</text>',
+    ]
+    x = 86.0
+    for item in items:
+        kind = item["kind"]
+        if item["type"] == "link":
+            lines.append(f'    <line class="legend-link wireless-link" x1="{x:.1f}" y1="38" x2="{x + 24:.1f}" y2="38" />')
+            lines.append(f'    <text class="legend-label" x="{x + 32:.1f}" y="42">{svg_text(item["label"])}</text>')
+        else:
+            fill, stroke = svg_kind_colors(kind, palette)
+            lines.append(f'    <rect class="legend-marker" x="{x:.1f}" y="29" width="24" height="16" rx="4" fill="{fill}" stroke="{stroke}" />')
+            lines.append(f'    <text class="legend-label" x="{x + 32:.1f}" y="42">{svg_text(item["label"])}</text>')
+        x += max(112.0, len(item["label"]) * 7.2 + 46.0)
+    lines.append("  </g>")
+    return lines
+
+
 def svg_link_label(link: dict[str, Any]) -> str:
     parts = [
         pick(link, ("pa", "port_a", "from_port")),
@@ -561,17 +656,28 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
     positions, width, height = svg_positions(devices)
     groups = visual_groups(plan, devices, options.group_by)
     group_boxes = visual_group_boxes(groups, positions)
+    title_height = visible_title_height(options)
+    legend_extra_height = legend_height(plan, devices, options)
+    positions = shifted_positions(positions, dy=title_height)
+    group_boxes = shifted_group_boxes(group_boxes, dy=title_height)
+    height += title_height + legend_extra_height
+    if options.title or options.legend:
+        width = max(width, 520.0)
+    width = max(width, legend_required_width(plan, devices, options))
     for box in group_boxes:
         width = max(width, box["x"] + box["width"] + 12.0)
         height = max(height, box["y"] + box["height"] + 12.0)
     palette = render_palette(options.theme)
+    title_text = options.title or "Packet Tracer topology"
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-labelledby="title desc">',
-        "  <title id=\"title\">Packet Tracer topology</title>",
+        f'  <title id="title">{svg_text(title_text)}</title>',
         "  <desc id=\"desc\">Offline-rendered Packet Tracer 7.3.0 topology diagram.</desc>",
         "  <style>",
         f"    svg {{ background: {palette['bg']}; font-family: Inter, Segoe UI, Arial, sans-serif; }}",
+        f"    .diagram-title {{ fill: {palette['text']}; font-size: 22px; font-weight: 800; }}",
+        f"    .diagram-subtitle {{ fill: {palette['muted']}; font-size: 12px; }}",
         f"    .link {{ stroke: {palette['link']}; stroke-width: 2.2; stroke-linecap: round; }}",
         f"    .link-label {{ fill: {palette['label']}; font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: {palette['label_back']}; stroke-width: 4px; stroke-linejoin: round; }}",
         "    .device text { text-anchor: middle; stroke: none; }",
@@ -582,6 +688,11 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
         "    .device circle { stroke-width: 2; }",
         f"    .group-box {{ fill: {palette['group_fill']}; fill-opacity: 0.22; stroke: {palette['group_stroke']}; stroke-width: 1.4; stroke-dasharray: 8 6; }}",
         f"    .group-label {{ fill: {palette['muted']}; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }}",
+        f"    .legend-panel {{ fill: {palette['panel_bg']}; stroke: {palette['panel_border']}; stroke-width: 1.2; }}",
+        f"    .legend-title {{ fill: {palette['text']}; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }}",
+        f"    .legend-label {{ fill: {palette['muted']}; font-size: 12px; }}",
+        "    .legend-marker { stroke-width: 1.8; }",
+        "    .legend-link { stroke-width: 2.4; stroke-linecap: round; }",
         f"    .router ellipse {{ fill: {palette['router_fill']}; stroke: {palette['router_stroke']}; }} .router path {{ stroke: {palette['router_stroke']}; }}",
         f"    .switch rect {{ fill: {palette['switch_fill']}; stroke: {palette['switch_stroke']}; }} .switch path {{ stroke: {palette['switch_stroke']}; }}",
         f"    .server rect {{ fill: {palette['server_fill']}; stroke: {palette['server_stroke']}; }} .server path {{ stroke: {palette['server_stroke']}; }}",
@@ -591,6 +702,10 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
         f"    .device:not(.router):not(.switch):not(.server):not(.pc):not(.wireless) rect {{ fill: {palette['device_fill']}; stroke: {palette['device_stroke']}; }}",
         "  </style>",
     ]
+
+    if options.title:
+        lines.append(f'  <text class="diagram-title" x="24" y="32">{svg_text(options.title)}</text>')
+        lines.append('  <text class="diagram-subtitle" x="24" y="50">Packet Tracer 7.3.0 offline topology</text>')
 
     for box in group_boxes:
         lines.append(f'  <g class="visual-group" id="{svg_text(box["id"])}">')
@@ -622,7 +737,10 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
             lines.extend(svg_device_group(device, x, y, options=options))
 
     if not devices:
-        lines.append('  <text class="device-name" x="160" y="110">empty topology</text>')
+        lines.append(f'  <text class="device-name" x="160" y="{110 + title_height:.1f}">empty topology</text>')
+
+    if legend_extra_height:
+        lines.extend(svg_legend(plan, devices, options=options, width=width, y=height - legend_extra_height + 12.0, palette=palette))
 
     lines.append("</svg>")
     return "\n".join(lines) + "\n"
@@ -638,6 +756,7 @@ def svg_fragment(plan: dict[str, Any], *, options: RenderOptions = RenderOptions
 def html_report(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> str:
     report = markdown(plan)
     palette = render_palette(options.theme)
+    title_text = options.title or "Packet Tracer Topology Plan"
     return "\n".join(
         [
             "<!doctype html>",
@@ -645,7 +764,7 @@ def html_report(plan: dict[str, Any], *, options: RenderOptions = RenderOptions(
             "<head>",
             '  <meta charset="utf-8">',
             '  <meta name="viewport" content="width=device-width, initial-scale=1">',
-            "  <title>Packet Tracer Topology Plan</title>",
+            f"  <title>{svg_text(title_text)}</title>",
             "  <style>",
             f"    body {{ margin: 0; background: {palette['html_bg']}; color: {palette['text']}; font-family: Inter, Segoe UI, Arial, sans-serif; }}",
             "    main { max-width: 1180px; margin: 0 auto; padding: 24px; }",
@@ -658,7 +777,7 @@ def html_report(plan: dict[str, Any], *, options: RenderOptions = RenderOptions(
             "</head>",
             "<body>",
             "  <main>",
-            "    <h1>Packet Tracer Topology Plan</h1>",
+            f"    <h1>{svg_text(title_text)}</h1>",
             '    <section class="diagram" aria-label="Topology diagram">',
             svg_fragment(plan, options=options),
             "    </section>",
@@ -693,6 +812,14 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
     positions, width, height = svg_positions(devices)
     groups = visual_groups(plan, devices, options.group_by)
     group_boxes = visual_group_boxes(groups, positions)
+    title_height = 70.0 if options.title else 0.0
+    legend_extra_height = 92.0 if options.legend and legend_items(plan, devices) else 0.0
+    positions = shifted_positions(positions, dy=title_height)
+    group_boxes = shifted_group_boxes(group_boxes, dy=title_height)
+    height += title_height + legend_extra_height
+    if options.title or options.legend:
+        width = max(width, 540.0)
+    width = max(width, legend_required_width(plan, devices, options))
     for box in group_boxes:
         width = max(width, box["x"] + box["width"] + 12.0)
         height = max(height, box["y"] + box["height"] + 12.0)
@@ -707,6 +834,16 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
         '        <mxCell id="0" />',
         '        <mxCell id="1" parent="0" />',
     ]
+
+    if options.title:
+        title_style = f"text;html=1;strokeColor=none;fillColor=none;fontColor={palette['text']};fontSize=22;fontStyle=1;align=left;verticalAlign=middle;"
+        subtitle_style = f"text;html=1;strokeColor=none;fillColor=none;fontColor={palette['muted']};fontSize=12;align=left;verticalAlign=middle;"
+        lines.append(f'        <mxCell id="title" value="{svg_text(options.title)}" style="{svg_text(title_style)}" vertex="1" parent="1">')
+        lines.append('          <mxGeometry x="24" y="18" width="460" height="28" as="geometry" />')
+        lines.append("        </mxCell>")
+        lines.append(f'        <mxCell id="subtitle" value="Packet Tracer 7.3.0 offline topology" style="{svg_text(subtitle_style)}" vertex="1" parent="1">')
+        lines.append('          <mxGeometry x="24" y="46" width="360" height="18" as="geometry" />')
+        lines.append("        </mxCell>")
 
     for index, box in enumerate(group_boxes):
         style = (
@@ -746,9 +883,35 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
         lines.append("        </mxCell>")
         next_id += 1
 
+    legend_y = height - legend_extra_height + 18.0 if legend_extra_height else 0.0
+    if options.legend and legend_extra_height:
+        panel_style = f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['panel_bg']};strokeColor={palette['panel_border']};fontColor={palette['text']};fontStyle=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;"
+        lines.append(f'        <mxCell id="legend-panel" value="Legend" style="{svg_text(panel_style)}" vertex="1" parent="1">')
+        lines.append(f'          <mxGeometry x="24" y="{legend_y:.1f}" width="{max(300.0, width - 48.0):.1f}" height="64" as="geometry" />')
+        lines.append("        </mxCell>")
+        legend_x = 104.0
+        for index, item in enumerate(legend_items(plan, devices)):
+            label_text = item["label"]
+            if item["type"] == "link":
+                line_style = f"shape=line;html=1;rounded=0;dashed=1;strokeColor={palette['wireless_link']};strokeWidth=2;"
+                lines.append(f'        <mxCell id="legend-link-{index}" value="" style="{svg_text(line_style)}" vertex="1" parent="1">')
+                lines.append(f'          <mxGeometry x="{legend_x:.1f}" y="{legend_y + 36:.1f}" width="28" height="4" as="geometry" />')
+                lines.append("        </mxCell>")
+            else:
+                fill, stroke = svg_kind_colors(item["kind"], palette)
+                marker_style = f"rounded=1;whiteSpace=wrap;html=1;fillColor={fill};strokeColor={stroke};"
+                lines.append(f'        <mxCell id="legend-marker-{index}" value="" style="{svg_text(marker_style)}" vertex="1" parent="1">')
+                lines.append(f'          <mxGeometry x="{legend_x:.1f}" y="{legend_y + 28:.1f}" width="24" height="16" as="geometry" />')
+                lines.append("        </mxCell>")
+            label_style = f"text;html=1;strokeColor=none;fillColor=none;fontColor={palette['muted']};fontSize=12;align=left;verticalAlign=middle;"
+            lines.append(f'        <mxCell id="legend-label-{index}" value="{svg_text(label_text)}" style="{svg_text(label_style)}" vertex="1" parent="1">')
+            lines.append(f'          <mxGeometry x="{legend_x + 32:.1f}" y="{legend_y + 25:.1f}" width="{max(80.0, len(label_text) * 7.2):.1f}" height="22" as="geometry" />')
+            lines.append("        </mxCell>")
+            legend_x += max(112.0, len(label_text) * 7.2 + 46.0)
+
     if not devices:
         lines.append('        <mxCell id="d2" value="empty topology" style="text;html=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">')
-        lines.append('          <mxGeometry x="80" y="80" width="160" height="40" as="geometry" />')
+        lines.append(f'          <mxGeometry x="80" y="{80 + title_height:.1f}" width="160" height="40" as="geometry" />')
         lines.append("        </mxCell>")
 
     lines.extend(
@@ -1373,6 +1536,8 @@ def diagram_audit(plan: dict[str, Any], *, options: RenderOptions = RenderOption
                 "model_labels": options.model_labels,
                 "group_by": options.group_by,
                 "theme": options.theme,
+                "title": options.title,
+                "legend": options.legend,
             },
             "render_advice": advice,
         },
@@ -1470,6 +1635,8 @@ def render_bundle(
             "model_labels": options.model_labels,
             "group_by": options.group_by,
             "direction": direction,
+            "title": options.title,
+            "legend": options.legend,
         },
         "counts": summary_data.get("counts", {}),
     }
@@ -1507,6 +1674,8 @@ def add_visual_options(parser: argparse.ArgumentParser) -> None:
     add_link_label_option(parser)
     parser.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=True, help="hide device model labels")
     parser.add_argument("--group-by", choices=RENDER_GROUP_BY, default="none", help="draw visual group boxes by network, VLAN, site, category, or auto detection")
+    parser.add_argument("--title", default="", help="visible diagram title for SVG, draw.io, and HTML renders")
+    parser.add_argument("--legend", action="store_true", help="include a visible device/link legend in SVG, draw.io, and HTML renders")
 
 
 def render_options(args: argparse.Namespace) -> RenderOptions:
@@ -1515,6 +1684,8 @@ def render_options(args: argparse.Namespace) -> RenderOptions:
         link_labels=getattr(args, "link_labels", True),
         model_labels=getattr(args, "model_labels", True),
         group_by=getattr(args, "group_by", "none"),
+        title=getattr(args, "title", ""),
+        legend=getattr(args, "legend", False),
     )
 
 

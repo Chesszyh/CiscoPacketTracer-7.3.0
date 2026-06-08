@@ -41,7 +41,11 @@ class LabCliTest(unittest.TestCase):
         self.assertIn("campus_vlans", data["templates"]["enterprise-edge"]["options"])
         self.assertIn("render/<basename>.*", data["template"]["outputs"])
         self.assertIn("--basename", data["plan"]["optional"])
+        self.assertIn("--title", data["plan"]["optional"])
+        self.assertIn("--legend", data["plan"]["optional"])
         self.assertEqual(data["template"]["render_options"]["formats"], ["svg", "drawio", "html", "markdown", "summary"])
+        self.assertIn("title", data["template"]["render_options"])
+        self.assertIn("legend", data["template"]["render_options"])
 
     def test_template_generates_agent_ready_lab_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -67,6 +71,8 @@ class LabCliTest(unittest.TestCase):
                         "formats": ["svg", "drawio", "html", "markdown", "summary"],
                         "theme": "paper",
                         "group_by": "auto",
+                        "title": "Enterprise Demo",
+                        "legend": True,
                     },
                     "export_configs": True,
                 },
@@ -79,6 +85,8 @@ class LabCliTest(unittest.TestCase):
             self.assertEqual(manifest["template"], "enterprise-edge")
             self.assertTrue(manifest["safety"]["ok"])
             self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary"])
+            self.assertEqual(manifest["render_bundle"]["options"]["title"], "Enterprise Demo")
+            self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
             self.assertGreater(manifest["config_files"]["count"], 0)
 
             expected = [
@@ -99,6 +107,8 @@ class LabCliTest(unittest.TestCase):
             topology = json.loads((out_dir / "topology.json").read_text(encoding="utf-8"))
             self.assertEqual(topology["metadata"]["lab_bundle"]["name"], "enterprise-demo")
             self.assertEqual(topology["metadata"]["lab_bundle"]["template"], "enterprise-edge")
+            self.assertIn("Enterprise Demo", (out_dir / "render" / "enterprise-demo.svg").read_text(encoding="utf-8"))
+            self.assertIn("Legend", (out_dir / "render" / "enterprise-demo.html").read_text(encoding="utf-8"))
             self.assertIn("router ospf 1", (out_dir / "configs" / "R-ENT-EDGE.cfg").read_text(encoding="utf-8"))
 
     def test_template_can_limit_render_formats(self) -> None:
@@ -138,12 +148,17 @@ class LabCliTest(unittest.TestCase):
                 "svg,summary",
                 "--group-by",
                 "category",
+                "--title",
+                "Serial Lab",
+                "--legend",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads(result.stdout)
             self.assertEqual(manifest["kind"], "pt730-lab-plan-bundle")
             self.assertEqual(manifest["name"], "serial-lab")
             self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "summary"])
+            self.assertEqual(manifest["render_bundle"]["options"]["title"], "Serial Lab")
+            self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
             self.assertTrue(manifest["safety"]["ok"])
             self.assertEqual(manifest["config_files"]["count"], 2)
             self.assertTrue((out_dir / "topology.json").exists())
