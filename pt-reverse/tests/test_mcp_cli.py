@@ -48,10 +48,18 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_live_count", names)
         self.assertIn("pt730_live_save_as", names)
         self.assertIn("pt730_live_ios", names)
+        self.assertIn("pt730_live_pc_inspect", names)
         self.assertIn("pt730_live_pc_static", names)
+        self.assertIn("pt730_live_pc_dhcp", names)
         self.assertIn("pt730_live_term", names)
         self.assertIn("pt730_live_ping", names)
         self.assertIn("pt730_live_server_inspect", names)
+        self.assertIn("pt730_live_server_service", names)
+        self.assertIn("pt730_live_server_dns_add", names)
+        self.assertIn("pt730_live_server_ftp_add", names)
+        self.assertIn("pt730_live_server_dhcp_config", names)
+        self.assertIn("pt730_live_ftp", names)
+        self.assertIn("pt730_live_sim", names)
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
@@ -188,6 +196,46 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("static", command)
         self.assertIn("192.168.1.10", command)
 
+    def test_live_pc_inspect_and_dhcp_dry_run_return_command_previews(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_pc_inspect",
+                        "arguments": {
+                            "device": "PC1",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_pc_dhcp",
+                        "arguments": {
+                            "device": "PC1",
+                            "renew": True,
+                            "wait": 10,
+                            "expect_network": "192.168.1.0/24",
+                            "dry_run": True,
+                        },
+                    },
+                },
+            ]
+        )
+        inspect_command = responses[0]["result"]["structuredContent"]["command"]
+        dhcp_command = responses[1]["result"]["structuredContent"]["command"]
+        self.assertIn("pt730-pc", inspect_command[0])
+        self.assertIn("inspect", inspect_command)
+        self.assertIn("dhcp", dhcp_command)
+        self.assertIn("--renew", dhcp_command)
+        self.assertIn("192.168.1.0/24", dhcp_command)
+
     def test_live_terminal_ping_and_server_dry_run_return_command_previews(self) -> None:
         responses = self.run_mcp(
             [
@@ -242,6 +290,127 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("10.0.0.2", ping_command)
         self.assertIn("pt730-server", server_command[0])
         self.assertIn("inspect", server_command)
+
+    def test_live_server_service_dns_ftp_and_dhcp_dry_run_return_command_previews(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_service",
+                        "arguments": {
+                            "device": "SRV1",
+                            "service": "http",
+                            "enabled": True,
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_dns_add",
+                        "arguments": {
+                            "device": "SRV1",
+                            "hostname": "www.example.local",
+                            "ip": "172.16.1.10",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_ftp_add",
+                        "arguments": {
+                            "device": "SRV1",
+                            "username": "lab",
+                            "password": "packet",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_server_dhcp_config",
+                        "arguments": {
+                            "device": "SRV1",
+                            "network": "192.168.1.0",
+                            "mask": "255.255.255.0",
+                            "gateway": "192.168.1.1",
+                            "dns": "172.16.1.10",
+                            "enable": True,
+                            "dry_run": True,
+                        },
+                    },
+                },
+            ]
+        )
+        service_command = responses[0]["result"]["structuredContent"]["command"]
+        dns_command = responses[1]["result"]["structuredContent"]["command"]
+        ftp_add_command = responses[2]["result"]["structuredContent"]["command"]
+        dhcp_config_command = responses[3]["result"]["structuredContent"]["command"]
+        self.assertIn("http", service_command)
+        self.assertIn("--enable", service_command)
+        self.assertIn("dns-add", dns_command)
+        self.assertIn("www.example.local", dns_command)
+        self.assertIn("ftp-add", ftp_add_command)
+        self.assertIn("lab", ftp_add_command)
+        self.assertIn("dhcp-config", dhcp_config_command)
+        self.assertIn("--enable", dhcp_config_command)
+
+    def test_live_ftp_and_sim_dry_run_return_command_previews(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_ftp",
+                        "arguments": {
+                            "client": "PC1",
+                            "server": "172.16.1.10",
+                            "username": "lab",
+                            "password": "packet",
+                            "commands": ["dir"],
+                            "expect": "ftp>",
+                            "dry_run": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_sim",
+                        "arguments": {
+                            "action": "simple_pdu",
+                            "source": "PC1",
+                            "target": "SRV1",
+                            "dry_run": True,
+                        },
+                    },
+                },
+            ]
+        )
+        ftp_command = responses[0]["result"]["structuredContent"]["command"]
+        sim_command = responses[1]["result"]["structuredContent"]["command"]
+        self.assertIn("pt730-ftp", ftp_command[0])
+        self.assertIn("172.16.1.10", ftp_command)
+        self.assertIn("--cmd", ftp_command)
+        self.assertIn("pt730-sim", sim_command[0])
+        self.assertIn("simple-pdu", sim_command)
 
     def test_live_apply_dry_run_is_allowed_without_live_bridge(self) -> None:
         responses = self.run_mcp(
