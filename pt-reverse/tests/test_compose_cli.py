@@ -166,6 +166,50 @@ class ComposeCliTest(unittest.TestCase):
             self.assertEqual(result.stdout, "")
             self.assertIn("devices", json.loads(out_path.read_text(encoding="utf-8")))
 
+    def test_can_load_segments_from_ip_plan_output(self) -> None:
+        ip_plan = {
+            "kind": "pt730-ip-plan",
+            "compose": {
+                "segments": [
+                    {
+                        "name": "OFFICE",
+                        "vlan": 20,
+                        "subnet": "192.168.0.0/26",
+                        "gateway": "192.168.0.62",
+                        "dns": "172.16.1.11",
+                        "representative_hosts": 2,
+                        "core": "MLS1",
+                    }
+                ]
+            },
+        }
+        compose_spec = {
+            "name": "ip-planned-campus",
+            "core": {"count": 1, "prefix": "MLS"},
+            "segments": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_path = Path(tmpdir) / "campus.json"
+            ip_path = Path(tmpdir) / "planned.json"
+            spec_path.write_text(json.dumps(compose_spec), encoding="utf-8")
+            ip_path.write_text(json.dumps(ip_plan), encoding="utf-8")
+            result = subprocess.run(
+                [str(COMPOSE), "campus", str(spec_path), "--segments-from-ip-plan", str(ip_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            plan = json.loads(result.stdout)
+            names = {device["name"] for device in plan["devices"]}
+            self.assertIn("SW-OFFICE", names)
+            self.assertIn("PC-OFFICE-1", names)
+            pc_configs = {config["name"]: config for config in plan["pc_configs"]}
+            self.assertEqual(pc_configs["PC-OFFICE-1"]["gateway"], "192.168.0.62")
+
     def test_rejects_gateway_outside_segment_subnet(self) -> None:
         spec = self.campus_spec()
         spec["segments"][0]["gateway"] = "192.168.1.254"

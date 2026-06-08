@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import ipaddress
 import json
 import math
@@ -53,6 +54,17 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("compose spec must be a JSON object")
     return data
+
+
+def _segments_from_ip_plan(path: Path) -> list[dict[str, Any]]:
+    data = _load_json(path)
+    compose = data.get("compose")
+    if not isinstance(compose, dict):
+        raise ValueError("ip plan output must contain compose object")
+    segments = compose.get("segments")
+    if not isinstance(segments, list):
+        raise ValueError("ip plan output must contain compose.segments array")
+    return copy.deepcopy(segments)
 
 
 def _slug(value: Any) -> str:
@@ -406,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--output", type=Path, help="write topology JSON to a file instead of stdout")
     campus_p.add_argument("--layout-style", choices=STYLES, default="campus", help="layout style to apply after composition")
     campus_p.add_argument("--no-layout", action="store_true", help="do not assign x/y coordinates")
+    campus_p.add_argument("--segments-from-ip-plan", type=Path, help="replace spec.segments with compose.segments from pt730-ip-plan output")
 
     args = parser.parse_args(argv)
     try:
@@ -414,6 +427,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.cmd == "campus":
             spec = _load_json(args.spec)
+            if args.segments_from_ip_plan is not None:
+                spec = copy.deepcopy(spec)
+                spec["segments"] = _segments_from_ip_plan(args.segments_from_ip_plan)
             plan = compose_campus(spec, do_layout=not args.no_layout, layout_style=args.layout_style)
             emit_json(plan, args.output, compact=args.compact)
             return 0

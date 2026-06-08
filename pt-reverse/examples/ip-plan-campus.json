@@ -1,0 +1,43 @@
+{
+  "address_pool": "192.168.0.0/21",
+  "dns": "172.16.1.11",
+  "default_representative_hosts": 2,
+  "groups": [
+    {
+      "name": "OFFICE",
+      "hosts": 60,
+      "vlan": 20,
+      "core": "MLS1"
+    },
+    {
+      "name": "TEACH",
+      "hosts": 60,
+      "vlan": 30,
+      "core": "MLS2"
+    },
+    {
+      "name": "RESEARCH",
+      "hosts": 120,
+      "vlan": 40,
+      "core": "MLS2"
+    },
+    {
+      "name": "GRAD",
+      "hosts": 200,
+      "vlan": 50,
+      "core": "MLS1"
+    },
+    {
+      "name": "LAB-A",
+      "hosts": 253,
+      "vlan": 60,
+      "core": "MLS2"
+    },
+    {
+      "name": "LAB-B",
+      "hosts": 253,
+      "vlan": 61,
+      "core": "MLS1"
+    }
+  ]
+}

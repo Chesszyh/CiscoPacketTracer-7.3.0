@@ -32,6 +32,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertEqual(data["packet_tracer_version"], "7.3.0")
         self.assertIn("pt730-layout", data["offline_tools"])
         self.assertIn("pt730-compose", data["offline_tools"])
+        self.assertIn("pt730-ip-plan", data["offline_tools"])
         self.assertIn("pt730-render", data["offline_tools"])
         self.assertIn("pt730-models", data["offline_tools"])
         self.assertIn("pt730-ios-template", data["offline_tools"])
@@ -41,6 +42,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("schema", data["ios_template_features"])
         self.assertIn("pt-reverse/bin/pt730-layout <plan.json> --output <layout.json>", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-compose campus <campus-spec.json> --output <plan.json>", data["recommended_workflow"])
+        self.assertIn("pt-reverse/bin/pt730-ip-plan campus <ip-plan.json> --output <planned-segments.json>", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-ios-template schema", data["recommended_workflow"])
 
     def test_table_output_is_human_readable(self) -> None:
