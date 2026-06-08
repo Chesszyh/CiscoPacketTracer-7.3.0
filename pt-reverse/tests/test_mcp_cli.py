@@ -43,6 +43,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_schema", names)
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_render_bundle", names)
+        self.assertIn("pt730_lab_template", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
         self.assertIn("pt730_template_wireless_lan", names)
@@ -97,6 +98,9 @@ class McpCliTest(unittest.TestCase):
         bundle = next(tool for tool in tools if tool["name"] == "pt730_render_bundle")
         self.assertIn("output_dir", bundle["inputSchema"]["required"])
         self.assertIn("formats", bundle["inputSchema"]["properties"])
+        lab = next(tool for tool in tools if tool["name"] == "pt730_lab_template")
+        self.assertIn("spec", lab["inputSchema"]["required"])
+        self.assertIn("output_dir", lab["inputSchema"]["required"])
         roas = next(tool for tool in tools if tool["name"] == "pt730_template_vlan_router_on_stick")
         self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
@@ -140,16 +144,33 @@ class McpCliTest(unittest.TestCase):
                         },
                     },
                 },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_schema",
+                        "arguments": {
+                            "target": "lab",
+                            "compact": True,
+                        },
+                    },
+                },
             ]
         )
         compose_result = responses[0]["result"]
         ios_result = responses[1]["result"]
+        lab_result = responses[2]["result"]
         self.assertEqual(compose_result["isError"], False)
         self.assertIn('"commands": [', compose_result["structuredContent"]["stdout"])
         self.assertIn('"campus"', compose_result["structuredContent"]["stdout"])
         self.assertEqual(ios_result["isError"], False)
         self.assertIn('"format":"pt730-ios-template"', ios_result["structuredContent"]["stdout"])
         self.assertNotIn("\n  ", ios_result["structuredContent"]["stdout"])
+        self.assertEqual(lab_result["isError"], False)
+        self.assertIn('"formats":["svg","drawio","html","markdown","summary"]', lab_result["structuredContent"]["stdout"])
+        self.assertIn('"enterprise-edge"', lab_result["structuredContent"]["stdout"])
+        self.assertNotIn("\n  ", lab_result["structuredContent"]["stdout"])
 
     def test_schema_tool_rejects_unknown_target(self) -> None:
         responses = self.run_mcp(
@@ -329,6 +350,65 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "mcp-simple.svg").exists())
             self.assertTrue((out_dir / "mcp-simple.summary.json").exists())
             self.assertTrue((out_dir / "mcp-simple.manifest.json").exists())
+
+    def test_tools_call_lab_template_generates_manifest_and_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec = Path(tmpdir) / "lab-spec.json"
+            spec.write_text(
+                json.dumps(
+                    {
+                        "name": "mcp-enterprise",
+                        "template": "enterprise-edge",
+                        "template_options": {
+                            "name": "MCP",
+                            "campus_vlans": 2,
+                            "hosts_per_vlan": 1,
+                            "campus_servers": 2,
+                            "branches": 1,
+                            "branch_hosts": 1,
+                            "dmz_servers": 1,
+                            "internet_hosts": 1,
+                            "routing": "ospf",
+                        },
+                        "render": {"basename": "mcp-enterprise", "formats": ["svg", "summary"], "group_by": "auto"},
+                        "export_configs": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_dir = Path(tmpdir) / "mcp-lab"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_lab_template",
+                            "arguments": {
+                                "spec": str(spec),
+                                "output_dir": str(out_dir),
+                                "compact": True,
+                            },
+                        },
+                    }
+                ]
+            )
+            result = responses[0]["result"]
+            self.assertEqual(result["isError"], False)
+            command = result["structuredContent"]["command"]
+            self.assertIn("pt730-lab", command[0])
+            self.assertIn("--compact", command)
+            self.assertIn("template", command)
+            self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+            manifest = json.loads(result["structuredContent"]["stdout"])
+            self.assertEqual(manifest["kind"], "pt730-lab-template-bundle")
+            self.assertEqual(manifest["template"], "enterprise-edge")
+            self.assertTrue(manifest["safety"]["ok"])
+            self.assertTrue((out_dir / "manifest.json").exists())
+            self.assertTrue((out_dir / "render" / "mcp-enterprise.svg").exists())
+            self.assertTrue((out_dir / "render" / "mcp-enterprise.summary.json").exists())
+            self.assertTrue((out_dir / "configs" / "R-MCP-EDGE.cfg").exists())
 
     def test_tools_call_pipeline_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -183,6 +183,40 @@ ok "pipeline checks"
 "$BIN/pt730-render" summary "$tmp/enterprise-edge-template.json" >/dev/null
 "$BIN/pt730-render" svg "$tmp/enterprise-edge-template.json" --group-by auto >/dev/null
 ok "template checks"
+"$BIN/pt730-lab" schema | python3 -m json.tool >/dev/null
+cat >"$tmp/lab-spec.json" <<'JSON'
+{
+  "name": "selftest-enterprise",
+  "template": "enterprise-edge",
+  "template_options": {
+    "name": "SELF",
+    "campus_vlans": 2,
+    "hosts_per_vlan": 1,
+    "campus_servers": 2,
+    "branches": 1,
+    "branch_hosts": 1,
+    "dmz_servers": 1,
+    "internet_hosts": 1,
+    "routing": "ospf"
+  },
+  "render": {
+    "basename": "selftest-enterprise",
+    "formats": ["svg", "summary"],
+    "group_by": "auto"
+  },
+  "export_configs": true
+}
+JSON
+"$BIN/pt730-lab" template "$tmp/lab-spec.json" --output-dir "$tmp/lab" >/dev/null
+test -s "$tmp/lab/topology.json"
+test -s "$tmp/lab/safety.json"
+test -s "$tmp/lab/manifest.json"
+test -s "$tmp/lab/render/selftest-enterprise.manifest.json"
+test -s "$tmp/lab/render/selftest-enterprise.svg"
+test -s "$tmp/lab/configs/R-SELF-EDGE.cfg"
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_template","arguments":{"spec":"'"$tmp"'/lab-spec.json","output_dir":"'"$tmp"'/mcp-lab","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+test -s "$tmp/mcp-lab/manifest.json"
+ok "lab bundle checks"
 "$BIN/pt730-config-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-config-plan" campus "$tmp/compose-plan.json" --output "$tmp/configured-plan.json"
 "$BIN/pt730-safety" plan "$tmp/configured-plan.json" >/dev/null

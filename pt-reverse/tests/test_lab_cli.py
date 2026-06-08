@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Tests for one-spec offline lab bundle generation."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+LAB = ROOT / "bin" / "pt730-lab"
+
+
+class LabCliTest(unittest.TestCase):
+    def run_lab(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(LAB), *args],
+            cwd=ROOT.parent,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=False,
+        )
+
+    def write_spec(self, tmpdir: str, spec: dict) -> Path:
+        path = Path(tmpdir) / "lab-spec.json"
+        path.write_text(json.dumps(spec), encoding="utf-8")
+        return path
+
+    def test_schema_describes_templates_and_outputs(self) -> None:
+        result = self.run_lab("schema")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIn("template", data["commands"])
+        self.assertIn("enterprise-edge", data["templates"])
+        self.assertIn("campus_vlans", data["templates"]["enterprise-edge"]["options"])
+        self.assertIn("render/<basename>.*", data["template"]["outputs"])
+        self.assertEqual(data["template"]["render_options"]["formats"], ["svg", "drawio", "html", "markdown", "summary"])
+
+    def test_template_generates_agent_ready_lab_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec = self.write_spec(
+                tmpdir,
+                {
+                    "name": "enterprise-demo",
+                    "template": "enterprise-edge",
+                    "template_options": {
+                        "name": "ENT",
+                        "campus_vlans": 2,
+                        "hosts_per_vlan": 1,
+                        "campus_servers": 2,
+                        "branches": 1,
+                        "branch_hosts": 1,
+                        "dmz_servers": 1,
+                        "internet_hosts": 1,
+                        "routing": "ospf",
+                        "layout_style": "campus",
+                    },
+                    "render": {
+                        "basename": "enterprise-demo",
+                        "formats": ["svg", "drawio", "html", "markdown", "summary"],
+                        "theme": "paper",
+                        "group_by": "auto",
+                    },
+                    "export_configs": True,
+                },
+            )
+            out_dir = Path(tmpdir) / "lab"
+            result = self.run_lab("template", str(spec), "--output-dir", str(out_dir))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["kind"], "pt730-lab-template-bundle")
+            self.assertEqual(manifest["template"], "enterprise-edge")
+            self.assertTrue(manifest["safety"]["ok"])
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary"])
+            self.assertGreater(manifest["config_files"]["count"], 0)
+
+            expected = [
+                "topology.json",
+                "safety.json",
+                "manifest.json",
+                "render/enterprise-demo.svg",
+                "render/enterprise-demo.drawio",
+                "render/enterprise-demo.html",
+                "render/enterprise-demo.md",
+                "render/enterprise-demo.summary.json",
+                "render/enterprise-demo.manifest.json",
+                "configs/R-ENT-EDGE.cfg",
+            ]
+            for relative in expected:
+                self.assertTrue((out_dir / relative).exists(), relative)
+
+            topology = json.loads((out_dir / "topology.json").read_text(encoding="utf-8"))
+            self.assertEqual(topology["metadata"]["lab_bundle"]["name"], "enterprise-demo")
+            self.assertEqual(topology["metadata"]["lab_bundle"]["template"], "enterprise-edge")
+            self.assertIn("router ospf 1", (out_dir / "configs" / "R-ENT-EDGE.cfg").read_text(encoding="utf-8"))
+
+    def test_template_can_limit_render_formats(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec = self.write_spec(
+                tmpdir,
+                {
+                    "template": "lan-star",
+                    "template_options": {"name": "SMALL", "pcs": 1, "servers": 1},
+                    "render": {"basename": "small", "formats": ["summary"]},
+                    "export_configs": False,
+                },
+            )
+            out_dir = Path(tmpdir) / "lab"
+            result = self.run_lab("template", str(spec), "--output-dir", str(out_dir))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["render_bundle"]["formats"], ["summary"])
+            self.assertEqual(manifest["config_files"]["count"], 0)
+            self.assertTrue((out_dir / "render" / "small.summary.json").exists())
+            self.assertFalse((out_dir / "render" / "small.svg").exists())
+            self.assertFalse((out_dir / "configs").exists())
+
+    def test_template_rejects_unknown_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec = self.write_spec(tmpdir, {"template": "not-real"})
+            result = self.run_lab("template", str(spec), "--output-dir", str(Path(tmpdir) / "lab"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown template", result.stderr)
+
+    def test_template_rejects_unknown_template_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec = self.write_spec(tmpdir, {"template": "lan-star", "template_options": {"bogus": 1}})
+            result = self.run_lab("template", str(spec), "--output-dir", str(Path(tmpdir) / "lab"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown option", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

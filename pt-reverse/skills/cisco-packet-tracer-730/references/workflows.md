@@ -24,12 +24,14 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
-The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/email/NTP/Syslog/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. `pt730_schema`, catalog, and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
+The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/email/NTP/Syslog/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. `pt730_schema` exposes template/IP-plan/compose/config/pipeline/lab/IOS-template schemas; catalog and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
 
 Example schema query:
 
 ```bash
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_schema","arguments":{"target":"compose","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pt730_schema","arguments":{"target":"lab","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 
@@ -51,6 +53,31 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_redundant_campus","arguments":{"name":"AGENT","segments":4,"hosts_per_segment":2,"servers":4,"routing":"ospf","layout_style":"campus","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_enterprise_edge","arguments":{"name":"ENT","campus_vlans":3,"hosts_per_vlan":2,"branches":2,"branch_hosts":2,"dmz_servers":2,"routing":"ospf","layout_style":"campus","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
+Example full lab bundle through MCP:
+
+```bash
+cat > lab-spec.json <<'JSON'
+{
+  "name": "enterprise-demo",
+  "template": "enterprise-edge",
+  "template_options": {
+    "name": "ENT",
+    "campus_vlans": 3,
+    "hosts_per_vlan": 2,
+    "campus_servers": 4,
+    "branches": 2,
+    "branch_hosts": 2,
+    "dmz_servers": 2,
+    "routing": "ospf"
+  },
+  "render": {"basename": "enterprise-demo", "formats": ["svg", "drawio", "html", "markdown", "summary"], "theme": "paper", "group_by": "auto"},
+  "export_configs": true
+}
+JSON
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_lab_template","arguments":{"spec":"lab-spec.json","output_dir":"enterprise-demo-lab","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
 ```
 
@@ -155,6 +182,7 @@ pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-pe
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf --output campus.json
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf --output redundant-campus.json
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf --output enterprise-edge.json
+pt-reverse/bin/pt730-lab template lab-spec.json --output-dir enterprise-demo-lab
 pt-reverse/bin/pt730-safety plan lan-star.json
 pt-reverse/bin/pt730-render svg lan-star.json --group-by network --output lan-star.svg
 pt-reverse/bin/pt730-render drawio lan-star.json --group-by network --output lan-star.drawio
@@ -199,6 +227,15 @@ metadata, and HTTP/DNS/FTP/email server configs. Use `--group-by auto` or
 models to generate an ISP edge, inside LAN, DMZ, Internet test host, NAT
 overload, outside ACL, static routes, and `security_policies` metadata. Use it
 for ASA-like security labs without touching risky ASA models in PT 7.3.0.
+
+## Lab Bundle
+
+Use `pt730-lab template <lab-spec.json> --output-dir <out-dir>` when an agent
+should create a complete offline deliverable from one template spec. The output
+directory contains `topology.json`, `safety.json`, `render/<basename>.*`,
+`configs/*.cfg`, and `manifest.json`. The spec selects any built-in template,
+uses snake_case `template_options`, and can set render `formats`, `theme`,
+labels, and `group_by`.
 
 ## Campus Pipeline
 

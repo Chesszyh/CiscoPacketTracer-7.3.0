@@ -31,6 +31,8 @@ pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-pe
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
+pt-reverse/bin/pt730-lab schema
+pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
 pt-reverse/bin/pt730-pipeline schema
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan schema
@@ -74,7 +76,7 @@ app/bridge/launch/recover lifecycle tools, and simulation/PDU tools support
 `dry_run=true` previews that return the underlying CLI command without touching
 Packet Tracer. Catalog and JavaScript safety checks are exposed offline through
 MCP, along with `pt730_schema` for retrieving template, IP-plan, compose,
-config-plan, pipeline, and IOS-template input schemas. Model registry reads are
+config-plan, pipeline, lab, and IOS-template input schemas. Model registry reads are
 exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
 Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
@@ -89,6 +91,9 @@ Render MCP tools expose visual theme, label, and visual grouping controls
 through `pt730_render` for SVG, draw.io, HTML, and Mermaid where supported.
 The `pt730_render_bundle` MCP tool writes a multi-format render bundle plus a
 manifest in one offline call.
+The `pt730_lab_template` MCP tool writes a complete offline lab bundle from one
+template spec JSON: topology, safety report, render bundle, per-device configs,
+and manifest.
 The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
 JSON controls for denser or cleaner topology diagrams.
 Config planning MCP tools expose IOS-only output, source filtering, and compact
@@ -196,6 +201,7 @@ pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-pe
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
+pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
@@ -342,6 +348,12 @@ NTP/Syslog/SNMP, server services, and optional RIP/OSPF configs.
 Enterprise-edge templates combine HQ VLANs, server zone, DMZ, ISP/Internet
 test LAN, branch serial WAN routers, NAT overload, outside ACL metadata, and
 service configs into one render-friendly integrated topology.
+Use `pt730-lab template <lab-spec.json> --output-dir <out-dir>` when an agent
+should start from one compact JSON spec and write a complete deliverable bundle:
+`topology.json`, `safety.json`, `render/<basename>.*`, `configs/*.cfg`, and
+`manifest.json`.  The spec selects any built-in template, passes snake_case
+`template_options`, and can control render `formats`, `theme`, labels, and
+`group_by` in the same file.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing ospf` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered
