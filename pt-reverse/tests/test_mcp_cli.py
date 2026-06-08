@@ -43,6 +43,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_schema", names)
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_render_bundle", names)
+        self.assertIn("pt730_verification_plan", names)
         self.assertIn("pt730_lab_template", names)
         self.assertIn("pt730_lab_plan", names)
         self.assertIn("pt730_lab_report", names)
@@ -101,6 +102,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("title", render["inputSchema"]["properties"])
         self.assertIn("legend", render["inputSchema"]["properties"])
         self.assertIn("diagram-audit", render["inputSchema"]["properties"]["format"]["enum"])
+        self.assertIn("verification-json", render["inputSchema"]["properties"]["format"]["enum"])
         bundle = next(tool for tool in tools if tool["name"] == "pt730_render_bundle")
         self.assertIn("output_dir", bundle["inputSchema"]["required"])
         self.assertIn("formats", bundle["inputSchema"]["properties"])
@@ -108,6 +110,10 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("title", bundle["inputSchema"]["properties"])
         self.assertIn("legend", bundle["inputSchema"]["properties"])
         self.assertIn("diagram-audit", bundle["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
+        self.assertIn("verification-md", bundle["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
+        verification = next(tool for tool in tools if tool["name"] == "pt730_verification_plan")
+        self.assertIn("plan", verification["inputSchema"]["required"])
+        self.assertIn("max_hosts", verification["inputSchema"]["properties"])
         lab = next(tool for tool in tools if tool["name"] == "pt730_lab_template")
         self.assertIn("spec", lab["inputSchema"]["required"])
         self.assertIn("output_dir", lab["inputSchema"]["required"])
@@ -118,6 +124,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("title", lab_plan["inputSchema"]["properties"])
         self.assertIn("legend", lab_plan["inputSchema"]["properties"])
         self.assertIn("diagram-audit", lab_plan["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
+        self.assertIn("verification-json", lab_plan["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
         lab_report = next(tool for tool in tools if tool["name"] == "pt730_lab_report")
         self.assertIn("manifest", lab_report["inputSchema"]["required"])
         self.assertIn("output", lab_report["inputSchema"]["properties"])
@@ -258,6 +265,49 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(data["kind"], "pt730-diagram-audit")
         self.assertTrue(data["ok"])
         self.assertEqual(data["checks"]["counts"]["rendered_devices"], 3)
+
+    def test_tools_call_verification_plan_returns_checklist(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_verification_plan",
+                        "arguments": {
+                            "plan": "pt-reverse/examples/server-dhcp-lan.json",
+                            "format": "markdown",
+                            "max_hosts": 4,
+                            "max_service_targets": 4,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "verification-json",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                        },
+                    },
+                },
+            ]
+        )
+        markdown_result = responses[0]["result"]
+        json_result = responses[1]["result"]
+        self.assertEqual(markdown_result["isError"], False)
+        self.assertIn("verification-plan", markdown_result["structuredContent"]["command"])
+        self.assertIn("--max-hosts", markdown_result["structuredContent"]["command"])
+        self.assertIn("# Packet Tracer Verification Plan", markdown_result["structuredContent"]["stdout"])
+        self.assertIn("pt730_live_server_inspect", markdown_result["structuredContent"]["stdout"])
+        self.assertEqual(json_result["isError"], False)
+        data = json.loads(json_result["structuredContent"]["stdout"])
+        self.assertEqual(data["kind"], "pt730-verification-plan")
+        self.assertGreaterEqual(data["counts"]["connectivity"], 1)
 
     def test_render_tool_exposes_visual_theme_and_label_options(self) -> None:
         responses = self.run_mcp(
@@ -523,13 +573,16 @@ class McpCliTest(unittest.TestCase):
             self.assertEqual(result["isError"], False)
             self.assertIn("--preset", result["structuredContent"]["command"])
             manifest = json.loads(result["structuredContent"]["stdout"])
-            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md"])
             self.assertEqual(manifest["options"]["preset"], "report")
             self.assertEqual(manifest["options"]["theme"], "paper")
             self.assertEqual(manifest["options"]["link_labels"], False)
             self.assertEqual(manifest["options"]["group_by"], "auto")
             self.assertEqual(manifest["options"]["legend"], True)
+            self.assertEqual(manifest["verification_plan"]["ok"], True)
             self.assertTrue((out_dir / "mcp-report.diagram-audit.json").exists())
+            self.assertTrue((out_dir / "mcp-report.verification.json").exists())
+            self.assertTrue((out_dir / "mcp-report.verification.md").exists())
 
     def test_tools_call_lab_template_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -661,13 +714,16 @@ class McpCliTest(unittest.TestCase):
             self.assertEqual(result["isError"], False)
             self.assertIn("--preset", result["structuredContent"]["command"])
             manifest = json.loads(result["structuredContent"]["stdout"])
-            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md"])
             self.assertEqual(manifest["render_bundle"]["options"]["preset"], "report")
             self.assertEqual(manifest["render_bundle"]["options"]["theme"], "paper")
             self.assertEqual(manifest["render_bundle"]["options"]["link_labels"], False)
             self.assertEqual(manifest["render_bundle"]["options"]["group_by"], "auto")
             self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
+            self.assertEqual(manifest["render_bundle"]["verification_plan"]["counts"]["ios"], 2)
             self.assertTrue((out_dir / "render" / "mcp-serial-report.diagram-audit.json").exists())
+            self.assertTrue((out_dir / "render" / "mcp-serial-report.verification.json").exists())
+            self.assertTrue((out_dir / "render" / "mcp-serial-report.verification.md").exists())
 
     def test_tools_call_lab_report_generates_markdown_or_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

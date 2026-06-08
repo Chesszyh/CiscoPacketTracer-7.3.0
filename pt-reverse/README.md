@@ -55,6 +55,7 @@ pt-reverse/bin/pt730-render html pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
+pt-reverse/bin/pt730-render verification-plan pt-reverse/examples/server-dhcp-lan.json --format markdown
 pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --title "Simple LAN" --legend
 pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-report --basename simple-lan --preset report
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
@@ -96,9 +97,14 @@ Render MCP tools expose visual preset, theme, title, legend, label, and visual g
 controls through `pt730_render` for SVG, draw.io, HTML, and Mermaid where
 supported, plus JSON summary, course audit, and diagram-quality audit outputs.
 Use `preset=report` for paper theme, automatic grouping, a visible legend,
-hidden link labels, and report bundle defaults that include `diagram-audit`.
+hidden link labels, and report bundle defaults that include `diagram-audit`,
+`verification-json`, and `verification-md`.
 The `pt730_render_bundle` MCP tool writes a multi-format render bundle plus a
 manifest in one offline call.
+The `pt730_verification_plan` MCP tool writes JSON or Markdown live/manual
+validation checklists from topology JSON without contacting Packet Tracer.  The
+checks map representative pings, IOS `show` commands, and Server-PT services to
+manual steps, local CLI commands, and dry-run MCP live-tool arguments.
 The `pt730_lab_template` MCP tool writes a complete offline lab bundle from one
 template spec JSON: topology, safety report, render bundle, per-device configs,
 and manifest.
@@ -216,7 +222,7 @@ pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
-pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit --title "Campus Topology" --legend
+pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit,verification-json,verification-md --title "Campus Topology" --legend
 pt-reverse/bin/pt730-lab report topology-lab/manifest.json --output topology-lab/deliverable.md
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
@@ -252,7 +258,8 @@ pt-reverse/bin/pt730-render drawio pt-reverse/examples/simple-lan.json --output 
 pt-reverse/bin/pt730-render html pt-reverse/examples/simple-lan.json --output simple-lan.html
 pt-reverse/bin/pt730-render markdown pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
-pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --formats svg,drawio,html,markdown,summary,diagram-audit --title "Simple LAN" --legend
+pt-reverse/bin/pt730-render verification-plan pt-reverse/examples/server-dhcp-lan.json --format markdown
+pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --formats svg,drawio,html,markdown,summary,diagram-audit,verification-json,verification-md --title "Simple LAN" --legend
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.generated.md
 pt-reverse/bin/pt730-render summary pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.summary.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.audit.json
@@ -377,7 +384,8 @@ composed a custom topology JSON. Use `pt730-lab report <out-dir>/manifest.json
 artifact paths, safety status, render outputs, config files, and suggested
 recording checks. Add `--preset report` or set `render.preset` to `report` when
 the agent should use paper theme, automatic grouping, a legend, hidden link
-labels, and default render formats that include `diagram-audit`.
+labels, and default render formats that include `diagram-audit`,
+`verification-json`, and `verification-md`.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing ospf` to run the offline
 agent workflow in one command and write a manifest, safety report, rendered
@@ -423,12 +431,17 @@ Use `pt730-render diagram-audit <plan.json>` before final screenshots to catch
 empty plans, missing coordinates, close device overlaps, disconnected
 components, oversized canvases, and dense-label/grouping issues without opening
 Packet Tracer.
+Use `pt730-render verification-plan <plan.json> --format markdown` before
+recording validation videos.  It generates representative gateway/DNS/server
+ping checks, IOS `show` commands for devices with `ios_configs`, and Server-PT
+service checks.  Each check includes a manual step, a local CLI command, and an
+MCP live-tool argument block with `dry_run=true`.
 Use `pt730-render html <plan.json> --output <review.html>` for a self-contained
 browser review page with the SVG diagram and Markdown report text embedded.
 Use `pt730-render bundle <plan.json> --output-dir <render-dir>` to write SVG,
 draw.io, HTML, Markdown, summary JSON, and a `<basename>.manifest.json` file
 from one existing plan.  Add `--formats svg,drawio,html,markdown,summary,course-audit`
-or `--formats svg,drawio,html,markdown,summary,diagram-audit`, plus
+or `--formats svg,drawio,html,markdown,summary,diagram-audit,verification-json,verification-md`, plus
 `--title <title> --legend`, when a bundle should include or limit specific
 artifacts.
 For this course assignment, `pt730-render course-audit <plan.json>` checks the

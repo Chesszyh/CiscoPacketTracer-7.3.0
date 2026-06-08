@@ -151,7 +151,7 @@ class LabCliTest(unittest.TestCase):
             result = self.run_lab("template", str(spec), "--output-dir", str(out_dir))
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads(result.stdout)
-            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md"])
             self.assertEqual(manifest["render_bundle"]["options"]["preset"], "report")
             self.assertEqual(manifest["render_bundle"]["options"]["theme"], "paper")
             self.assertEqual(manifest["render_bundle"]["options"]["link_labels"], False)
@@ -159,6 +159,9 @@ class LabCliTest(unittest.TestCase):
             self.assertEqual(manifest["render_bundle"]["options"]["title"], "preset-demo")
             self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
             self.assertTrue((out_dir / "render" / "preset-demo.diagram-audit.json").exists())
+            self.assertTrue((out_dir / "render" / "preset-demo.verification.json").exists())
+            self.assertTrue((out_dir / "render" / "preset-demo.verification.md").exists())
+            self.assertEqual(manifest["render_bundle"]["verification_plan"]["ok"], True)
 
     def test_plan_generates_lab_bundle_from_existing_topology_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -213,7 +216,7 @@ class LabCliTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads(result.stdout)
-            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md"])
             self.assertEqual(manifest["render_bundle"]["options"]["preset"], "report")
             self.assertEqual(manifest["render_bundle"]["options"]["theme"], "paper")
             self.assertEqual(manifest["render_bundle"]["options"]["link_labels"], False)
@@ -221,6 +224,9 @@ class LabCliTest(unittest.TestCase):
             self.assertEqual(manifest["render_bundle"]["options"]["title"], "serial-report")
             self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
             self.assertTrue((out_dir / "render" / "serial-report.diagram-audit.json").exists())
+            self.assertTrue((out_dir / "render" / "serial-report.verification.json").exists())
+            self.assertTrue((out_dir / "render" / "serial-report.verification.md").exists())
+            self.assertEqual(manifest["render_bundle"]["verification_plan"]["counts"]["ios"], 2)
 
     def test_report_generates_coursework_deliverable_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -247,6 +253,23 @@ class LabCliTest(unittest.TestCase):
             self.assertIn("serial.svg", result.stdout)
             self.assertIn("R_AUTO1.cfg", result.stdout)
             self.assertIn("Suggested Recording Checklist", result.stdout)
+
+            report_bundle = self.run_lab(
+                "plan",
+                "pt-reverse/examples/two-router-serial-configured.json",
+                "--output-dir",
+                str(out_dir / "report-preset"),
+                "--basename",
+                "serial-report",
+                "--preset",
+                "report",
+            )
+            self.assertEqual(report_bundle.returncode, 0, report_bundle.stderr)
+            report_result = self.run_lab("report", str(out_dir / "report-preset" / "manifest.json"))
+            self.assertEqual(report_result.returncode, 0, report_result.stderr)
+            self.assertIn("## Verification Plan", report_result.stdout)
+            self.assertIn("serial-report.verification.md", report_result.stdout)
+            self.assertIn("Verification plan", report_result.stdout)
 
             report_path = out_dir / "deliverable.md"
             written = self.run_lab("report", str(out_dir / "manifest.json"), "--output", str(report_path))

@@ -542,6 +542,24 @@ class RenderCliTest(unittest.TestCase):
             audit_data = json.loads((out_dir / "simple.diagram-audit.json").read_text(encoding="utf-8"))
             self.assertEqual(audit_data["kind"], "pt730-diagram-audit")
 
+    def test_verification_plan_outputs_live_checklist(self) -> None:
+        result = self.run_render("verification-plan", str(ROOT / "examples" / "server-dhcp-lan.json"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["kind"], "pt730-verification-plan")
+        self.assertGreaterEqual(data["counts"]["checks"], 5)
+        self.assertGreaterEqual(data["counts"]["services"], 3)
+        self.assertIn("pt730_live_term", {check.get("mcp", {}).get("tool") for check in data["checks"]})
+        self.assertIn("pt730_live_server_inspect", {check.get("mcp", {}).get("tool") for check in data["checks"]})
+        self.assertIn("pt730_live_ftp", {check.get("mcp", {}).get("tool") for check in data["checks"]})
+        self.assertTrue(any(check["source"] == "PC_DHCP" and check["target"] == "dhcpdemo.local" for check in data["checks"]))
+
+        markdown = self.run_render("verification-plan", str(ROOT / "examples" / "server-dhcp-lan.json"), "--format", "markdown")
+        self.assertEqual(markdown.returncode, 0, markdown.stderr)
+        self.assertIn("# Packet Tracer Verification Plan", markdown.stdout)
+        self.assertIn("## Service Checks", markdown.stdout)
+        self.assertIn("pt-reverse/bin/pt730-ftp PC_DHCP", markdown.stdout)
+
     def test_bundle_report_preset_adds_report_defaults_and_diagram_audit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "bundle"
@@ -557,7 +575,7 @@ class RenderCliTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads(result.stdout)
-            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit"])
+            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md"])
             self.assertEqual(manifest["options"]["preset"], "report")
             self.assertEqual(manifest["options"]["theme"], "paper")
             self.assertEqual(manifest["options"]["link_labels"], False)
@@ -565,7 +583,11 @@ class RenderCliTest(unittest.TestCase):
             self.assertEqual(manifest["options"]["title"], "report-simple")
             self.assertEqual(manifest["options"]["legend"], True)
             self.assertEqual(manifest["diagram_audit"], {"ok": True, "exit_code": 0})
+            self.assertEqual(manifest["verification_plan"]["ok"], True)
+            self.assertGreaterEqual(manifest["verification_plan"]["counts"]["checks"], 1)
             self.assertTrue((out_dir / "report-simple.diagram-audit.json").exists())
+            self.assertTrue((out_dir / "report-simple.verification.json").exists())
+            self.assertTrue((out_dir / "report-simple.verification.md").exists())
 
     def test_course_audit_accepts_course_design_plan(self) -> None:
         result = self.run_render("course-audit", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))

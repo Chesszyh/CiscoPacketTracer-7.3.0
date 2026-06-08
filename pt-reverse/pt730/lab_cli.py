@@ -316,6 +316,23 @@ def lab_report_markdown(manifest: dict[str, Any], *, manifest_path: Path, title:
         lines.extend(markdown_table(["Format", "Path", "Bytes", "Exit Code", "Status"], render_rows))
         lines.append("")
 
+    verification = render_bundle.get("verification_plan") if isinstance(render_bundle.get("verification_plan"), dict) else {}
+    if verification:
+        verification_rows = []
+        counts_data = verification.get("counts") if isinstance(verification.get("counts"), dict) else {}
+        verification_rows.append(["OK", verification.get("ok", "")])
+        verification_rows.append(["Exit code", verification.get("exit_code", "")])
+        for key in ("checks", "dhcp", "connectivity", "ios", "services", "representative_hosts", "server_targets"):
+            if key in counts_data:
+                verification_rows.append([key, counts_data[key]])
+        for fmt in ("verification-json", "verification-md"):
+            value = render_paths.get(fmt)
+            if value:
+                verification_rows.append([fmt, display_manifest_path(base_dir, value)])
+        lines.extend(["## Verification Plan", ""])
+        lines.extend(markdown_table(["Field", "Value"], verification_rows))
+        lines.append("")
+
     counts = render_bundle.get("counts") if isinstance(render_bundle.get("counts"), dict) else {}
     if counts:
         count_order = [
@@ -382,6 +399,9 @@ def lab_report_markdown(manifest: dict[str, Any], *, manifest_path: Path, title:
     if render_bundle.get("course_audit"):
         audit = render_bundle.get("course_audit")
         video_rows.append(["Course audit", f"Review course-audit result: ok={audit.get('ok') if isinstance(audit, dict) else audit}."])
+    if verification:
+        counts_data = verification.get("counts") if isinstance(verification.get("counts"), dict) else {}
+        video_rows.append(["Verification plan", f"Follow verification.md/json checks: {counts_data.get('checks', '')} planned checks."])
     lines.extend(["## Suggested Recording Checklist", ""])
     lines.extend(markdown_table(["Step", "What To Show"], video_rows))
     lines.append("")
@@ -782,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--output-dir", type=Path, required=True)
     plan_p.add_argument("--name", default="", help="logical lab name; defaults to the plan filename stem")
     plan_p.add_argument("--basename", default="", help="render artifact filename stem; defaults to --name or the plan filename stem")
-    plan_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit; defaults depend on --preset")
+    plan_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit,verification-json,verification-md; defaults depend on --preset")
     plan_p.add_argument("--direction", choices=("LR", "TD", "TB", "RL", "BT"), default="LR", help="Mermaid direction when mermaid is included")
     plan_p.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, auto grouping, legend, hidden link labels, and report bundle formats")
     plan_p.add_argument("--theme", choices=RENDER_THEMES, default=None, help="diagram color theme")

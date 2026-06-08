@@ -9,6 +9,7 @@ import ipaddress
 import json
 import math
 import re
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,9 +27,20 @@ COURSE_EXPECTED_PCS = 1900
 RENDER_THEMES = ("light", "dark", "paper")
 RENDER_GROUP_BY = ("none", "auto", "network", "vlan", "site", "category")
 RENDER_PRESETS = ("manual", "report")
-BUNDLE_RENDER_FORMATS = ("mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit")
+BUNDLE_RENDER_FORMATS = (
+    "mermaid",
+    "svg",
+    "drawio",
+    "html",
+    "markdown",
+    "summary",
+    "course-audit",
+    "diagram-audit",
+    "verification-json",
+    "verification-md",
+)
 BUNDLE_DEFAULT_FORMATS = ("svg", "drawio", "html", "markdown", "summary")
-BUNDLE_REPORT_FORMATS = ("svg", "drawio", "html", "markdown", "summary", "diagram-audit")
+BUNDLE_REPORT_FORMATS = ("svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md")
 DIAGRAM_AUDIT_OVERLAP_X = 120.0
 DIAGRAM_AUDIT_OVERLAP_Y = 90.0
 DIAGRAM_AUDIT_MAX_WIDTH = 1800.0
@@ -44,6 +56,8 @@ BUNDLE_EXTENSIONS = {
     "summary": "summary.json",
     "course-audit": "audit.json",
     "diagram-audit": "diagram-audit.json",
+    "verification-json": "verification.json",
+    "verification-md": "verification.md",
 }
 
 
@@ -291,6 +305,465 @@ def server_service_rows(plan: dict[str, Any]) -> dict[str, list[list[Any]]]:
                 pick(syslog, ("port",)) if isinstance(syslog, dict) else "",
             ])
     return rows
+
+
+def _enabled_service(value: Any) -> bool:
+    if isinstance(value, dict):
+        enabled = value.get("enabled")
+        if enabled is False:
+            return False
+        if enabled is None:
+            return True
+        return bool(enabled)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+    return value is True
+
+
+def _host_fields(plan: dict[str, Any]) -> dict[str, dict[str, str]]:
+    hosts: dict[str, dict[str, str]] = {}
+    for config in plan.get("pc_configs", []):
+        if not isinstance(config, dict):
+            continue
+        fields = ip_config_fields(config)
+        name = fields["name"]
+        if not name:
+            continue
+        hosts[name] = fields
+    return hosts
+
+
+def _device_category_map(plan: dict[str, Any]) -> dict[str, str]:
+    categories: dict[str, str] = {}
+    for index, device in enumerate(plan.get("devices", [])):
+        if not isinstance(device, dict):
+            continue
+        name = pick(device, ("name", "id"), f"device_{index}")
+        categories[name] = pick(device, ("category", "kind")).lower()
+    return categories
+
+
+def _server_config_map(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    servers: dict[str, dict[str, Any]] = {}
+    for config in plan.get("server_configs", []):
+        if not isinstance(config, dict):
+            continue
+        name = server_name(config)
+        if name:
+            servers[name] = config
+    return servers
+
+
+def _command_string(command: list[str]) -> str:
+    return " ".join(shlex.quote(str(part)) for part in command)
+
+
+def _safe_check_id(prefix: str, *parts: Any, used: set[str]) -> str:
+    raw = "_".join(str(part) for part in (prefix, *parts) if part not in (None, ""))
+    value = node_id(raw).lower()
+    base = value
+    suffix = 2
+    while value in used:
+        value = f"{base}_{suffix}"
+        suffix += 1
+    used.add(value)
+    return value
+
+
+def _check(
+    used: set[str],
+    *,
+    prefix: str,
+    parts: tuple[Any, ...],
+    category: str,
+    title: str,
+    purpose: str,
+    manual: str,
+    cli: list[str] | None = None,
+    mcp_tool: str = "",
+    mcp_arguments: dict[str, Any] | None = None,
+    source: str = "",
+    target: str = "",
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "id": _safe_check_id(prefix, *parts, used=used),
+        "category": category,
+        "title": title,
+        "purpose": purpose,
+        "source": source,
+        "target": target,
+        "manual": manual,
+    }
+    if cli:
+        record["cli"] = {"command": cli, "shell": _command_string(cli)}
+    if mcp_tool:
+        args = dict(mcp_arguments or {})
+        args.setdefault("dry_run", True)
+        record["mcp"] = {"tool": mcp_tool, "arguments": args}
+    return record
+
+
+def _host_network(fields: dict[str, str]) -> str:
+    if not fields.get("ip") or not fields.get("mask"):
+        return ""
+    try:
+        return str(ipaddress.ip_network(f"{fields['ip']}/{fields['mask']}", strict=False))
+    except ValueError:
+        return ""
+
+
+def _representative_hosts(plan: dict[str, Any], *, max_hosts: int) -> list[dict[str, str]]:
+    hosts = _host_fields(plan)
+    server_names = set(_server_config_map(plan))
+    selected: list[dict[str, str]] = []
+    selected_names: set[str] = set()
+    for group in address_groups(plan):
+        for name in group["hosts"]:
+            if name in server_names or name in selected_names or name not in hosts:
+                continue
+            selected.append(hosts[name])
+            selected_names.add(name)
+            break
+        if len(selected) >= max_hosts:
+            return selected
+    if not selected:
+        for name, fields in hosts.items():
+            if name in server_names or name in selected_names:
+                continue
+            selected.append(fields)
+            selected_names.add(name)
+            if len(selected) >= max_hosts:
+                break
+    if not selected:
+        for name, fields in hosts.items():
+            if name in selected_names:
+                continue
+            selected.append(fields)
+            selected_names.add(name)
+            if len(selected) >= max_hosts:
+                break
+    return selected
+
+
+def _server_ip_records(plan: dict[str, Any], *, max_targets: int) -> list[dict[str, str]]:
+    hosts = _host_fields(plan)
+    server_names = set(_server_config_map(plan))
+    records = [hosts[name] for name in hosts if name in server_names and hosts[name].get("ip")]
+    if not records:
+        categories = _device_category_map(plan)
+        records = [fields for name, fields in hosts.items() if categories.get(name) == "server" and fields.get("ip")]
+    return records[:max_targets]
+
+
+def _ios_commands(config: dict[str, Any]) -> list[str]:
+    raw = config.get("commands", config.get("cmds", config.get("config", config.get("cli", []))))
+    if isinstance(raw, list):
+        return [str(item) for item in raw]
+    if isinstance(raw, str):
+        return [line.strip() for line in raw.splitlines() if line.strip()]
+    return []
+
+
+def _ios_show_commands(commands: list[str]) -> list[str]:
+    lowered = "\n".join(commands).lower()
+    show = ["show ip interface brief", "show running-config | section hostname"]
+    if "router ospf" in lowered:
+        show.extend(["show ip ospf neighbor", "show ip route ospf", "show ip protocols"])
+    if "router rip" in lowered:
+        show.extend(["show ip route rip", "show ip protocols"])
+    if re.search(r"(?m)^\s*ip route\s+", lowered):
+        show.append("show ip route static")
+    if "standby " in lowered:
+        show.append("show standby brief")
+    if "spanning-tree" in lowered:
+        show.extend(["show spanning-tree summary", "show spanning-tree root"])
+    if "channel-group" in lowered or "port-channel" in lowered:
+        show.append("show etherchannel summary")
+    if "ip nat " in lowered:
+        show.extend(["show ip nat translations", "show ip nat statistics"])
+    if "ip access-group" in lowered or re.search(r"(?m)^\s*access-list\s+", lowered):
+        show.append("show access-lists")
+    if "ip dhcp pool" in lowered:
+        show.extend(["show ip dhcp pool", "show ip dhcp binding"])
+    if "logging host" in lowered:
+        show.append("show logging")
+    if "ntp server" in lowered:
+        show.append("show ntp associations")
+    if "snmp-server" in lowered:
+        show.append("show snmp")
+    deduped: list[str] = []
+    for command in show:
+        if command not in deduped:
+            deduped.append(command)
+    return deduped
+
+
+def _service_names(config: dict[str, Any]) -> list[str]:
+    names = []
+    for service in ("http", "dns", "ftp", "tftp", "email", "ntp", "syslog", "dhcp"):
+        if _enabled_service(config.get(service)):
+            names.append(service)
+    return names
+
+
+def verification_plan(plan: dict[str, Any], *, max_hosts: int = 12, max_service_targets: int = 8) -> dict[str, Any]:
+    used: set[str] = set()
+    checks: list[dict[str, Any]] = []
+    hosts = _host_fields(plan)
+    representative_hosts = _representative_hosts(plan, max_hosts=max_hosts)
+    server_ips = _server_ip_records(plan, max_targets=max_service_targets)
+    server_configs = _server_config_map(plan)
+    sample_client = representative_hosts[0] if representative_hosts else next(iter(hosts.values()), {})
+
+    for host in representative_hosts:
+        name = host["name"]
+        gateway = host.get("gateway")
+        dns = host.get("dns")
+        if host.get("dhcp") == "yes":
+            network = _host_network(host)
+            cli = ["pt-reverse/bin/pt730-pc", "dhcp", name, "--port", host.get("port") or "FastEthernet0", "--renew", "--wait", "10"]
+            args: dict[str, Any] = {"device": name, "port": host.get("port") or "FastEthernet0", "renew": True, "wait": 10}
+            if network:
+                cli.extend(["--expect-network", network])
+                args["expect_network"] = network
+            checks.append(
+                _check(
+                    used,
+                    prefix="dhcp",
+                    parts=(name,),
+                    category="dhcp",
+                    title=f"Verify DHCP lease on {name}",
+                    purpose="Confirm the DHCP client receives a usable address before connectivity checks.",
+                    manual=f"Open {name} Desktop > IP Configuration, select DHCP, then confirm a non-zero IP address.",
+                    cli=cli,
+                    mcp_tool="pt730_live_pc_dhcp",
+                    mcp_arguments=args,
+                    source=name,
+                    target=network,
+                )
+            )
+        if gateway:
+            checks.append(
+                _check(
+                    used,
+                    prefix="ping_gateway",
+                    parts=(name, gateway),
+                    category="connectivity",
+                    title=f"Ping default gateway from {name}",
+                    purpose="Confirm host access VLAN/subnet gateway reachability.",
+                    manual=f"On {name}, run: ping {gateway}",
+                    cli=["pt-reverse/bin/pt730-term", name, "--cmd", f"ping {gateway}", "--wait", "8", "--expect", r"Lost = 0 \(0% loss\)"],
+                    mcp_tool="pt730_live_term",
+                    mcp_arguments={"device": name, "commands": [f"ping {gateway}"], "wait": 8, "expect": r"Lost = 0 \(0% loss\)"},
+                    source=name,
+                    target=gateway,
+                )
+            )
+        if dns and dns != gateway:
+            checks.append(
+                _check(
+                    used,
+                    prefix="ping_dns",
+                    parts=(name, dns),
+                    category="connectivity",
+                    title=f"Ping DNS server from {name}",
+                    purpose="Confirm the host can reach its configured DNS server.",
+                    manual=f"On {name}, run: ping {dns}",
+                    cli=["pt-reverse/bin/pt730-term", name, "--cmd", f"ping {dns}", "--wait", "8", "--expect", r"Lost = 0 \(0% loss\)"],
+                    mcp_tool="pt730_live_term",
+                    mcp_arguments={"device": name, "commands": [f"ping {dns}"], "wait": 8, "expect": r"Lost = 0 \(0% loss\)"},
+                    source=name,
+                    target=dns,
+                )
+            )
+        for server in server_ips:
+            if server.get("ip") and server["ip"] != host.get("ip"):
+                checks.append(
+                    _check(
+                        used,
+                        prefix="ping_server",
+                        parts=(name, server["name"], server["ip"]),
+                        category="connectivity",
+                        title=f"Ping {server['name']} from {name}",
+                        purpose="Confirm representative host-to-server reachability.",
+                        manual=f"On {name}, run: ping {server['ip']}",
+                        cli=["pt-reverse/bin/pt730-term", name, "--cmd", f"ping {server['ip']}", "--wait", "8", "--expect", r"Lost = 0 \(0% loss\)"],
+                        mcp_tool="pt730_live_term",
+                        mcp_arguments={"device": name, "commands": [f"ping {server['ip']}"], "wait": 8, "expect": r"Lost = 0 \(0% loss\)"},
+                        source=name,
+                        target=server["ip"],
+                    )
+                )
+
+    for config in plan.get("ios_configs", []):
+        if not isinstance(config, dict):
+            continue
+        device = pick(config, ("device", "name", "router", "switch"))
+        if not device:
+            continue
+        show_commands = _ios_show_commands(_ios_commands(config))
+        checks.append(
+            _check(
+                used,
+                prefix="ios_show",
+                parts=(device,),
+                category="ios",
+                title=f"Inspect IOS state on {device}",
+                purpose="Confirm generated IOS configuration is present and routing/switching features are active.",
+                manual=f"On {device} CLI, run: " + "; ".join(show_commands),
+                cli=["pt-reverse/bin/pt730-ios", device, *sum((["--cmd", command] for command in show_commands), []), "--output", "tail"],
+                mcp_tool="pt730_live_ios",
+                mcp_arguments={"device": device, "commands": show_commands},
+                source=device,
+            )
+        )
+
+    for name, config in list(server_configs.items())[:max_service_targets]:
+        services = _service_names(config)
+        host = hosts.get(name, {})
+        server_ip = host.get("ip", "")
+        if services:
+            checks.append(
+                _check(
+                    used,
+                    prefix="server_inspect",
+                    parts=(name,),
+                    category="services",
+                    title=f"Inspect services on {name}",
+                    purpose="Confirm configured Server-PT services are enabled and visible through the bridge.",
+                    manual=f"Open {name} Services tab and verify: {', '.join(service.upper() for service in services)}.",
+                    cli=["pt-reverse/bin/pt730-server", "inspect", name],
+                    mcp_tool="pt730_live_server_inspect",
+                    mcp_arguments={"device": name},
+                    source=name,
+                    target=", ".join(services),
+                )
+            )
+        if "http" in services and sample_client and server_ip:
+            checks.append(
+                _check(
+                    used,
+                    prefix="http_pdu",
+                    parts=(sample_client.get("name"), name),
+                    category="services",
+                    title=f"HTTP reachability to {name}",
+                    purpose="Use a simple PDU as a lightweight service-path smoke check before browser testing.",
+                    manual=f"From {sample_client.get('name')}, open a browser to http://{server_ip}/ or send a simple PDU to {name}.",
+                    cli=["pt-reverse/bin/pt730-sim", "simple-pdu", sample_client.get("name", ""), name],
+                    mcp_tool="pt730_live_sim",
+                    mcp_arguments={"action": "simple_pdu", "source": sample_client.get("name", ""), "target": name},
+                    source=sample_client.get("name", ""),
+                    target=server_ip,
+                )
+            )
+        dns = config.get("dns")
+        if isinstance(dns, dict) and sample_client:
+            for record in as_list(dns.get("records"))[:max_service_targets]:
+                if not isinstance(record, dict):
+                    continue
+                hostname = pick(record, ("name", "host", "domain"))
+                if not hostname:
+                    continue
+                checks.append(
+                    _check(
+                        used,
+                        prefix="dns_lookup",
+                        parts=(sample_client.get("name"), hostname),
+                        category="services",
+                        title=f"Resolve and ping {hostname}",
+                        purpose="Confirm DNS record resolution and routed reachability from a representative client.",
+                        manual=f"On {sample_client.get('name')}, run: ping {hostname}",
+                        cli=["pt-reverse/bin/pt730-term", sample_client.get("name", ""), "--cmd", f"ping {hostname}", "--wait", "8", "--expect", r"Lost = 0 \(0% loss\)"],
+                        mcp_tool="pt730_live_term",
+                        mcp_arguments={"device": sample_client.get("name", ""), "commands": [f"ping {hostname}"], "wait": 8, "expect": r"Lost = 0 \(0% loss\)"},
+                        source=sample_client.get("name", ""),
+                        target=hostname,
+                    )
+                )
+        ftp = config.get("ftp")
+        if isinstance(ftp, dict) and sample_client and server_ip:
+            for account in as_list(ftp.get("accounts", ftp.get("users")))[:1]:
+                if not isinstance(account, dict):
+                    continue
+                username = pick(account, ("username", "user", "name"))
+                password = pick(account, ("password", "pass"), "packet")
+                if not username:
+                    continue
+                checks.append(
+                    _check(
+                        used,
+                        prefix="ftp_login",
+                        parts=(sample_client.get("name"), name, username),
+                        category="services",
+                        title=f"FTP login to {name}",
+                        purpose="Confirm an FTP account can authenticate and list files from a representative client.",
+                        manual=f"On {sample_client.get('name')}, run: ftp {server_ip}, login as {username}, then run dir.",
+                        cli=["pt-reverse/bin/pt730-ftp", sample_client.get("name", ""), server_ip, "--username", username, "--password", password, "--cmd", "dir", "--expect", "ftp>"],
+                        mcp_tool="pt730_live_ftp",
+                        mcp_arguments={"client": sample_client.get("name", ""), "server": server_ip, "username": username, "password": password, "commands": ["dir"], "expect": "ftp>"},
+                        source=sample_client.get("name", ""),
+                        target=server_ip,
+                    )
+                )
+
+    return {
+        "kind": "pt730-verification-plan",
+        "packet_tracer_version": "7.3.0",
+        "ok": True,
+        "limits": {"max_hosts": max_hosts, "max_service_targets": max_service_targets},
+        "counts": {
+            "checks": len(checks),
+            "connectivity": len([check for check in checks if check["category"] == "connectivity"]),
+            "ios": len([check for check in checks if check["category"] == "ios"]),
+            "services": len([check for check in checks if check["category"] == "services"]),
+            "dhcp": len([check for check in checks if check["category"] == "dhcp"]),
+            "representative_hosts": len(representative_hosts),
+            "server_targets": len(server_ips),
+        },
+        "notes": [
+            "This plan is offline guidance; commands contact live Packet Tracer only when an operator executes them.",
+            "MCP arguments include dry_run=true by default so an agent can preview before allow_live=true execution.",
+            "Run checks sequentially because PT 7.3.0 live terminal automation is crash-prone under concurrent access.",
+        ],
+        "checks": checks,
+    }
+
+
+def verification_markdown(report: dict[str, Any]) -> str:
+    lines: list[str] = ["# Packet Tracer Verification Plan", ""]
+    counts = report.get("counts") if isinstance(report.get("counts"), dict) else {}
+    lines.extend(["## Summary", ""])
+    lines.extend(markdown_table(["Field", "Value"], [[key, value] for key, value in counts.items()]))
+    lines.append("")
+    notes = report.get("notes")
+    if isinstance(notes, list) and notes:
+        lines.extend(["## Notes", ""])
+        for note in notes:
+            lines.append(f"- {note}")
+        lines.append("")
+
+    checks = report.get("checks") if isinstance(report.get("checks"), list) else []
+    for category, title in (("dhcp", "DHCP Checks"), ("connectivity", "Connectivity Checks"), ("ios", "IOS Checks"), ("services", "Service Checks")):
+        rows = []
+        for check in checks:
+            if not isinstance(check, dict) or check.get("category") != category:
+                continue
+            cli = check.get("cli") if isinstance(check.get("cli"), dict) else {}
+            mcp = check.get("mcp") if isinstance(check.get("mcp"), dict) else {}
+            rows.append([
+                check.get("id", ""),
+                check.get("title", ""),
+                check.get("source", ""),
+                check.get("target", ""),
+                check.get("manual", ""),
+                cli.get("shell", ""),
+                mcp.get("tool", ""),
+            ])
+        if rows:
+            lines.extend([f"## {title}", ""])
+            lines.extend(markdown_table(["ID", "Check", "Source", "Target", "Manual", "CLI", "MCP Tool"], rows))
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def mermaid(plan: dict[str, Any], *, direction: str, link_labels: bool = True) -> str:
@@ -1613,6 +2086,12 @@ def render_format(plan: dict[str, Any], fmt: str, *, options: RenderOptions, dir
     if fmt == "diagram-audit":
         report, code = diagram_audit(plan, options=options)
         return json.dumps(report, ensure_ascii=False, indent=2) + "\n", code
+    if fmt == "verification-json":
+        report = verification_plan(plan)
+        return json.dumps(report, ensure_ascii=False, indent=2) + "\n", 0
+    if fmt == "verification-md":
+        report = verification_plan(plan)
+        return verification_markdown(report), 0
     raise ValueError(f"unsupported render format: {fmt}")
 
 
@@ -1685,6 +2164,14 @@ def render_bundle(
             manifest["diagram_audit"] = {"ok": bool(audit_data.get("ok")), "exit_code": exit_codes["diagram-audit"]}
         except (OSError, json.JSONDecodeError):
             manifest["diagram_audit"] = {"ok": False, "exit_code": exit_codes["diagram-audit"]}
+    if "verification-json" in formats:
+        verification_path = output_dir / artifacts["verification-json"]
+        try:
+            verification_data = json.loads(verification_path.read_text(encoding="utf-8"))
+            counts = verification_data.get("counts") if isinstance(verification_data.get("counts"), dict) else {}
+            manifest["verification_plan"] = {"ok": bool(verification_data.get("ok")), "exit_code": exit_codes["verification-json"], "counts": counts}
+        except (OSError, json.JSONDecodeError):
+            manifest["verification_plan"] = {"ok": False, "exit_code": exit_codes["verification-json"], "counts": {}}
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest, max(exit_codes.values(), default=0)
 
@@ -1774,11 +2261,19 @@ def main(argv: list[str] | None = None) -> int:
     diagram_audit_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
     add_visual_options(diagram_audit_p)
 
+    verify_p = sub.add_parser("verification-plan", help="generate offline live/manual validation steps for a topology plan")
+    verify_p.add_argument("plan", type=Path)
+    verify_p.add_argument("--format", choices=["json", "markdown"], default="json", help="output format")
+    verify_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    verify_p.add_argument("--compact", action="store_true", help="emit compact JSON when --format json")
+    verify_p.add_argument("--max-hosts", type=int, default=12, help="maximum representative hosts to include")
+    verify_p.add_argument("--max-service-targets", type=int, default=8, help="maximum server/service targets to include")
+
     bundle_p = sub.add_parser("bundle", help="render one plan into multiple offline review artifacts and a manifest")
     bundle_p.add_argument("plan", type=Path)
     bundle_p.add_argument("--output-dir", type=Path, required=True, help="directory for generated artifacts")
     bundle_p.add_argument("--basename", default="topology", help="artifact filename prefix")
-    bundle_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit; defaults depend on --preset")
+    bundle_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit,verification-json,verification-md; defaults depend on --preset")
     bundle_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"], help="Mermaid direction when mermaid is included")
     add_visual_options(bundle_p)
 
@@ -1827,6 +2322,25 @@ def main(argv: list[str] | None = None) -> int:
             report, code = diagram_audit(plan, options=render_options(args, default_title=args.plan.stem))
             emit(json.dumps(report, ensure_ascii=False, indent=2) + "\n", args.output)
             return code
+        if args.cmd == "verification-plan":
+            if args.max_hosts < 1:
+                raise ValueError("--max-hosts must be at least 1")
+            if args.max_service_targets < 1:
+                raise ValueError("--max-service-targets must be at least 1")
+            plan = _load_plan(args.plan)
+            _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
+            report = verification_plan(plan, max_hosts=args.max_hosts, max_service_targets=args.max_service_targets)
+            if args.format == "markdown":
+                emit(verification_markdown(report), args.output)
+            else:
+                text = json.dumps(
+                    report,
+                    ensure_ascii=False,
+                    indent=None if args.compact else 2,
+                    separators=(",", ":") if args.compact else None,
+                ) + "\n"
+                emit(text, args.output)
+            return 0
         if args.cmd == "bundle":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)

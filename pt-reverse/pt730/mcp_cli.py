@@ -21,7 +21,18 @@ VISUAL_RENDER_FORMATS = {"svg", "drawio", "html"}
 RENDER_OPTION_FORMATS = VISUAL_RENDER_FORMATS | {"diagram-audit"}
 RENDER_GROUP_BY = {"none", "auto", "network", "vlan", "site", "category"}
 RENDER_PRESETS = {"manual", "report"}
-BUNDLE_RENDER_FORMATS = {"mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"}
+BUNDLE_RENDER_FORMATS = {
+    "mermaid",
+    "svg",
+    "drawio",
+    "html",
+    "markdown",
+    "summary",
+    "course-audit",
+    "diagram-audit",
+    "verification-json",
+    "verification-md",
+}
 
 
 class ToolError(ValueError):
@@ -209,12 +220,18 @@ def tool_schema(root: Path, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_render(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    fmt = enum_arg(args, "format", {"mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit"})
+    fmt = enum_arg(args, "format", {"mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"})
     command = [str(bin_path(root, "pt730-render"))]
     if bool_arg(args, "strict_safety", default=False):
         command.append("--strict-safety")
     if bool_arg(args, "allow_risky", default=False):
         command.append("--allow-risky")
+    if fmt in {"verification-json", "verification-md"}:
+        command.extend(["verification-plan", str_arg(args, "plan"), "--format", "json" if fmt == "verification-json" else "markdown"])
+        output = str_arg(args, "output", required=False)
+        if output:
+            command.extend(["--output", output])
+        return run_cli(root, command)
     command.extend([fmt, str_arg(args, "plan")])
     output = str_arg(args, "output", required=False)
     if output:
@@ -311,6 +328,30 @@ def tool_render_bundle(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     legend = optional_bool_arg(args, "legend")
     if legend:
         command.append("--legend")
+    return run_cli(root, command)
+
+
+def tool_verification_plan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-render"))]
+    if bool_arg(args, "strict_safety", default=False):
+        command.append("--strict-safety")
+    if bool_arg(args, "allow_risky", default=False):
+        command.append("--allow-risky")
+    command.extend(["verification-plan", str_arg(args, "plan")])
+    fmt = enum_arg(args, "format", {"json", "markdown"}, default="json")
+    command.extend(["--format", fmt])
+    output = str_arg(args, "output", required=False)
+    if output:
+        command.extend(["--output", output])
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    max_hosts = int_arg(args, "max_hosts", default=12)
+    max_service_targets = int_arg(args, "max_service_targets", default=8)
+    if max_hosts < 1:
+        raise ToolError("max_hosts must be at least 1")
+    if max_service_targets < 1:
+        raise ToolError("max_service_targets must be at least 1")
+    command.extend(["--max-hosts", str(max_hosts), "--max-service-targets", str(max_service_targets)])
     return run_cli(root, command)
 
 
@@ -1492,10 +1533,11 @@ def tools() -> list[dict[str, Any]]:
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
         tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
-        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, or diagram-audit.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
-        tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
+        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, diagram-audit, verification-json, or verification-md.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
+        tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
+        tool("pt730_verification_plan", "Generate an offline JSON or Markdown live/manual validation checklist for a topology plan.", schema({"plan": string, "format": {"type": "string", "enum": ["json", "markdown"]}, "output": string, "compact": boolean, "max_hosts": integer, "max_service_targets": integer, "strict_safety": boolean, "allow_risky": boolean}, ["plan"]), tool_verification_plan),
         tool("pt730_lab_template", "Generate a full offline lab bundle from one template spec JSON: topology, safety report, render bundle, configs, and manifest.", schema({"spec": string, "output_dir": string, "strict_safety": boolean, "compact": boolean}, ["spec", "output_dir"]), tool_lab_template),
-        tool("pt730_lab_plan", "Generate a full offline lab bundle from an existing topology plan JSON: topology copy, safety report, render bundle, configs, and manifest.", schema({"plan": string, "output_dir": string, "name": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "export_configs": boolean, "config_source": string, "compact": boolean}, ["plan", "output_dir"]), tool_lab_plan),
+        tool("pt730_lab_plan", "Generate a full offline lab bundle from an existing topology plan JSON: topology copy, safety report, render bundle, configs, and manifest.", schema({"plan": string, "output_dir": string, "name": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "strict_safety": boolean, "export_configs": boolean, "config_source": string, "compact": boolean}, ["plan", "output_dir"]), tool_lab_plan),
         tool("pt730_lab_report", "Generate a Markdown coursework/deliverable index from a pt730-lab manifest.json.", schema({"manifest": string, "output": string, "title": string, "compact": boolean}, ["manifest"]), tool_lab_report),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),
