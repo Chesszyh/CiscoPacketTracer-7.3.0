@@ -17,6 +17,7 @@ from render_cli import BUNDLE_DEFAULT_FORMATS, RENDER_GROUP_BY, RENDER_PRESETS, 
 from safety_cli import check_plan, summarize
 from template_cli import (
     campus,
+    dual_stack_lan,
     edge_security,
     enterprise_edge,
     lan_star,
@@ -62,6 +63,22 @@ TEMPLATES: dict[str, TemplateDefinition] = {
             "gateway": None,
             "dns": None,
             "ssid": "PT730-LAB",
+            "layout_style": "lan",
+            "no_layout": False,
+        },
+    ),
+    "dual-stack-lan": TemplateDefinition(
+        dual_stack_lan,
+        {
+            "name": "DUAL",
+            "pcs": 2,
+            "servers": 1,
+            "ipv4_network": "192.168.60.0/24",
+            "ipv4_gateway": None,
+            "ipv6_prefix": "2001:db8:60::/64",
+            "ipv6_gateway": None,
+            "dns": None,
+            "ipv6_dns": None,
             "layout_style": "lan",
             "no_layout": False,
         },
@@ -351,7 +368,7 @@ def lab_report_markdown(manifest: dict[str, Any], *, manifest_path: Path, title:
         counts_data = verification.get("counts") if isinstance(verification.get("counts"), dict) else {}
         verification_rows.append(["OK", verification.get("ok", "")])
         verification_rows.append(["Exit code", verification.get("exit_code", "")])
-        for key in ("checks", "dhcp", "connectivity", "ios", "services", "representative_hosts", "server_targets"):
+        for key in ("checks", "dhcp", "connectivity", "ipv6", "ios", "services", "representative_hosts", "server_targets"):
             if key in counts_data:
                 verification_rows.append([key, counts_data[key]])
         for fmt in ("verification-json", "verification-md"):
@@ -369,6 +386,7 @@ def lab_report_markdown(manifest: dict[str, Any], *, manifest_path: Path, title:
             "modules",
             "links",
             "pc_configs",
+            "ipv6_configs",
             "ap_configs",
             "vlan_configs",
             "dhcp_pools",

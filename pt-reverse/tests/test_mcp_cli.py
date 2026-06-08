@@ -49,6 +49,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_lab_report", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
+        self.assertIn("pt730_template_dual_stack_lan", names)
         self.assertIn("pt730_template_wireless_lan", names)
         self.assertIn("pt730_template_vlan_router_on_stick", names)
         self.assertIn("pt730_template_switching_lab", names)
@@ -130,6 +131,9 @@ class McpCliTest(unittest.TestCase):
         lab_report = next(tool for tool in tools if tool["name"] == "pt730_lab_report")
         self.assertIn("manifest", lab_report["inputSchema"]["required"])
         self.assertIn("output", lab_report["inputSchema"]["properties"])
+        dual_stack = next(tool for tool in tools if tool["name"] == "pt730_template_dual_stack_lan")
+        self.assertIn("ipv6_prefix", dual_stack["inputSchema"]["properties"])
+        self.assertIn("ipv6_gateway", dual_stack["inputSchema"]["properties"])
         roas = next(tool for tool in tools if tool["name"] == "pt730_template_vlan_router_on_stick")
         self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
         switching = next(tool for tool in tools if tool["name"] == "pt730_template_switching_lab")
@@ -1230,6 +1234,44 @@ class McpCliTest(unittest.TestCase):
         self.assertNotIn("email", services)
         self.assertEqual(services["dhcp"]["start"], "192.168.210.3")
         self.assertEqual(services["dhcp"]["end"], "192.168.210.4")
+
+    def test_dual_stack_lan_template_tool_generates_ipv6_topology(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_dual_stack_lan",
+                        "arguments": {
+                            "name": "DS",
+                            "pcs": 2,
+                            "servers": 1,
+                            "ipv4_network": "192.168.70.0/24",
+                            "ipv4_gateway": "192.168.70.1",
+                            "ipv6_prefix": "2001:db8:70::/64",
+                            "ipv6_gateway": "2001:db8:70::1",
+                            "layout_style": "lan",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("dual-stack-lan", command)
+        self.assertIn("--ipv6-prefix", command)
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template dual-stack-lan")
+        self.assertEqual(plan["metadata"]["ipv6_prefix"], "2001:db8:70::/64")
+        self.assertEqual(len(plan["ipv6_configs"]), 3)
+        self.assertEqual(plan["ipv6_configs"][0]["ipv6"], "2001:db8:70::2")
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ipv6 unicast-routing", joined)
+        self.assertIn("ipv6 address 2001:db8:70::1/64", joined)
 
     def test_campus_template_tool_generates_complex_topology_with_l3_configs(self) -> None:
         responses = self.run_mcp(

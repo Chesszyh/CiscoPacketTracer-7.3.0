@@ -22,6 +22,7 @@ pt-reverse/bin/pt730-capabilities
 pt-reverse/bin/pt730-models manifest
 pt-reverse/bin/pt730-template schema
 pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24
+pt-reverse/bin/pt730-template dual-stack-lan --pcs 2 --servers 1 --ipv4-network 192.168.60.0/24 --ipv6-prefix 2001:db8:60::/64
 pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --client-addressing dhcp
@@ -87,10 +88,11 @@ MCP, along with `pt730_schema` for retrieving template, IP-plan, compose,
 config-plan, pipeline, lab, and IOS-template input schemas. Model registry reads are
 exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
-Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
-VLAN, switching-lab, server-services, edge-security, router-ring, WAN-ring,
-campus, redundant-campus, and enterprise-edge template options including DNS,
-SSID, 802.1Q, STP, EtherChannel, access/trunk ports, Server-PT
+Built-in template MCP tools expose LAN-star, dual-stack-LAN, wireless-LAN,
+router-on-a-stick VLAN, switching-lab, server-services, edge-security,
+router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template
+options including DNS, IPv6 prefixes/gateways, SSID, 802.1Q, STP,
+EtherChannel, access/trunk ports, Server-PT
 HTTP/DNS/FTP/TFTP/Email/NTP/Syslog/DHCP metadata, NAT/ACL, DMZ, HSRP/STP, DHCP
 relay, branch WAN, ISP/Internet, RIP/OSPF/static WAN and campus L3 routing,
 layout, no-layout, compact, router DHCP pools, DHCP client hosts, and naming
@@ -217,6 +219,7 @@ pt-reverse/bin/pt730-topo query
 pt-reverse/bin/pt730-topo query --summary
 pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
 pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24
+pt-reverse/bin/pt730-template dual-stack-lan --pcs 2 --servers 1 --ipv4-network 192.168.60.0/24 --ipv6-prefix 2001:db8:60::/64
 pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --client-addressing dhcp
 pt-reverse/bin/pt730-template switching-lab --vlans 3 --hosts-per-vlan 2 --access-switches 2
@@ -355,12 +358,17 @@ Use `pt730-compose campus <spec.json> --segments-from-ip-plan <planned.json>
 --output <plan.json>` to expand a compact agent-friendly campus spec into
 devices, safe ports, links, static host IPs, server services, and default layout
 coordinates before touching Packet Tracer.
-Use `pt730-template lan-star ...`, `pt730-template wireless-lan ...`,
-`pt730-template vlan-router-on-stick ...`, `pt730-template switching-lab ...`,
-`pt730-template server-services ...`, `pt730-template edge-security ...`,
-`pt730-template router-ring ...`, `pt730-template wan-ring ...`,
-`pt730-template campus ...`, and `pt730-template enterprise-edge ...` when an
-agent needs a common lab topology without first writing a topology JSON file.
+Use `pt730-template lan-star ...`, `pt730-template dual-stack-lan ...`,
+`pt730-template wireless-lan ...`, `pt730-template vlan-router-on-stick ...`,
+`pt730-template switching-lab ...`, `pt730-template server-services ...`,
+`pt730-template edge-security ...`, `pt730-template router-ring ...`,
+`pt730-template wan-ring ...`, `pt730-template campus ...`, and
+`pt730-template enterprise-edge ...` when an agent needs a common lab topology
+without first writing a topology JSON file.
+Dual-stack-LAN templates generate IPv4 static host configs, IPv6 host metadata,
+IOS `ipv6 unicast-routing`, and renderable IPv6 address summaries. IPv6 host
+GUI writes are kept as manual metadata until the PT 7.3.0 PC IPv6 JavaScript
+API is live-verified.
 Wireless-LAN templates use locally verified `AccessPoint-PT` and `Laptop-PT`
 models, emit AP/SSID metadata, and keep wireless cable code `8109` as a
 non-strict safety warning until live validation is explicitly requested.

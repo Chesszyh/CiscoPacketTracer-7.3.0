@@ -40,6 +40,8 @@ class LabCliTest(unittest.TestCase):
         self.assertIn("report", data["commands"])
         self.assertIn("enterprise-edge", data["templates"])
         self.assertIn("campus_vlans", data["templates"]["enterprise-edge"]["options"])
+        self.assertIn("dual-stack-lan", data["templates"])
+        self.assertIn("ipv6_prefix", data["templates"]["dual-stack-lan"]["options"])
         self.assertIn("switching-lab", data["templates"])
         self.assertIn("access_switches", data["templates"]["switching-lab"]["options"])
         self.assertIn("server-services", data["templates"])

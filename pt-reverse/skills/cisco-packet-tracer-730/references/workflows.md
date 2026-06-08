@@ -184,6 +184,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 
 ```bash
 pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24 --output lan-star.json
+pt-reverse/bin/pt730-template dual-stack-lan --pcs 2 --servers 1 --ipv4-network 192.168.60.0/24 --ipv6-prefix 2001:db8:60::/64 --output dual-stack-lan.json
 pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24 --output wireless-lan.json
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10 --client-addressing dhcp --output vlan-router-on-stick.json
 pt-reverse/bin/pt730-template switching-lab --vlans 3 --hosts-per-vlan 2 --access-switches 2 --output switching-lab.json
@@ -207,6 +208,12 @@ pt-reverse/bin/pt730-render verification-plan lan-star.json --format markdown --
 pt-reverse/bin/pt730-render bundle lan-star.json --output-dir lan-star-render --basename lan-star --formats svg,drawio,html,markdown,summary,diagram-audit,verification-json,verification-md --title "LAN Star" --legend
 pt-reverse/bin/pt730-render bundle lan-star.json --output-dir lan-star-report --basename lan-star --preset report
 ```
+
+`dual-stack-lan` uses verified `2911`, `2960-24TT`, `PC-PT`, and `Server-PT`
+models. It writes static IPv4 `pc_configs`, IPv6 `ipv6_configs`, router IOS
+`ipv6 unicast-routing`, IPv6 address summaries, and IPv6 verification-plan
+checks. Keep IPv6 PC/Server GUI writes as manual/report metadata until live
+PT 7.3.0 JavaScript APIs are explicitly verified.
 
 `wireless-lan` uses verified `AccessPoint-PT` and `Laptop-PT` models and writes
 AP/SSID metadata under `ap_configs`. Wireless links use cable code `8109`, which

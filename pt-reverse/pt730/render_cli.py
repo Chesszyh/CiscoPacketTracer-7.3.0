@@ -211,6 +211,10 @@ def ip_config_fields(config: dict[str, Any]) -> dict[str, str]:
         "mask": pick(config, ("mask", "subnet_mask", "netmask")),
         "gateway": pick(config, ("gateway", "default_gateway", "gw")),
         "dns": pick(config, ("dns", "dns_server")),
+        "ipv6": pick(config, ("ipv6", "ipv6_address", "ipv6_ip")),
+        "ipv6_prefix": pick(config, ("ipv6_prefix", "prefix", "prefix_length")),
+        "ipv6_gateway": pick(config, ("ipv6_gateway", "gateway6", "default_gateway6")),
+        "ipv6_dns": pick(config, ("ipv6_dns", "dns6", "dns_server6")),
     }
 
 
@@ -225,6 +229,51 @@ def address_groups(plan: dict[str, Any]) -> list[dict[str, Any]]:
         try:
             network = ipaddress.ip_network(f"{fields['ip']}/{fields['mask']}", strict=False)
         except ValueError:
+            continue
+        key = (str(network), fields["gateway"], fields["dns"])
+        entry = groups.setdefault(
+            key,
+            {
+                "network": str(network),
+                "gateway": fields["gateway"],
+                "dns": fields["dns"],
+                "hosts": [],
+            },
+        )
+        entry["hosts"].append(fields["name"])
+    return sorted(groups.values(), key=lambda item: ipaddress.ip_network(item["network"]).network_address)
+
+
+def ipv6_config_fields(config: dict[str, Any]) -> dict[str, str]:
+    return {
+        "name": pick(config, ("name", "device", "pc", "server")),
+        "port": pick(config, ("port",), "FastEthernet0"),
+        "ipv6": pick(config, ("ipv6", "ipv6_address", "address")),
+        "prefix": pick(config, ("prefix", "ipv6_prefix", "prefix_length")),
+        "gateway": pick(config, ("gateway", "ipv6_gateway", "gateway6", "default_gateway6")),
+        "dns": pick(config, ("dns", "ipv6_dns", "dns6", "dns_server6")),
+        "note": pick(config, ("note", "description")),
+    }
+
+
+def ipv6_config_entries(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    explicit = [config for config in plan.get("ipv6_configs", []) if isinstance(config, dict)]
+    if explicit:
+        return explicit
+    return [config for config in plan.get("pc_configs", []) if isinstance(config, dict) and pick(config, ("ipv6", "ipv6_address", "ipv6_ip"))]
+
+
+def ipv6_address_groups(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for config in ipv6_config_entries(plan):
+        fields = ipv6_config_fields(config)
+        if not fields["ipv6"] or not fields["prefix"]:
+            continue
+        try:
+            network = ipaddress.ip_network(f"{fields['ipv6']}/{fields['prefix']}", strict=False)
+        except ValueError:
+            continue
+        if not isinstance(network, ipaddress.IPv6Network):
             continue
         key = (str(network), fields["gateway"], fields["dns"])
         entry = groups.setdefault(
@@ -455,6 +504,26 @@ def _server_ip_records(plan: dict[str, Any], *, max_targets: int) -> list[dict[s
     return records[:max_targets]
 
 
+def _ipv6_host_fields(plan: dict[str, Any]) -> dict[str, dict[str, str]]:
+    hosts: dict[str, dict[str, str]] = {}
+    for config in ipv6_config_entries(plan):
+        fields = ipv6_config_fields(config)
+        name = fields["name"]
+        if name and fields["ipv6"]:
+            hosts[name] = fields
+    return hosts
+
+
+def _server_ipv6_records(plan: dict[str, Any], *, max_targets: int) -> list[dict[str, str]]:
+    hosts = _ipv6_host_fields(plan)
+    server_names = set(_server_config_map(plan))
+    records = [hosts[name] for name in hosts if name in server_names and hosts[name].get("ipv6")]
+    if not records:
+        categories = _device_category_map(plan)
+        records = [fields for name, fields in hosts.items() if categories.get(name) == "server" and fields.get("ipv6")]
+    return records[:max_targets]
+
+
 def _ios_commands(config: dict[str, Any]) -> list[str]:
     raw = config.get("commands", config.get("cmds", config.get("config", config.get("cli", []))))
     if isinstance(raw, list):
@@ -510,8 +579,10 @@ def verification_plan(plan: dict[str, Any], *, max_hosts: int = 12, max_service_
     used: set[str] = set()
     checks: list[dict[str, Any]] = []
     hosts = _host_fields(plan)
+    ipv6_hosts = _ipv6_host_fields(plan)
     representative_hosts = _representative_hosts(plan, max_hosts=max_hosts)
     server_ips = _server_ip_records(plan, max_targets=max_service_targets)
+    server_ipv6s = _server_ipv6_records(plan, max_targets=max_service_targets)
     server_configs = _server_config_map(plan)
     sample_client = representative_hosts[0] if representative_hosts else next(iter(hosts.values()), {})
 
@@ -576,6 +647,25 @@ def verification_plan(plan: dict[str, Any], *, max_hosts: int = 12, max_service_
                     target=dns,
                 )
             )
+        ipv6_host = ipv6_hosts.get(name, {})
+        ipv6_gateway = ipv6_host.get("gateway")
+        if ipv6_gateway:
+            checks.append(
+                _check(
+                    used,
+                    prefix="ping_ipv6_gateway",
+                    parts=(name, ipv6_gateway),
+                    category="ipv6",
+                    title=f"Ping IPv6 default gateway from {name}",
+                    purpose="Confirm dual-stack host IPv6 gateway reachability.",
+                    manual=f"On {name}, run: ping {ipv6_gateway}",
+                    cli=["pt-reverse/bin/pt730-term", name, "--cmd", f"ping {ipv6_gateway}", "--wait", "8", "--expect", r"Lost = 0 \(0% loss\)"],
+                    mcp_tool="pt730_live_term",
+                    mcp_arguments={"device": name, "commands": [f"ping {ipv6_gateway}"], "wait": 8, "expect": r"Lost = 0 \(0% loss\)"},
+                    source=name,
+                    target=ipv6_gateway,
+                )
+            )
         for server in server_ips:
             if server.get("ip") and server["ip"] != host.get("ip"):
                 checks.append(
@@ -592,6 +682,24 @@ def verification_plan(plan: dict[str, Any], *, max_hosts: int = 12, max_service_
                         mcp_arguments={"device": name, "commands": [f"ping {server['ip']}"], "wait": 8, "expect": r"Lost = 0 \(0% loss\)"},
                         source=name,
                         target=server["ip"],
+                    )
+                )
+        for server in server_ipv6s:
+            if server.get("ipv6") and server["ipv6"] != ipv6_host.get("ipv6"):
+                checks.append(
+                    _check(
+                        used,
+                        prefix="ping_ipv6_server",
+                        parts=(name, server["name"], server["ipv6"]),
+                        category="ipv6",
+                        title=f"Ping IPv6 server {server['name']} from {name}",
+                        purpose="Confirm representative host-to-server IPv6 reachability.",
+                        manual=f"On {name}, run: ping {server['ipv6']}",
+                        cli=["pt-reverse/bin/pt730-term", name, "--cmd", f"ping {server['ipv6']}", "--wait", "8", "--expect", r"Lost = 0 \(0% loss\)"],
+                        mcp_tool="pt730_live_term",
+                        mcp_arguments={"device": name, "commands": [f"ping {server['ipv6']}"], "wait": 8, "expect": r"Lost = 0 \(0% loss\)"},
+                        source=name,
+                        target=server["ipv6"],
                     )
                 )
 
@@ -717,6 +825,7 @@ def verification_plan(plan: dict[str, Any], *, max_hosts: int = 12, max_service_
             "ios": len([check for check in checks if check["category"] == "ios"]),
             "services": len([check for check in checks if check["category"] == "services"]),
             "dhcp": len([check for check in checks if check["category"] == "dhcp"]),
+            "ipv6": len([check for check in checks if check["category"] == "ipv6"]),
             "representative_hosts": len(representative_hosts),
             "server_targets": len(server_ips),
         },
@@ -1479,6 +1588,15 @@ def markdown(plan: dict[str, Any]) -> str:
         lines.extend(markdown_table(["Name", "Port", "DHCP", "IP", "Mask", "Gateway", "DNS"], pc_rows))
         lines.append("")
 
+    ipv6_rows = []
+    for config in ipv6_config_entries(plan):
+        fields = ipv6_config_fields(config)
+        ipv6_rows.append([fields["name"], fields["port"], fields["ipv6"], fields["prefix"], fields["gateway"], fields["dns"], fields["note"]])
+    if ipv6_rows:
+        lines.extend(["## IPv6 Host Configs", ""])
+        lines.extend(markdown_table(["Name", "Port", "IPv6", "Prefix", "Gateway", "DNS", "Note"], ipv6_rows))
+        lines.append("")
+
     address_rows = []
     for group in address_groups(plan):
         hosts = group["hosts"]
@@ -1489,6 +1607,18 @@ def markdown(plan: dict[str, Any]) -> str:
     if address_rows:
         lines.extend(["## Address Summary", ""])
         lines.extend(markdown_table(["Network", "Gateway", "DNS", "Configured Hosts", "Sample Hosts"], address_rows))
+        lines.append("")
+
+    ipv6_address_rows = []
+    for group in ipv6_address_groups(plan):
+        hosts = group["hosts"]
+        shown_hosts = ", ".join(hosts[:6])
+        if len(hosts) > 6:
+            shown_hosts += f", ... (+{len(hosts) - 6})"
+        ipv6_address_rows.append([group["network"], group["gateway"], group["dns"], len(hosts), shown_hosts])
+    if ipv6_address_rows:
+        lines.extend(["## IPv6 Address Summary", ""])
+        lines.extend(markdown_table(["Prefix", "Gateway", "DNS", "Configured Hosts", "Sample Hosts"], ipv6_address_rows))
         lines.append("")
 
     vlan_rows = []
@@ -1643,6 +1773,7 @@ def summary(plan: dict[str, Any]) -> str:
             "modules": len(plan.get("modules", [])),
             "links": len(plan.get("links", [])),
             "pc_configs": len(plan.get("pc_configs", [])),
+            "ipv6_configs": len(ipv6_config_entries(plan)),
             "ap_configs": len(plan.get("ap_configs", [])),
             "vlan_configs": len(plan.get("vlan_configs", [])),
             "dhcp_pools": len(plan.get("dhcp_pools", [])),
@@ -1659,6 +1790,20 @@ def summary(plan: dict[str, Any]) -> str:
                 "hosts": group["hosts"],
             }
             for group in address_groups(plan)
+        ],
+        "ipv6_address_groups": [
+            {
+                "network": group["network"],
+                "gateway": group["gateway"],
+                "dns": group["dns"],
+                "configured_hosts": len(group["hosts"]),
+                "hosts": group["hosts"],
+            }
+            for group in ipv6_address_groups(plan)
+        ],
+        "ipv6_configs": [
+            ipv6_config_fields(config)
+            for config in ipv6_config_entries(plan)
         ],
         "vlan_link_counts": dict(sorted(vlan_counts.items(), key=lambda item: int(item[0]) if item[0].isdigit() else item[0])),
         "vlans": [

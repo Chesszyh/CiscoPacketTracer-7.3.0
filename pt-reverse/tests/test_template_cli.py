@@ -61,6 +61,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertIn("lan-star", data["commands"])
+        self.assertIn("dual-stack-lan", data["commands"])
         self.assertIn("router-ring", data["commands"])
         self.assertIn("wan-ring", data["commands"])
         self.assertIn("wireless-lan", data["commands"])
@@ -72,6 +73,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("redundant-campus", data["commands"])
         self.assertIn("enterprise-edge", data["commands"])
         self.assertIn("lan-star", data["templates"])
+        self.assertIn("dual-stack-lan", data["templates"])
         self.assertIn("wireless-lan", data["templates"])
         self.assertIn("vlan-router-on-stick", data["templates"])
         self.assertIn("switching-lab", data["templates"])
@@ -87,6 +89,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("--routing none|rip|ospf", data["templates"]["redundant-campus"]["options"])
         self.assertIn("--routing none|rip|ospf|static", data["templates"]["enterprise-edge"]["options"])
         self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
+        self.assertIn("--ipv6-prefix", data["templates"]["dual-stack-lan"]["options"])
         self.assertIn("--access-switches", data["templates"]["switching-lab"]["options"])
         self.assertIn("--services all|http,dns,ftp,tftp,email,ntp,syslog,dhcp", data["templates"]["server-services"]["options"])
 
@@ -114,6 +117,76 @@ class TemplateCliTest(unittest.TestCase):
         self.assertEqual(plan["pc_configs"][0]["gateway"], "192.168.10.1")
         self.assertEqual(plan["server_configs"][0]["http"], True)
         self.assert_safe_and_renderable(plan)
+
+    def test_dual_stack_lan_generates_ipv6_metadata_and_ios_configs(self) -> None:
+        result = self.run_template(
+            "dual-stack-lan",
+            "--name",
+            "DUAL",
+            "--pcs",
+            "2",
+            "--servers",
+            "1",
+            "--ipv4-network",
+            "192.168.60.0/24",
+            "--ipv4-gateway",
+            "192.168.60.1",
+            "--ipv6-prefix",
+            "2001:db8:60::/64",
+            "--ipv6-gateway",
+            "2001:db8:60::1",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertEqual(names, {"R-DUAL-DS", "SW-DUAL-DS", "PC-DUAL-1", "PC-DUAL-2", "SRV-DUAL-1"})
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        self.assertEqual(len(plan["links"]), 4)
+        self.assertEqual(len(plan["pc_configs"]), 3)
+        self.assertEqual(len(plan["ipv6_configs"]), 3)
+        self.assertEqual(plan["metadata"]["source"], "pt730-template dual-stack-lan")
+        self.assertEqual(plan["metadata"]["ipv6_prefix"], "2001:db8:60::/64")
+        self.assertEqual(plan["pc_configs"][0]["ip"], "192.168.60.2")
+        self.assertEqual(plan["pc_configs"][0]["ipv6"], "2001:db8:60::2")
+        self.assertEqual(plan["pc_configs"][0]["ipv6_gateway"], "2001:db8:60::1")
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ipv6 unicast-routing", joined)
+        self.assertIn("ipv6 address 2001:db8:60::1/64", joined)
+        self.assertIn("ipv6 enable", joined)
+        self.assertIn("dns", plan["server_configs"][0])
+        self.assertIn("ipv6_dns_records", plan["metadata"])
+        self.assert_safe_and_renderable(plan)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            summary = subprocess.run(
+                [str(RENDER), "summary", path],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(summary.returncode, 0, summary.stderr)
+            data = json.loads(summary.stdout)
+            self.assertEqual(data["counts"]["ipv6_configs"], 3)
+            self.assertEqual(data["ipv6_address_groups"][0]["network"], "2001:db8:60::/64")
+            verification = subprocess.run(
+                [str(RENDER), "verification-plan", path, "--format", "json"],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(verification.returncode, 0, verification.stderr)
+            checks = json.loads(verification.stdout)
+            self.assertGreaterEqual(checks["counts"]["ipv6"], 2)
+        finally:
+            Path(path).unlink(missing_ok=True)
 
     def test_wireless_lan_generates_safe_aps_laptops_services_and_layout(self) -> None:
         result = self.run_template(

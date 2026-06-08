@@ -34,6 +34,13 @@ def _host(network: ipaddress.IPv4Network, offset: int) -> ipaddress.IPv4Address:
     return address
 
 
+def _ipv6_host(network: ipaddress.IPv6Network, offset: int) -> ipaddress.IPv6Address:
+    address = ipaddress.IPv6Address(int(network.network_address) + offset)
+    if address not in network:
+        raise ValueError(f"{network}: host offset {offset} is outside network")
+    return address
+
+
 def _emit(plan: dict[str, Any], output: Path | None, *, compact: bool) -> None:
     text = json.dumps(plan, ensure_ascii=False, indent=None if compact else 2, separators=(",", ":") if compact else None) + "\n"
     if output is None:
@@ -50,11 +57,15 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "switching-lab", "server-services", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
+        "commands": ["schema", "lan-star", "dual-stack-lan", "wireless-lan", "vlan-router-on-stick", "switching-lab", "server-services", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
                 "options": ["--name", "--pcs", "--servers", "--network", "--gateway", "--dns", "--layout-style", "--no-layout"],
+            },
+            "dual-stack-lan": {
+                "description": "One router, one access switch, static IPv4 host configs, IPv6 host metadata, and IOS IPv6 unicast routing for dual-stack labs.",
+                "options": ["--name", "--pcs", "--servers", "--ipv4-network", "--ipv4-gateway", "--ipv6-prefix", "--ipv6-gateway", "--dns", "--ipv6-dns", "--layout-style", "--no-layout"],
             },
             "wireless-lan": {
                 "description": "One router, one access switch, safe AccessPoint-PT APs, Laptop-PT clients, optional HTTP/DNS servers, and static host IPs.",
@@ -164,6 +175,146 @@ def lan_star(*, name: str, pcs: int, servers: int, network: str, gateway: str | 
         plan["links"].append({"a": switch, "pa": f"FastEthernet0/{len(plan['links']) + 1}", "b": server, "pb": "FastEthernet0", "cable": "straight"})
         plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(ip_addr), "mask": _mask(net), "gateway": str(gw), "dns": dns or str(ip_addr)})
         plan["server_configs"].append({"name": server, "http": True})
+
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
+def dual_stack_lan(
+    *,
+    name: str,
+    pcs: int,
+    servers: int,
+    ipv4_network: str,
+    ipv4_gateway: str | None,
+    ipv6_prefix: str,
+    ipv6_gateway: str | None,
+    dns: str | None,
+    ipv6_dns: str | None,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if pcs < 0 or servers < 0:
+        raise ValueError("pcs and servers must be >= 0")
+    if pcs + servers < 1:
+        raise ValueError("dual-stack-lan requires at least one PC or server")
+    if pcs + servers > 23:
+        raise ValueError("dual-stack-lan supports up to 23 host links on one 2960 switch")
+
+    v4_net = ipaddress.ip_network(ipv4_network, strict=False)
+    if not isinstance(v4_net, ipaddress.IPv4Network):
+        raise ValueError("ipv4-network must be an IPv4 network")
+    v4_gw = ipaddress.ip_address(ipv4_gateway) if ipv4_gateway else _host(v4_net, 1)
+    if not isinstance(v4_gw, ipaddress.IPv4Address) or v4_gw not in v4_net:
+        raise ValueError(f"ipv4 gateway {v4_gw} is outside {v4_net}")
+
+    v6_net = ipaddress.ip_network(ipv6_prefix, strict=False)
+    if not isinstance(v6_net, ipaddress.IPv6Network):
+        raise ValueError("ipv6-prefix must be an IPv6 network")
+    v6_gw = ipaddress.ip_address(ipv6_gateway) if ipv6_gateway else _ipv6_host(v6_net, 1)
+    if not isinstance(v6_gw, ipaddress.IPv6Address) or v6_gw not in v6_net:
+        raise ValueError(f"ipv6 gateway {v6_gw} is outside {v6_net}")
+
+    count = pcs + servers
+    v4_addresses = _host_list(v4_net, count=count, skip={v4_gw})
+    v6_addresses = _ipv6_host_list(v6_net, count=count, skip={v6_gw})
+    server_v4 = v4_addresses[pcs:]
+    server_v6 = v6_addresses[pcs:]
+    v4_dns = dns or (str(server_v4[0]) if server_v4 else str(v4_gw))
+    v6_dns = ipv6_dns or (str(server_v6[0]) if server_v6 else str(v6_gw))
+    slug = name.upper()
+    router = f"R-{slug}-DS"
+    switch = f"SW-{slug}-DS"
+
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": router, "category": "router", "model": "2911"},
+            {"name": switch, "category": "switch", "model": "2960-24TT"},
+        ],
+        "links": [{"a": router, "pa": "GigabitEthernet0/0", "b": switch, "pb": "FastEthernet0/1", "cable": "straight", "note": "dual-stack gateway"}],
+        "pc_configs": [],
+        "ipv6_configs": [],
+        "server_configs": [],
+        "ios_configs": [
+            {
+                "device": router,
+                "init_dialog": True,
+                "commands": [
+                    "enable",
+                    "configure terminal",
+                    f"hostname {router}",
+                    "ipv6 unicast-routing",
+                    "interface GigabitEthernet0/0",
+                    "description DUAL_STACK_LAN",
+                    f"ip address {v4_gw} {_mask(v4_net)}",
+                    f"ipv6 address {v6_gw}/{v6_net.prefixlen}",
+                    "ipv6 enable",
+                    "no shutdown",
+                    "end",
+                ],
+            }
+        ],
+        "metadata": {
+            "source": "pt730-template dual-stack-lan",
+            "name": name,
+            "ipv4_network": str(v4_net),
+            "ipv4_gateway": str(v4_gw),
+            "ipv6_prefix": str(v6_net),
+            "ipv6_gateway": str(v6_gw),
+            "features": ["dual_stack", "ipv4_static_hosts", "ipv6_host_metadata", "ipv6_unicast_routing"],
+        },
+    }
+
+    def add_host(device_name: str, category: str, model: str, index: int, note: str) -> None:
+        v4 = v4_addresses[index]
+        v6 = v6_addresses[index]
+        plan["devices"].append({"name": device_name, "category": category, "model": model})
+        plan["links"].append({"a": switch, "pa": f"FastEthernet0/{index + 2}", "b": device_name, "pb": "FastEthernet0", "cable": "straight", "note": note})
+        plan["pc_configs"].append(
+            {
+                "name": device_name,
+                "port": "FastEthernet0",
+                "ip": str(v4),
+                "mask": _mask(v4_net),
+                "gateway": str(v4_gw),
+                "dns": v4_dns,
+                "ipv6": str(v6),
+                "ipv6_prefix": v6_net.prefixlen,
+                "ipv6_gateway": str(v6_gw),
+                "ipv6_dns": v6_dns,
+            }
+        )
+        plan["ipv6_configs"].append(
+            {
+                "name": device_name,
+                "port": "FastEthernet0",
+                "ipv6": str(v6),
+                "prefix": v6_net.prefixlen,
+                "gateway": str(v6_gw),
+                "dns": v6_dns,
+                "note": "manual Packet Tracer Desktop IPv6 configuration",
+            }
+        )
+
+    for index in range(pcs):
+        add_host(f"PC-{slug}-{index + 1}", "pc", "PC-PT", index, "dual-stack client")
+    for offset in range(servers):
+        host_index = pcs + offset
+        server = f"SRV-{slug}-{offset + 1}"
+        add_host(server, "server", "Server-PT", host_index, "dual-stack server")
+        server_config: dict[str, Any] = {"name": server, "http": True}
+        if offset == 0:
+            server_config["dns"] = {
+                "enabled": True,
+                "records": [
+                    {"name": f"www.{name.lower()}.local", "ip": str(server_v4[0])},
+                    {"name": f"dual.{name.lower()}.local", "ip": str(server_v4[0])},
+                ],
+            }
+            plan["metadata"]["ipv6_dns_records"] = [
+                {"name": f"www.{name.lower()}.local", "ipv6": str(server_v6[0])},
+                {"name": f"dual.{name.lower()}.local", "ipv6": str(server_v6[0])},
+            ]
+        plan["server_configs"].append(server_config)
 
     return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
 
@@ -343,6 +494,22 @@ def _host_list(network: ipaddress.IPv4Network, *, count: int, skip: set[ipaddres
         if len(result) >= count:
             return result
     raise ValueError(f"{network}: not enough usable host addresses")
+
+
+def _ipv6_host_list(network: ipaddress.IPv6Network, *, count: int, skip: set[ipaddress.IPv6Address]) -> list[ipaddress.IPv6Address]:
+    if count <= 0:
+        return []
+    result: list[ipaddress.IPv6Address] = []
+    current = int(network.network_address) + 1
+    last = int(network.broadcast_address)
+    while current <= last:
+        address = ipaddress.IPv6Address(current)
+        if address not in skip:
+            result.append(address)
+            if len(result) >= count:
+                return result
+        current += 1
+    raise ValueError(f"{network}: not enough usable IPv6 host addresses")
 
 
 def _redundant_gateway_addresses(network: ipaddress.IPv4Network) -> tuple[ipaddress.IPv4Address, ipaddress.IPv4Address, ipaddress.IPv4Address]:
@@ -2258,6 +2425,20 @@ def main(argv: list[str] | None = None) -> int:
     lan_p.add_argument("--no-layout", action="store_true")
     lan_p.add_argument("--output", type=Path)
 
+    dual_p = sub.add_parser("dual-stack-lan", help="generate a dual-stack IPv4/IPv6 LAN")
+    dual_p.add_argument("--name", default="DUAL")
+    dual_p.add_argument("--pcs", type=int, default=2)
+    dual_p.add_argument("--servers", type=int, default=1)
+    dual_p.add_argument("--ipv4-network", default="192.168.60.0/24")
+    dual_p.add_argument("--ipv4-gateway")
+    dual_p.add_argument("--ipv6-prefix", default="2001:db8:60::/64")
+    dual_p.add_argument("--ipv6-gateway")
+    dual_p.add_argument("--dns")
+    dual_p.add_argument("--ipv6-dns")
+    dual_p.add_argument("--layout-style", choices=STYLES, default="lan")
+    dual_p.add_argument("--no-layout", action="store_true")
+    dual_p.add_argument("--output", type=Path)
+
     wifi_p = sub.add_parser("wireless-lan", help="generate a router-switch-AP-laptop wireless LAN")
     wifi_p.add_argument("--name", default="WIFI")
     wifi_p.add_argument("--aps", type=int, default=1)
@@ -2419,6 +2600,25 @@ def main(argv: list[str] | None = None) -> int:
                     network=args.network,
                     gateway=args.gateway,
                     dns=args.dns,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "dual-stack-lan":
+            _emit(
+                dual_stack_lan(
+                    name=args.name,
+                    pcs=args.pcs,
+                    servers=args.servers,
+                    ipv4_network=args.ipv4_network,
+                    ipv4_gateway=args.ipv4_gateway,
+                    ipv6_prefix=args.ipv6_prefix,
+                    ipv6_gateway=args.ipv6_gateway,
+                    dns=args.dns,
+                    ipv6_dns=args.ipv6_dns,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

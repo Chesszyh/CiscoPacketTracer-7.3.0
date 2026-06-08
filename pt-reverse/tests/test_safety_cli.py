@@ -134,6 +134,18 @@ class SafetyCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("gateway outside subnet", result.stdout)
 
+    def test_ipv6_gateway_outside_prefix_fails_offline(self) -> None:
+        result = self.run_plan(
+            {
+                "devices": [{"name": "PC1", "category": "pc", "model": "PC-PT"}],
+                "ipv6_configs": [
+                    {"name": "PC1", "ipv6": "2001:db8:1::10", "prefix": 64, "gateway": "2001:db8:2::1"}
+                ],
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("IPv6 gateway outside prefix", result.stdout)
+
     def test_dhcp_pool_start_outside_network_fails_offline(self) -> None:
         result = self.run_plan(
             {

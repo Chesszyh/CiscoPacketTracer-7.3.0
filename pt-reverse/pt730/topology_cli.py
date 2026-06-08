@@ -325,6 +325,35 @@ def _plan_safety_issues(plan: dict[str, Any]) -> list[dict[str, str]]:
         if gateway not in network:
             issues.append(_safety_issue("error", where, f"{gateway}: gateway outside subnet {network}"))
 
+    def check_ipv6(where: str, label: str, value: Any) -> ipaddress.IPv6Address | None:
+        if value in (None, ""):
+            return None
+        try:
+            address = ipaddress.ip_address(str(value))
+        except ValueError:
+            issues.append(_safety_issue("error", where, f"{label}: invalid IPv6 address {value}"))
+            return None
+        if not isinstance(address, ipaddress.IPv6Address):
+            issues.append(_safety_issue("error", where, f"{label}: invalid IPv6 address {value}"))
+            return None
+        return address
+
+    def check_ipv6_subnet(where: str, ip_value: Any, prefix_value: Any, gateway_value: Any) -> None:
+        ip_addr = check_ipv6(where, "ipv6", ip_value)
+        gateway = check_ipv6(where, "gateway", gateway_value)
+        if ip_addr is None or gateway is None or prefix_value in (None, ""):
+            return
+        try:
+            network = ipaddress.ip_network(f"{ip_addr}/{prefix_value}", strict=False)
+        except ValueError:
+            issues.append(_safety_issue("error", where, f"prefix: invalid IPv6 prefix {prefix_value}"))
+            return
+        if not isinstance(network, ipaddress.IPv6Network):
+            issues.append(_safety_issue("error", where, f"prefix: invalid IPv6 prefix {prefix_value}"))
+            return
+        if gateway not in network:
+            issues.append(_safety_issue("error", where, f"{gateway}: IPv6 gateway outside prefix {network}"))
+
     def check_dhcp_pool(where: str, dhcp: Any) -> None:
         if not isinstance(dhcp, dict):
             return
@@ -387,8 +416,32 @@ def _plan_safety_issues(plan: dict[str, Any]) -> list[dict[str, str]]:
                 config.get("gateway", config.get("default_gateway", config.get("gw"))),
             )
         check_ipv4(f"pc_configs[{index}]", "dns", config.get("dns", config.get("dns_server")))
+        if config.get("ipv6") or config.get("ipv6_address") or config.get("ipv6_ip"):
+            check_ipv6_subnet(
+                f"pc_configs[{index}]",
+                config.get("ipv6", config.get("ipv6_address", config.get("ipv6_ip"))),
+                config.get("ipv6_prefix", config.get("prefix", config.get("prefix_length"))),
+                config.get("ipv6_gateway", config.get("gateway6", config.get("default_gateway6"))),
+            )
+            check_ipv6(f"pc_configs[{index}]", "ipv6_dns", config.get("ipv6_dns", config.get("dns6", config.get("dns_server6"))))
         if config.get("dhcp") is True:
             issues.append(_safety_issue("warning", f"pc_configs[{index}]", f"{name}: DHCP client validation is guarded; static IP is safer for unattended smoke tests"))
+
+    for index, config in enumerate(plan.get("ipv6_configs", [])):
+        if not isinstance(config, dict):
+            issues.append(_safety_issue("error", f"ipv6_configs[{index}]", "ipv6 config entry must be an object"))
+            continue
+        name = str(config.get("name", config.get("device", config.get("pc", config.get("server", "")))))
+        if name and name not in device_names:
+            issues.append(_safety_issue("error", f"ipv6_configs[{index}]", f"{name}: unknown configured device"))
+        check_port(f"ipv6_configs[{index}]", name, str(config.get("port", "FastEthernet0")))
+        check_ipv6_subnet(
+            f"ipv6_configs[{index}]",
+            config.get("ipv6", config.get("ipv6_address", config.get("address"))),
+            config.get("prefix", config.get("ipv6_prefix", config.get("prefix_length"))),
+            config.get("gateway", config.get("ipv6_gateway", config.get("gateway6", config.get("default_gateway6")))),
+        )
+        check_ipv6(f"ipv6_configs[{index}]", "dns", config.get("dns", config.get("ipv6_dns", config.get("dns6", config.get("dns_server6")))))
 
     for collection, aliases in (
         ("server_configs", ("name", "device", "server")),

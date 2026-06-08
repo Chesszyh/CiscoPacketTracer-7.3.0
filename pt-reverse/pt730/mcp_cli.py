@@ -519,6 +519,44 @@ def tool_template_lan_star(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_template_dual_stack_lan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-template"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.extend(
+        [
+            "dual-stack-lan",
+            "--pcs",
+            str(int_arg(args, "pcs", default=2)),
+            "--servers",
+            str(int_arg(args, "servers", default=1)),
+            "--ipv4-network",
+            str_arg(args, "ipv4_network", required=False, default="192.168.60.0/24"),
+            "--ipv6-prefix",
+            str_arg(args, "ipv6_prefix", required=False, default="2001:db8:60::/64"),
+        ]
+    )
+    for key, flag in (
+        ("name", "--name"),
+        ("ipv4_gateway", "--ipv4-gateway"),
+        ("ipv6_gateway", "--ipv6-gateway"),
+        ("dns", "--dns"),
+        ("ipv6_dns", "--ipv6-dns"),
+        ("output", "--output"),
+    ):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    layout_style = str_arg(args, "layout_style", required=False)
+    if layout_style:
+        if layout_style not in LAYOUT_STYLES:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
+        command.extend(["--layout-style", layout_style])
+    if bool_arg(args, "no_layout", default=False):
+        command.append("--no-layout")
+    return run_cli(root, command)
+
+
 def tool_template_wireless_lan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-template"))]
     if bool_arg(args, "compact", default=False):
@@ -1602,6 +1640,7 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_safety_policy", "Print the current PT 7.3 automation safety policy.", schema({}), tool_safety_policy),
         tool("pt730_catalog", "Query the offline Packet Tracer catalog with local PT 7.3 safety overlay.", schema({"action": {"type": "string", "enum": ["devices", "device", "ports", "modules", "module", "cables", "infer_cable", "aliases"]}, "model": string, "module": string, "category": string, "category_a": string, "category_b": string, "status": string, "include_ports": boolean, "table": boolean}, ["action"]), tool_catalog),
         tool("pt730_template_lan_star", "Generate a router-switch-PC/server star LAN topology JSON.", schema({"name": string, "pcs": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_lan_star),
+        tool("pt730_template_dual_stack_lan", "Generate a dual-stack IPv4/IPv6 LAN topology JSON with IOS IPv6 routing and IPv6 host metadata.", schema({"name": string, "pcs": integer, "servers": integer, "ipv4_network": string, "ipv4_gateway": string, "ipv6_prefix": string, "ipv6_gateway": string, "dns": string, "ipv6_dns": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_dual_stack_lan),
         tool("pt730_template_wireless_lan", "Generate a router-switch-AP-laptop wireless LAN topology JSON with safe PT 7.3 models.", schema({"name": string, "aps": integer, "laptops": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "ssid": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_wireless_lan),
         tool("pt730_template_vlan_router_on_stick", "Generate a router-on-a-stick VLAN trunk lab topology JSON with router subinterfaces.", schema({"name": string, "vlans": integer, "hosts_per_vlan": integer, "servers_per_vlan": integer, "address_pool": string, "vlan_prefix": integer, "vlan_base": integer, "native_vlan": integer, "domain": string, "client_addressing": {"type": "string", "enum": ["static", "dhcp"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_vlan_router_on_stick),
         tool("pt730_template_switching_lab", "Generate a Layer-2 switching lab with dual distribution switches, STP, EtherChannel, VLAN trunks, access ports, and representative PCs.", schema({"name": string, "vlans": integer, "hosts_per_vlan": integer, "access_switches": integer, "address_pool": string, "vlan_prefix": integer, "vlan_base": integer, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_switching_lab),
