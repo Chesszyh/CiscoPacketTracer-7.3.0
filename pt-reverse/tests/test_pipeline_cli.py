@@ -53,6 +53,7 @@ class PipelineCliTest(unittest.TestCase):
                 "topology.md",
                 "topology.svg",
                 "topology.html",
+                "topology.drawio",
                 "safety.json",
                 "manifest.json",
                 "configs/MLS1.cfg",
@@ -61,8 +62,10 @@ class PipelineCliTest(unittest.TestCase):
                 self.assertTrue((out_dir / relative).exists(), relative)
             self.assertEqual(manifest["artifacts"]["svg"], "topology.svg")
             self.assertEqual(manifest["artifacts"]["html"], "topology.html")
+            self.assertEqual(manifest["artifacts"]["drawio"], "topology.drawio")
             self.assertIn("<svg", (out_dir / "topology.svg").read_text(encoding="utf-8"))
             self.assertIn("<!doctype html>", (out_dir / "topology.html").read_text(encoding="utf-8"))
+            self.assertIn("<mxfile", (out_dir / "topology.drawio").read_text(encoding="utf-8"))
 
             layout = json.loads((out_dir / "topology.layout.json").read_text(encoding="utf-8"))
             self.assertGreater(len(layout["devices"]), 0)

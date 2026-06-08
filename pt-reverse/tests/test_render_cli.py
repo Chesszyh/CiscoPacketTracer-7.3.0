@@ -73,6 +73,30 @@ class RenderCliTest(unittest.TestCase):
         finally:
             out.unlink(missing_ok=True)
 
+    def test_drawio_renders_importable_mxfile(self) -> None:
+        result = self.run_render("drawio", str(ROOT / "examples" / "simple-lan.json"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("<mxfile", result.stdout)
+        self.assertIn("<mxGraphModel", result.stdout)
+        self.assertIn("R_DEMO", result.stdout)
+        self.assertIn("SW_DEMO", result.stdout)
+        self.assertIn("PC_DEMO", result.stdout)
+        self.assertIn("GigabitEthernet0/0", result.stdout)
+        self.assertIn("edge=\"1\"", result.stdout)
+
+    def test_drawio_output_option_writes_file(self) -> None:
+        out = ROOT / "tests" / ".render-output.drawio"
+        out.unlink(missing_ok=True)
+        try:
+            result = self.run_render("drawio", str(ROOT / "examples" / "simple-lan.json"), "--output", str(out))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("<mxfile", text)
+            self.assertIn("PC_DEMO", text)
+        finally:
+            out.unlink(missing_ok=True)
+
     def test_html_renders_embedded_diagram_and_report(self) -> None:
         result = self.run_render("html", str(ROOT / "examples" / "simple-lan.json"))
         self.assertEqual(result.returncode, 0, result.stderr)

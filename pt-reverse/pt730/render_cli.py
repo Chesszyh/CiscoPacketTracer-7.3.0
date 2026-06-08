@@ -411,6 +411,75 @@ def html_report(plan: dict[str, Any]) -> str:
     )
 
 
+def drawio_style(kind: str) -> tuple[str, float, float]:
+    if kind == "router":
+        return ("ellipse;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#1d4ed8;fontColor=#0f172a;fontStyle=1;", 128.0, 64.0)
+    if kind == "switch":
+        return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#15803d;fontColor=#0f172a;fontStyle=1;", 136.0, 64.0)
+    if kind == "server":
+        return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#b45309;fontColor=#0f172a;fontStyle=1;", 116.0, 76.0)
+    if kind == "pc":
+        return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4338ca;fontColor=#0f172a;fontStyle=1;", 116.0, 70.0)
+    return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#64748b;fontColor=#0f172a;fontStyle=1;", 116.0, 64.0)
+
+
+def drawio(plan: dict[str, Any]) -> str:
+    devices = svg_devices(plan)
+    positions, width, height = svg_positions(devices)
+    ids = {pick(device, ("name", "id"), f"device_{index}"): f"d{index + 2}" for index, device in enumerate(devices)}
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<mxfile host="app.diagrams.net" modified="2026-06-08T00:00:00.000Z" agent="pt730-render" version="24.7.17" type="device">',
+        '  <diagram id="pt730-topology" name="Packet Tracer Topology">',
+        f'    <mxGraphModel dx="{max(800, int(width))}" dy="{max(600, int(height))}" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="{max(850, int(width + 80))}" pageHeight="{max(1100, int(height + 80))}" math="0" shadow="0">',
+        "      <root>",
+        '        <mxCell id="0" />',
+        '        <mxCell id="1" parent="0" />',
+    ]
+
+    for index, device in enumerate(devices):
+        name = pick(device, ("name", "id"), f"device_{index}")
+        model = pick(device, ("model",))
+        kind = svg_device_kind(device)
+        style, item_width, item_height = drawio_style(kind)
+        x, y = positions.get(name, (90.0, 90.0))
+        value = name if not model else f"{name}\n{model}"
+        lines.append(f'        <mxCell id="{ids[name]}" value="{svg_text(value)}" style="{svg_text(style)}" vertex="1" parent="1">')
+        lines.append(f'          <mxGeometry x="{x - item_width / 2:.1f}" y="{y - item_height / 2:.1f}" width="{item_width:.1f}" height="{item_height:.1f}" as="geometry" />')
+        lines.append("        </mxCell>")
+
+    next_id = len(devices) + 2
+    for index, link in enumerate(plan.get("links", [])):
+        if not isinstance(link, dict):
+            continue
+        a = pick(link, ("a", "device_a", "from", "from_device"), f"a_{index}")
+        b = pick(link, ("b", "device_b", "to", "to_device"), f"b_{index}")
+        if a not in ids or b not in ids:
+            continue
+        label_text = svg_link_label(link)
+        edge_style = "endArrow=none;html=1;rounded=0;strokeColor=#475569;fontColor=#334155;labelBackgroundColor=#f8fafc;"
+        lines.append(f'        <mxCell id="e{next_id}" value="{svg_text(label_text)}" style="{svg_text(edge_style)}" edge="1" parent="1" source="{ids[a]}" target="{ids[b]}">')
+        lines.append('          <mxGeometry relative="1" as="geometry" />')
+        lines.append("        </mxCell>")
+        next_id += 1
+
+    if not devices:
+        lines.append('        <mxCell id="d2" value="empty topology" style="text;html=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">')
+        lines.append('          <mxGeometry x="80" y="80" width="160" height="40" as="geometry" />')
+        lines.append("        </mxCell>")
+
+    lines.extend(
+        [
+            "      </root>",
+            "    </mxGraphModel>",
+            "  </diagram>",
+            "</mxfile>",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def cell(value: Any) -> str:
     text = "" if value is None else str(value)
     return text.replace("|", "\\|").replace("\n", "<br>")
@@ -717,6 +786,10 @@ def main(argv: list[str] | None = None) -> int:
     svg_p.add_argument("plan", type=Path)
     svg_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
 
+    drawio_p = sub.add_parser("drawio", help="render a plan as an importable diagrams.net/draw.io mxfile")
+    drawio_p.add_argument("plan", type=Path)
+    drawio_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+
     html_p = sub.add_parser("html", help="render a plan as a self-contained HTML review page")
     html_p.add_argument("plan", type=Path)
     html_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
@@ -744,6 +817,11 @@ def main(argv: list[str] | None = None) -> int:
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(svg(plan), args.output)
+            return 0
+        if args.cmd == "drawio":
+            plan = _load_plan(args.plan)
+            _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
+            emit(drawio(plan), args.output)
             return 0
         if args.cmd == "html":
             plan = _load_plan(args.plan)

@@ -50,6 +50,8 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("core_interconnect_pool", data["compose_features"])
         self.assertIn("campus", data["pipeline_features"])
         self.assertIn("config_file_export", data["pipeline_features"])
+        self.assertIn("drawio_render", data["pipeline_features"])
+        self.assertIn("drawio", data["render_features"])
         self.assertIn("lan_star", data["template_features"])
         self.assertIn("router_ring", data["template_features"])
         self.assertIn("pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24", data["recommended_workflow"])
@@ -63,6 +65,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("pt-reverse/bin/pt730-config-plan export-configs <configured-plan.json> --output-dir <configs-dir>", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-ip-plan campus <ip-plan.json> --output <planned-segments.json>", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-ios-template schema", data["recommended_workflow"])
+        self.assertIn("pt-reverse/bin/pt730-render drawio <plan.json> --output <diagram.drawio>", data["recommended_workflow"])
 
     def test_table_output_is_human_readable(self) -> None:
         result = self.run_cmd("--table")
