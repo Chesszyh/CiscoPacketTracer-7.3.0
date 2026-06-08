@@ -10,6 +10,7 @@ import json
 import math
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,85 @@ COURSE_PC_NETWORK = ipaddress.ip_network("192.168.0.0/21")
 COURSE_SERVER_GATEWAY = "172.16.1.62"
 COURSE_EXPECTED_SERVERS = 50
 COURSE_EXPECTED_PCS = 1900
+RENDER_THEMES = ("light", "dark", "paper")
+
+
+@dataclass(frozen=True)
+class RenderOptions:
+    theme: str = "light"
+    link_labels: bool = True
+    model_labels: bool = True
+
+
+def render_palette(theme: str) -> dict[str, str]:
+    if theme == "dark":
+        return {
+            "bg": "#0f172a",
+            "html_bg": "#020617",
+            "panel_bg": "#0f172a",
+            "panel_border": "#334155",
+            "text": "#e2e8f0",
+            "muted": "#94a3b8",
+            "report_bg": "#111827",
+            "link": "#94a3b8",
+            "label": "#e2e8f0",
+            "label_back": "#0f172a",
+            "router_fill": "#1e3a8a",
+            "router_stroke": "#93c5fd",
+            "switch_fill": "#14532d",
+            "switch_stroke": "#86efac",
+            "server_fill": "#78350f",
+            "server_stroke": "#fbbf24",
+            "pc_fill": "#312e81",
+            "pc_stroke": "#a5b4fc",
+            "device_fill": "#1f2937",
+            "device_stroke": "#94a3b8",
+        }
+    if theme == "paper":
+        return {
+            "bg": "#fbf7ef",
+            "html_bg": "#f3eadb",
+            "panel_bg": "#fffaf2",
+            "panel_border": "#d6c6ad",
+            "text": "#1f2933",
+            "muted": "#6b5f51",
+            "report_bg": "#fffaf2",
+            "link": "#6b7280",
+            "label": "#374151",
+            "label_back": "#fbf7ef",
+            "router_fill": "#dbeafe",
+            "router_stroke": "#1d4ed8",
+            "switch_fill": "#dcfce7",
+            "switch_stroke": "#15803d",
+            "server_fill": "#fde68a",
+            "server_stroke": "#b45309",
+            "pc_fill": "#e0e7ff",
+            "pc_stroke": "#4338ca",
+            "device_fill": "#f1f5f9",
+            "device_stroke": "#64748b",
+        }
+    return {
+        "bg": "#f8fafc",
+        "html_bg": "#f1f5f9",
+        "panel_bg": "#ffffff",
+        "panel_border": "#cbd5e1",
+        "text": "#0f172a",
+        "muted": "#475569",
+        "report_bg": "#ffffff",
+        "link": "#475569",
+        "label": "#334155",
+        "label_back": "#f8fafc",
+        "router_fill": "#dbeafe",
+        "router_stroke": "#1d4ed8",
+        "switch_fill": "#dcfce7",
+        "switch_stroke": "#15803d",
+        "server_fill": "#fef3c7",
+        "server_stroke": "#b45309",
+        "pc_fill": "#e0e7ff",
+        "pc_stroke": "#4338ca",
+        "device_fill": "#f1f5f9",
+        "device_stroke": "#64748b",
+    }
 
 
 def node_id(name: str) -> str:
@@ -173,7 +253,7 @@ def server_service_rows(plan: dict[str, Any]) -> dict[str, list[list[Any]]]:
     return rows
 
 
-def mermaid(plan: dict[str, Any], *, direction: str) -> str:
+def mermaid(plan: dict[str, Any], *, direction: str, link_labels: bool = True) -> str:
     lines = [f"flowchart {direction}"]
     seen_ids: set[str] = set()
     for index, device in enumerate(plan.get("devices", [])):
@@ -198,7 +278,10 @@ def mermaid(plan: dict[str, Any], *, direction: str) -> str:
         pb = pick(link, ("pb", "port_b", "to_port"), "")
         cable = pick(link, ("cable", "type", "link_type", "cable_type"), "straight")
         link_label = " / ".join(part for part in [pa, cable, pb] if part)
-        lines.append(f'  {node_id(a)} ---|"{label(link_label)}"| {node_id(b)}')
+        if link_labels and link_label:
+            lines.append(f'  {node_id(a)} ---|"{label(link_label)}"| {node_id(b)}')
+        else:
+            lines.append(f"  {node_id(a)} --- {node_id(b)}")
 
     if len(lines) == 1:
         lines.append("  empty[\"empty topology\"]")
@@ -286,12 +369,13 @@ def svg_link_label(link: dict[str, Any]) -> str:
     return " / ".join(part for part in parts if part)
 
 
-def svg_device_group(device: dict[str, Any], x: float, y: float) -> list[str]:
+def svg_device_group(device: dict[str, Any], x: float, y: float, *, options: RenderOptions) -> list[str]:
     kind = svg_device_kind(device)
     name = pick(device, ("name", "id"))
     model = pick(device, ("model",))
     lines = [f'  <g class="device {kind}" transform="translate({x:.1f} {y:.1f})">']
-    lines.append(f"    <title>{svg_text(name)} {svg_text(model)}</title>")
+    title = name if not options.model_labels or not model else f"{name} {model}"
+    lines.append(f"    <title>{svg_text(title)}</title>")
     if kind == "router":
         lines.append('    <ellipse cx="0" cy="0" rx="64" ry="32" />')
         lines.append('    <path d="M -34 -5 L 34 -5 M -18 8 L 18 8" />')
@@ -307,34 +391,35 @@ def svg_device_group(device: dict[str, Any], x: float, y: float) -> list[str]:
     else:
         lines.append('    <rect x="-58" y="-32" width="116" height="64" rx="8" />')
     lines.append(f'    <text class="device-name" x="0" y="52">{svg_text(name)}</text>')
-    if model:
+    if model and options.model_labels:
         lines.append(f'    <text class="device-model" x="0" y="68">{svg_text(model)}</text>')
     lines.append("  </g>")
     return lines
 
 
-def svg(plan: dict[str, Any]) -> str:
+def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> str:
     devices = svg_devices(plan)
     positions, width, height = svg_positions(devices)
+    palette = render_palette(options.theme)
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-labelledby="title desc">',
         "  <title id=\"title\">Packet Tracer topology</title>",
         "  <desc id=\"desc\">Offline-rendered Packet Tracer 7.3.0 topology diagram.</desc>",
         "  <style>",
-        "    svg { background: #f8fafc; font-family: Inter, Segoe UI, Arial, sans-serif; }",
-        "    .link { stroke: #475569; stroke-width: 2.2; stroke-linecap: round; }",
-        "    .link-label { fill: #334155; font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: #f8fafc; stroke-width: 4px; stroke-linejoin: round; }",
+        f"    svg {{ background: {palette['bg']}; font-family: Inter, Segoe UI, Arial, sans-serif; }}",
+        f"    .link {{ stroke: {palette['link']}; stroke-width: 2.2; stroke-linecap: round; }}",
+        f"    .link-label {{ fill: {palette['label']}; font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: {palette['label_back']}; stroke-width: 4px; stroke-linejoin: round; }}",
         "    .device text { text-anchor: middle; stroke: none; }",
-        "    .device-name { fill: #0f172a; font-size: 13px; font-weight: 700; }",
-        "    .device-model { fill: #475569; font-size: 10px; }",
+        f"    .device-name {{ fill: {palette['text']}; font-size: 13px; font-weight: 700; }}",
+        f"    .device-model {{ fill: {palette['muted']}; font-size: 10px; }}",
         "    .device rect, .device ellipse { stroke-width: 2; }",
         "    .device path { fill: none; stroke-width: 2; stroke-linecap: round; }",
-        "    .router ellipse { fill: #dbeafe; stroke: #1d4ed8; } .router path { stroke: #1d4ed8; }",
-        "    .switch rect { fill: #dcfce7; stroke: #15803d; } .switch path { stroke: #15803d; }",
-        "    .server rect { fill: #fef3c7; stroke: #b45309; } .server path { stroke: #b45309; }",
-        "    .pc rect { fill: #e0e7ff; stroke: #4338ca; } .pc path { stroke: #4338ca; }",
-        "    .device.device rect { fill: #f1f5f9; stroke: #64748b; }",
+        f"    .router ellipse {{ fill: {palette['router_fill']}; stroke: {palette['router_stroke']}; }} .router path {{ stroke: {palette['router_stroke']}; }}",
+        f"    .switch rect {{ fill: {palette['switch_fill']}; stroke: {palette['switch_stroke']}; }} .switch path {{ stroke: {palette['switch_stroke']}; }}",
+        f"    .server rect {{ fill: {palette['server_fill']}; stroke: {palette['server_stroke']}; }} .server path {{ stroke: {palette['server_stroke']}; }}",
+        f"    .pc rect {{ fill: {palette['pc_fill']}; stroke: {palette['pc_stroke']}; }} .pc path {{ stroke: {palette['pc_stroke']}; }}",
+        f"    .device.device rect {{ fill: {palette['device_fill']}; stroke: {palette['device_stroke']}; }}",
         "  </style>",
     ]
 
@@ -349,7 +434,7 @@ def svg(plan: dict[str, Any]) -> str:
         x2, y2 = positions[b]
         lines.append(f'  <line class="link" x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" />')
         link_label = svg_link_label(link)
-        if link_label:
+        if options.link_labels and link_label:
             mid_x = (x1 + x2) / 2
             mid_y = (y1 + y2) / 2 - 8
             lines.append(f'  <text class="link-label" x="{mid_x:.1f}" y="{mid_y:.1f}">{svg_text(link_label)}</text>')
@@ -358,7 +443,7 @@ def svg(plan: dict[str, Any]) -> str:
         name = pick(device, ("name", "id"))
         if name in positions:
             x, y = positions[name]
-            lines.extend(svg_device_group(device, x, y))
+            lines.extend(svg_device_group(device, x, y, options=options))
 
     if not devices:
         lines.append('  <text class="device-name" x="160" y="110">empty topology</text>')
@@ -367,15 +452,16 @@ def svg(plan: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def svg_fragment(plan: dict[str, Any]) -> str:
-    lines = svg(plan).splitlines()
+def svg_fragment(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> str:
+    lines = svg(plan, options=options).splitlines()
     if lines and lines[0].startswith("<?xml"):
         lines = lines[1:]
     return "\n".join(lines)
 
 
-def html_report(plan: dict[str, Any]) -> str:
+def html_report(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> str:
     report = markdown(plan)
+    palette = render_palette(options.theme)
     return "\n".join(
         [
             "<!doctype html>",
@@ -385,20 +471,20 @@ def html_report(plan: dict[str, Any]) -> str:
             '  <meta name="viewport" content="width=device-width, initial-scale=1">',
             "  <title>Packet Tracer Topology Plan</title>",
             "  <style>",
-            "    body { margin: 0; background: #f1f5f9; color: #0f172a; font-family: Inter, Segoe UI, Arial, sans-serif; }",
+            f"    body {{ margin: 0; background: {palette['html_bg']}; color: {palette['text']}; font-family: Inter, Segoe UI, Arial, sans-serif; }}",
             "    main { max-width: 1180px; margin: 0 auto; padding: 24px; }",
             "    h1 { font-size: 24px; margin: 0 0 18px; }",
             "    section { margin-top: 20px; }",
-            "    .diagram { overflow: auto; background: white; border: 1px solid #cbd5e1; }",
+            f"    .diagram {{ overflow: auto; background: {palette['panel_bg']}; border: 1px solid {palette['panel_border']}; }}",
             "    .diagram svg { display: block; min-width: 100%; }",
-            "    pre { overflow: auto; white-space: pre-wrap; background: white; border: 1px solid #cbd5e1; padding: 16px; line-height: 1.45; }",
+            f"    pre {{ overflow: auto; white-space: pre-wrap; background: {palette['report_bg']}; border: 1px solid {palette['panel_border']}; padding: 16px; line-height: 1.45; }}",
             "  </style>",
             "</head>",
             "<body>",
             "  <main>",
             "    <h1>Packet Tracer Topology Plan</h1>",
             '    <section class="diagram" aria-label="Topology diagram">',
-            svg_fragment(plan),
+            svg_fragment(plan, options=options),
             "    </section>",
             '    <section aria-label="Topology report">',
             f"      <pre>{svg_text(report)}</pre>",
@@ -411,22 +497,24 @@ def html_report(plan: dict[str, Any]) -> str:
     )
 
 
-def drawio_style(kind: str) -> tuple[str, float, float]:
+def drawio_style(kind: str, *, theme: str) -> tuple[str, float, float]:
+    palette = render_palette(theme)
     if kind == "router":
-        return ("ellipse;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#1d4ed8;fontColor=#0f172a;fontStyle=1;", 128.0, 64.0)
+        return (f"ellipse;whiteSpace=wrap;html=1;fillColor={palette['router_fill']};strokeColor={palette['router_stroke']};fontColor={palette['text']};fontStyle=1;", 128.0, 64.0)
     if kind == "switch":
-        return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#15803d;fontColor=#0f172a;fontStyle=1;", 136.0, 64.0)
+        return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['switch_fill']};strokeColor={palette['switch_stroke']};fontColor={palette['text']};fontStyle=1;", 136.0, 64.0)
     if kind == "server":
-        return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#b45309;fontColor=#0f172a;fontStyle=1;", 116.0, 76.0)
+        return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['server_fill']};strokeColor={palette['server_stroke']};fontColor={palette['text']};fontStyle=1;", 116.0, 76.0)
     if kind == "pc":
-        return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4338ca;fontColor=#0f172a;fontStyle=1;", 116.0, 70.0)
-    return ("rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#64748b;fontColor=#0f172a;fontStyle=1;", 116.0, 64.0)
+        return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['pc_fill']};strokeColor={palette['pc_stroke']};fontColor={palette['text']};fontStyle=1;", 116.0, 70.0)
+    return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['device_fill']};strokeColor={palette['device_stroke']};fontColor={palette['text']};fontStyle=1;", 116.0, 64.0)
 
 
-def drawio(plan: dict[str, Any]) -> str:
+def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> str:
     devices = svg_devices(plan)
     positions, width, height = svg_positions(devices)
     ids = {pick(device, ("name", "id"), f"device_{index}"): f"d{index + 2}" for index, device in enumerate(devices)}
+    palette = render_palette(options.theme)
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<mxfile host="app.diagrams.net" modified="2026-06-08T00:00:00.000Z" agent="pt730-render" version="24.7.17" type="device">',
@@ -441,9 +529,9 @@ def drawio(plan: dict[str, Any]) -> str:
         name = pick(device, ("name", "id"), f"device_{index}")
         model = pick(device, ("model",))
         kind = svg_device_kind(device)
-        style, item_width, item_height = drawio_style(kind)
+        style, item_width, item_height = drawio_style(kind, theme=options.theme)
         x, y = positions.get(name, (90.0, 90.0))
-        value = name if not model else f"{name}\n{model}"
+        value = name if not model or not options.model_labels else f"{name}\n{model}"
         lines.append(f'        <mxCell id="{ids[name]}" value="{svg_text(value)}" style="{svg_text(style)}" vertex="1" parent="1">')
         lines.append(f'          <mxGeometry x="{x - item_width / 2:.1f}" y="{y - item_height / 2:.1f}" width="{item_width:.1f}" height="{item_height:.1f}" as="geometry" />')
         lines.append("        </mxCell>")
@@ -456,8 +544,8 @@ def drawio(plan: dict[str, Any]) -> str:
         b = pick(link, ("b", "device_b", "to", "to_device"), f"b_{index}")
         if a not in ids or b not in ids:
             continue
-        label_text = svg_link_label(link)
-        edge_style = "endArrow=none;html=1;rounded=0;strokeColor=#475569;fontColor=#334155;labelBackgroundColor=#f8fafc;"
+        label_text = svg_link_label(link) if options.link_labels else ""
+        edge_style = f"endArrow=none;html=1;rounded=0;strokeColor={palette['link']};fontColor={palette['label']};labelBackgroundColor={palette['label_back']};"
         lines.append(f'        <mxCell id="e{next_id}" value="{svg_text(label_text)}" style="{svg_text(edge_style)}" edge="1" parent="1" source="{ids[a]}" target="{ids[b]}">')
         lines.append('          <mxGeometry relative="1" as="geometry" />')
         lines.append("        </mxCell>")
@@ -771,6 +859,24 @@ def emit(text: str, output: Path | None) -> None:
     output.write_text(text, encoding="utf-8")
 
 
+def add_link_label_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=True, help="hide link port/cable/VLAN labels")
+
+
+def add_visual_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--theme", choices=RENDER_THEMES, default="light", help="diagram color theme")
+    add_link_label_option(parser)
+    parser.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=True, help="hide device model labels")
+
+
+def render_options(args: argparse.Namespace) -> RenderOptions:
+    return RenderOptions(
+        theme=getattr(args, "theme", "light"),
+        link_labels=getattr(args, "link_labels", True),
+        model_labels=getattr(args, "model_labels", True),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict-safety", action="store_true", help="treat safety warnings as failures")
@@ -781,18 +887,22 @@ def main(argv: list[str] | None = None) -> int:
     mermaid_p.add_argument("plan", type=Path)
     mermaid_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"])
     mermaid_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_link_label_option(mermaid_p)
 
     svg_p = sub.add_parser("svg", help="render a plan as an offline SVG topology diagram")
     svg_p.add_argument("plan", type=Path)
     svg_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_visual_options(svg_p)
 
     drawio_p = sub.add_parser("drawio", help="render a plan as an importable diagrams.net/draw.io mxfile")
     drawio_p.add_argument("plan", type=Path)
     drawio_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_visual_options(drawio_p)
 
     html_p = sub.add_parser("html", help="render a plan as a self-contained HTML review page")
     html_p.add_argument("plan", type=Path)
     html_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_visual_options(html_p)
 
     markdown_p = sub.add_parser("markdown", help="render a plan as Markdown tables")
     markdown_p.add_argument("plan", type=Path)
@@ -811,22 +921,22 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "mermaid":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(mermaid(plan, direction=args.direction), args.output)
+            emit(mermaid(plan, direction=args.direction, link_labels=args.link_labels), args.output)
             return 0
         if args.cmd == "svg":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(svg(plan), args.output)
+            emit(svg(plan, options=render_options(args)), args.output)
             return 0
         if args.cmd == "drawio":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(drawio(plan), args.output)
+            emit(drawio(plan, options=render_options(args)), args.output)
             return 0
         if args.cmd == "html":
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
-            emit(html_report(plan), args.output)
+            emit(html_report(plan, options=render_options(args)), args.output)
             return 0
         if args.cmd == "markdown":
             plan = _load_plan(args.plan)

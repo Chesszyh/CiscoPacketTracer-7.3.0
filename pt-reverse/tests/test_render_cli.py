@@ -35,6 +35,12 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("GigabitEthernet0/0", result.stdout)
         self.assertIn("FastEthernet0/1", result.stdout)
 
+    def test_mermaid_can_hide_link_labels(self) -> None:
+        result = self.run_render("mermaid", str(ROOT / "examples" / "simple-lan.json"), "--no-link-labels")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("R_DEMO --- SW_DEMO", result.stdout)
+        self.assertNotIn("GigabitEthernet0/0", result.stdout)
+
     def test_mermaid_strict_rejects_guarded_dhcp_warning(self) -> None:
         result = self.run_render("--strict-safety", "mermaid", str(ROOT / "examples" / "server-dhcp-lan.json"))
         self.assertNotEqual(result.returncode, 0)
@@ -60,6 +66,14 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("<line", result.stdout)
         self.assertIn("GigabitEthernet0/0", result.stdout)
 
+    def test_svg_visual_options_control_theme_and_labels(self) -> None:
+        result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--theme", "dark", "--no-link-labels", "--no-model-labels")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("background: #0f172a", result.stdout)
+        self.assertIn("R_DEMO", result.stdout)
+        self.assertNotIn("GigabitEthernet0/0", result.stdout)
+        self.assertNotIn("2911", result.stdout)
+
     def test_svg_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.svg"
         out.unlink(missing_ok=True)
@@ -84,6 +98,14 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("GigabitEthernet0/0", result.stdout)
         self.assertIn("edge=\"1\"", result.stdout)
 
+    def test_drawio_visual_options_control_theme_and_labels(self) -> None:
+        result = self.run_render("drawio", str(ROOT / "examples" / "simple-lan.json"), "--theme", "paper", "--no-link-labels", "--no-model-labels")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("labelBackgroundColor=#fbf7ef", result.stdout)
+        self.assertIn('value="R_DEMO"', result.stdout)
+        self.assertNotIn("GigabitEthernet0/0", result.stdout)
+        self.assertNotIn("2911", result.stdout)
+
     def test_drawio_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.drawio"
         out.unlink(missing_ok=True)
@@ -105,6 +127,16 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("R_DEMO", result.stdout)
         self.assertIn("Packet Tracer Topology Plan", result.stdout)
         self.assertIn("192.168.50.10", result.stdout)
+
+    def test_html_visual_options_control_theme_and_diagram_labels(self) -> None:
+        result = self.run_render("html", str(ROOT / "examples" / "simple-lan.json"), "--theme", "dark", "--no-link-labels", "--no-model-labels")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("background: #020617", result.stdout)
+        self.assertIn("<svg", result.stdout)
+        self.assertIn("192.168.50.10", result.stdout)
+        diagram = result.stdout.split("    </section>", 1)[0]
+        self.assertNotIn("GigabitEthernet0/0", diagram)
+        self.assertNotIn("2911", diagram)
 
     def test_html_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.html"

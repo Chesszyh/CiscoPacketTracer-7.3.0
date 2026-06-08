@@ -70,6 +70,8 @@ Built-in template MCP tools expose the same DNS, layout, no-layout, compact,
 and naming options as the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
+Render MCP tools expose visual theme and label controls through `pt730_render`
+for SVG, draw.io, HTML, and Mermaid where supported.
 The `pt730_layout` MCP tool exposes canvas size, spacing, margin, and compact
 JSON controls for denser or cleaner topology diagrams.
 Config planning MCP tools expose IOS-only output, source filtering, and compact
@@ -325,6 +327,9 @@ deterministic grid when coordinates are missing.
 Use `pt730-render drawio <plan.json> --output <diagram.drawio>` for an
 importable diagrams.net/draw.io topology file that keeps device/link labels
 editable.
+For cleaner large diagrams, add `--theme light|dark|paper`,
+`--no-link-labels`, or `--no-model-labels` to SVG/draw.io/HTML renders; Mermaid
+supports `--no-link-labels`.
 Use `pt730-render html <plan.json> --output <review.html>` for a self-contained
 browser review page with the SVG diagram and Markdown report text embedded.
 For this course assignment, `pt730-render course-audit <plan.json>` checks the

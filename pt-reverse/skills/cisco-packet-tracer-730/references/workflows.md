@@ -58,6 +58,13 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
+Example visual render control through MCP:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"svg","plan":"pt-reverse/examples/simple-lan.json","theme":"dark","link_labels":false,"model_labels":false}}}' \
+  | pt-reverse/bin/pt730-mcp
+```
+
 Example config planning through MCP:
 
 ```bash
@@ -147,7 +154,8 @@ pt-reverse/bin/pt730-config-plan --compact campus topology.composed.json --ios-o
 pt-reverse/bin/pt730-layout topology.configured.json --style campus --output topology.layout.json
 pt-reverse/bin/pt730-safety plan topology.layout.json
 pt-reverse/bin/pt730-render markdown topology.layout.json --output topology.md
-pt-reverse/bin/pt730-render drawio topology.layout.json --output topology.drawio
+pt-reverse/bin/pt730-render drawio topology.layout.json --theme paper --output topology.drawio
+pt-reverse/bin/pt730-render svg topology.layout.json --theme dark --no-link-labels --output topology.clean.svg
 pt-reverse/bin/pt730-config-plan --compact export-configs topology.configured.json --output-dir configs --source "pt730-config-plan campus"
 ```
 

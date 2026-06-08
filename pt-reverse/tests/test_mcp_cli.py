@@ -167,6 +167,76 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(result["structuredContent"]["exitCode"], 0)
         self.assertIn("192.168.50.0/24", result["structuredContent"]["stdout"])
 
+    def test_render_tool_exposes_visual_theme_and_label_options(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "svg",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "theme": "dark",
+                            "link_labels": False,
+                            "model_labels": False,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "mermaid",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "link_labels": False,
+                        },
+                    },
+                },
+            ]
+        )
+        svg_result = responses[0]["result"]
+        mermaid_result = responses[1]["result"]
+        self.assertEqual(svg_result["isError"], False)
+        svg_command = svg_result["structuredContent"]["command"]
+        self.assertIn("--theme", svg_command)
+        self.assertIn("dark", svg_command)
+        self.assertIn("--no-link-labels", svg_command)
+        self.assertIn("--no-model-labels", svg_command)
+        self.assertIn("background: #0f172a", svg_result["structuredContent"]["stdout"])
+        self.assertNotIn("GigabitEthernet0/0", svg_result["structuredContent"]["stdout"])
+        self.assertNotIn("2911", svg_result["structuredContent"]["stdout"])
+        self.assertEqual(mermaid_result["isError"], False)
+        self.assertIn("--no-link-labels", mermaid_result["structuredContent"]["command"])
+        self.assertIn("R_DEMO --- SW_DEMO", mermaid_result["structuredContent"]["stdout"])
+        self.assertNotIn("GigabitEthernet0/0", mermaid_result["structuredContent"]["stdout"])
+
+    def test_render_tool_rejects_visual_options_for_non_visual_formats(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "summary",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "theme": "dark",
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("theme is supported only", responses[0]["error"]["message"])
+
     def test_tools_call_pipeline_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "mcp-pipeline"
