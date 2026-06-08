@@ -834,6 +834,21 @@ def markdown(plan: dict[str, Any]) -> str:
         lines.extend(markdown_table(["Network", "Gateway", "DNS", "Configured Hosts", "Sample Hosts"], address_rows))
         lines.append("")
 
+    vlan_rows = []
+    for config in plan.get("vlan_configs", []):
+        if isinstance(config, dict):
+            vlan_rows.append([
+                pick(config, ("id", "vlan", "vlan_id")),
+                pick(config, ("name",)),
+                pick(config, ("network", "subnet")),
+                pick(config, ("gateway",)),
+                pick(config, ("description", "note")),
+            ])
+    if vlan_rows:
+        lines.extend(["## VLAN Configs", ""])
+        lines.extend(markdown_table(["VLAN", "Name", "Network", "Gateway", "Note"], vlan_rows))
+        lines.append("")
+
     ap_rows = []
     for config in plan.get("ap_configs", []):
         if isinstance(config, dict):
@@ -953,6 +968,7 @@ def summary(plan: dict[str, Any]) -> str:
             "links": len(plan.get("links", [])),
             "pc_configs": len(plan.get("pc_configs", [])),
             "ap_configs": len(plan.get("ap_configs", [])),
+            "vlan_configs": len(plan.get("vlan_configs", [])),
             "server_configs": len(plan.get("server_configs", [])),
             "security_policies": len(plan.get("security_policies", [])),
             "ios_configs": len(plan.get("ios_configs", [])),
@@ -968,6 +984,16 @@ def summary(plan: dict[str, Any]) -> str:
             for group in address_groups(plan)
         ],
         "vlan_link_counts": dict(sorted(vlan_counts.items(), key=lambda item: int(item[0]) if item[0].isdigit() else item[0])),
+        "vlans": [
+            {
+                "id": pick(config, ("id", "vlan", "vlan_id")),
+                "name": pick(config, ("name",)),
+                "network": pick(config, ("network", "subnet")),
+                "gateway": pick(config, ("gateway",)),
+            }
+            for config in plan.get("vlan_configs", [])
+            if isinstance(config, dict)
+        ],
         "noted_links": noted_links,
         "wireless": {
             "aps": len(plan.get("ap_configs", [])),

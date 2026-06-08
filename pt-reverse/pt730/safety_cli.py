@@ -96,6 +96,13 @@ def is_physical_interface(name: str) -> bool:
     return name.startswith(PHYSICAL_INTERFACE_PREFIXES) and not name.startswith(VIRTUAL_INTERFACE_PREFIXES)
 
 
+def physical_interface_base(name: str) -> str:
+    if "." not in name:
+        return name
+    base, suffix = name.rsplit(".", 1)
+    return base if suffix.isdigit() else name
+
+
 def interface_needs_no_shutdown(commands: list[str]) -> bool:
     return any(command.lower().startswith(("ip address ", "switchport ")) for command in commands)
 
@@ -279,7 +286,8 @@ def check_plan(plan: dict[str, Any]) -> list[dict[str, Any]]:
                 for interface, commands in blocks.items():
                     ios_interface_blocks[(name, interface)] = commands
                     ports = device_ports.get(name)
-                    if ports is not None and is_physical_interface(interface) and interface not in ports:
+                    base_interface = physical_interface_base(interface)
+                    if ports is not None and is_physical_interface(interface) and base_interface not in ports:
                         add_issue(issues, "error", f"{collection}[{index}]", "unknown IOS interface", name=name, interface=interface)
                     if interface_needs_no_shutdown(commands) and not has_command(commands, "no shutdown") and not has_command(commands, "shutdown"):
                         add_issue(

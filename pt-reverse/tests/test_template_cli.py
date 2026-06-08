@@ -64,10 +64,12 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("router-ring", data["commands"])
         self.assertIn("wan-ring", data["commands"])
         self.assertIn("wireless-lan", data["commands"])
+        self.assertIn("vlan-router-on-stick", data["commands"])
         self.assertIn("edge-security", data["commands"])
         self.assertIn("campus", data["commands"])
         self.assertIn("lan-star", data["templates"])
         self.assertIn("wireless-lan", data["templates"])
+        self.assertIn("vlan-router-on-stick", data["templates"])
         self.assertIn("edge-security", data["templates"])
         self.assertIn("router-ring", data["templates"])
         self.assertIn("wan-ring", data["templates"])
@@ -151,6 +153,52 @@ class TemplateCliTest(unittest.TestCase):
         self.assertNotIn("WirelessEndDevice-PT", encoded)
         self.assertNotIn("SMARTPHONE-PT", encoded)
         self.assertNotIn("WRT300N", encoded)
+        self.assert_safe_and_renderable(plan)
+
+    def test_vlan_router_on_stick_generates_dot1q_trunk_subinterfaces_and_access_ports(self) -> None:
+        result = self.run_template(
+            "vlan-router-on-stick",
+            "--name",
+            "LAB",
+            "--vlans",
+            "3",
+            "--hosts-per-vlan",
+            "2",
+            "--servers-per-vlan",
+            "1",
+            "--address-pool",
+            "192.168.20.0/22",
+            "--vlan-base",
+            "10",
+            "--native-vlan",
+            "10",
+            "--domain",
+            "lab.local",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertIn("R-LAB-ROAS", names)
+        self.assertIn("SW-LAB-ACCESS", names)
+        self.assertIn("PC-LAB-V10-1", names)
+        self.assertIn("SRV-LAB-V12-1", names)
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        self.assertEqual(len(plan["devices"]), 11)
+        self.assertEqual(len(plan["links"]), 10)
+        self.assertEqual(len(plan["pc_configs"]), 9)
+        self.assertEqual(len(plan["vlan_configs"]), 3)
+        self.assertEqual([config["id"] for config in plan["vlan_configs"]], [10, 11, 12])
+        self.assertEqual({link.get("vlan") for link in plan["links"] if "vlan" in link}, {10, 11, 12})
+        self.assertEqual(plan["metadata"]["source"], "pt730-template vlan-router-on-stick")
+        services = {config["name"]: config for config in plan["server_configs"]}
+        self.assertIn("dns", services["SRV-LAB-V10-1"])
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("encapsulation dot1Q 10 native", joined)
+        self.assertIn("encapsulation dot1Q 11", joined)
+        self.assertIn("switchport mode trunk", joined)
+        self.assertIn("switchport trunk allowed vlan 10,11,12", joined)
+        self.assertIn("switchport access vlan 12", joined)
+        self.assertNotIn("3560-24PS", json.dumps(plan))
         self.assert_safe_and_renderable(plan)
 
     def test_edge_security_generates_nat_acl_dmz_and_static_routes(self) -> None:

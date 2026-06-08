@@ -76,6 +76,40 @@ class TopologyCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown IOS interface", result.stderr)
 
+    def test_apply_dry_run_accepts_known_ios_subinterface_before_live_bridge(self) -> None:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "devices": [{"name": "R1", "category": "router", "model": "2911"}],
+                    "ios_configs": [
+                        {
+                            "device": "R1",
+                            "commands": [
+                                "interface GigabitEthernet0/0.10",
+                                "encapsulation dot1Q 10",
+                                "ip address 192.168.10.1 255.255.255.0",
+                                "no shutdown",
+                            ],
+                        }
+                    ],
+                },
+                f,
+            )
+            path = f.name
+        try:
+            result = subprocess.run(
+                [str(TOPO), "--timeout", "1", "apply", "--dry-run", path],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_apply_dry_run_rejects_model_marked_risky_by_validation_overlay(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             validation_path = Path(tmpdir) / "model-validations.json"

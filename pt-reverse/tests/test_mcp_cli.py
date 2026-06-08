@@ -45,6 +45,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
         self.assertIn("pt730_template_wireless_lan", names)
+        self.assertIn("pt730_template_vlan_router_on_stick", names)
         self.assertIn("pt730_template_edge_security", names)
         self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
@@ -479,6 +480,27 @@ class McpCliTest(unittest.TestCase):
                     "id": 3,
                     "method": "tools/call",
                     "params": {
+                        "name": "pt730_template_vlan_router_on_stick",
+                        "arguments": {
+                            "name": "ROAS",
+                            "vlans": 2,
+                            "hosts_per_vlan": 1,
+                            "servers_per_vlan": 1,
+                            "address_pool": "192.168.30.0/23",
+                            "vlan_prefix": 24,
+                            "vlan_base": 10,
+                            "native_vlan": 10,
+                            "domain": "roas.local",
+                            "layout_style": "hierarchical",
+                            "compact": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
                         "name": "pt730_template_edge_security",
                         "arguments": {
                             "name": "SEC",
@@ -493,7 +515,7 @@ class McpCliTest(unittest.TestCase):
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 4,
+                    "id": 5,
                     "method": "tools/call",
                     "params": {
                         "name": "pt730_template_router_ring",
@@ -508,7 +530,7 @@ class McpCliTest(unittest.TestCase):
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 5,
+                    "id": 6,
                     "method": "tools/call",
                     "params": {
                         "name": "pt730_template_wan_ring",
@@ -530,16 +552,19 @@ class McpCliTest(unittest.TestCase):
         )
         lan_result = responses[0]["result"]
         wireless_result = responses[1]["result"]
-        edge_result = responses[2]["result"]
-        ring_result = responses[3]["result"]
-        wan_result = responses[4]["result"]
+        roas_result = responses[2]["result"]
+        edge_result = responses[3]["result"]
+        ring_result = responses[4]["result"]
+        wan_result = responses[5]["result"]
         self.assertEqual(lan_result["isError"], False)
         self.assertEqual(wireless_result["isError"], False)
+        self.assertEqual(roas_result["isError"], False)
         self.assertEqual(edge_result["isError"], False)
         self.assertEqual(ring_result["isError"], False)
         self.assertEqual(wan_result["isError"], False)
         lan_command = lan_result["structuredContent"]["command"]
         wireless_command = wireless_result["structuredContent"]["command"]
+        roas_command = roas_result["structuredContent"]["command"]
         edge_command = edge_result["structuredContent"]["command"]
         ring_command = ring_result["structuredContent"]["command"]
         wan_command = wan_result["structuredContent"]["command"]
@@ -551,6 +576,9 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("--ssid", wireless_command)
         self.assertIn("CLASSROOM", wireless_command)
         self.assertIn("--dns", wireless_command)
+        self.assertIn("vlan-router-on-stick", roas_command)
+        self.assertIn("--native-vlan", roas_command)
+        self.assertIn("10", roas_command)
         self.assertIn("edge-security", edge_command)
         self.assertIn("--domain", edge_command)
         self.assertIn("sec.local", edge_command)
@@ -561,6 +589,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("--routing", wan_command)
         lan_plan = json.loads(lan_result["structuredContent"]["stdout"])
         wireless_plan = json.loads(wireless_result["structuredContent"]["stdout"])
+        roas_plan = json.loads(roas_result["structuredContent"]["stdout"])
         edge_plan = json.loads(edge_result["structuredContent"]["stdout"])
         ring_plan = json.loads(ring_result["structuredContent"]["stdout"])
         wan_plan = json.loads(wan_result["structuredContent"]["stdout"])
@@ -571,6 +600,9 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(wireless_plan["metadata"]["ssid"], "CLASSROOM")
         self.assertEqual(len(wireless_plan["ap_configs"]), 2)
         self.assertEqual(wireless_plan["pc_configs"][0]["dns"], "192.168.80.254")
+        self.assertEqual(roas_plan["metadata"]["source"], "pt730-template vlan-router-on-stick")
+        self.assertEqual(len(roas_plan["vlan_configs"]), 2)
+        self.assertIn("encapsulation dot1Q 10 native", "\n".join(command for config in roas_plan["ios_configs"] for command in config["commands"]))
         self.assertEqual(edge_plan["metadata"]["source"], "pt730-template edge-security")
         self.assertEqual(edge_plan["metadata"]["domain"], "sec.local")
         self.assertEqual(len(edge_plan["security_policies"]), 2)

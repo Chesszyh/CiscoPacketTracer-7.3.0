@@ -47,7 +47,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "wireless-lan", "edge-security", "router-ring", "wan-ring", "campus"],
+        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "edge-security", "router-ring", "wan-ring", "campus"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -56,6 +56,10 @@ def schema() -> dict[str, Any]:
             "wireless-lan": {
                 "description": "One router, one access switch, safe AccessPoint-PT APs, Laptop-PT clients, optional HTTP/DNS servers, and static host IPs.",
                 "options": ["--name", "--aps", "--laptops", "--servers", "--network", "--gateway", "--dns", "--ssid", "--layout-style", "--no-layout"],
+            },
+            "vlan-router-on-stick": {
+                "description": "One 2911 router, one 2960 switch, 802.1Q trunk, router subinterfaces, access VLANs, static hosts, and optional HTTP/DNS servers.",
+                "options": ["--name", "--vlans", "--hosts-per-vlan", "--servers-per-vlan", "--address-pool", "--vlan-prefix", "--vlan-base", "--native-vlan", "--domain", "--layout-style", "--no-layout"],
             },
             "edge-security": {
                 "description": "ISP edge router, inside LAN, DMZ servers, Internet test host, NAT overload, outside ACL, and static routes.",
@@ -318,6 +322,172 @@ def _host_list(network: ipaddress.IPv4Network, *, count: int, skip: set[ipaddres
         if len(result) >= count:
             return result
     raise ValueError(f"{network}: not enough usable host addresses")
+
+
+def vlan_router_on_stick(
+    *,
+    name: str,
+    vlans: int,
+    hosts_per_vlan: int,
+    servers_per_vlan: int,
+    address_pool: str,
+    vlan_prefix: int,
+    vlan_base: int,
+    native_vlan: int | None,
+    domain: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if vlans < 1:
+        raise ValueError("vlan-router-on-stick requires at least one VLAN")
+    if hosts_per_vlan < 0 or servers_per_vlan < 0:
+        raise ValueError("hosts-per-vlan and servers-per-vlan must be >= 0")
+    if hosts_per_vlan + servers_per_vlan < 1:
+        raise ValueError("vlan-router-on-stick requires at least one host or server per VLAN")
+    endpoints = vlans * (hosts_per_vlan + servers_per_vlan)
+    if endpoints > 24:
+        raise ValueError("vlan-router-on-stick supports up to 24 access endpoints on one 2960 switch")
+    vlan_ids = [vlan_base + index for index in range(vlans)]
+    if native_vlan is not None and native_vlan not in vlan_ids:
+        raise ValueError("native-vlan must match one of the generated VLAN IDs")
+
+    pool = ipaddress.ip_network(address_pool, strict=False)
+    networks = _subnets(pool, vlan_prefix, vlans, label="vlan-prefix")
+    slug = name.upper()
+    router = f"R-{slug}" if slug.endswith("ROAS") else f"R-{slug}-ROAS"
+    switch = f"SW-{slug}-ACCESS"
+    allowed_vlans = ",".join(str(vlan_id) for vlan_id in vlan_ids)
+
+    router_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {router}",
+        "interface GigabitEthernet0/0",
+        "description 802.1Q_TRUNK_TO_ACCESS_SWITCH",
+        "no shutdown",
+        "exit",
+    ]
+    switch_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {switch}",
+    ]
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": router, "category": "router", "model": "2911"},
+            {"name": switch, "category": "switch", "model": "2960-24TT"},
+        ],
+        "links": [
+            {
+                "a": router,
+                "pa": "GigabitEthernet0/0",
+                "b": switch,
+                "pb": "GigabitEthernet0/1",
+                "cable": "straight",
+                "note": f"802.1Q trunk VLANs {allowed_vlans}",
+            }
+        ],
+        "pc_configs": [],
+        "server_configs": [],
+        "vlan_configs": [],
+        "ios_configs": [],
+        "metadata": {
+            "source": "pt730-template vlan-router-on-stick",
+            "name": name,
+            "address_pool": str(pool),
+            "vlan_base": vlan_base,
+            "native_vlan": native_vlan,
+            "domain": domain,
+        },
+    }
+
+    vlan_infos: list[dict[str, Any]] = []
+    first_server_by_vlan: dict[int, str] = {}
+    for index, (vlan_id, network) in enumerate(zip(vlan_ids, networks), start=1):
+        gateway = _host(network, 1)
+        addresses = _host_list(network, count=hosts_per_vlan + servers_per_vlan, skip={gateway})
+        vlan_name = f"VLAN{vlan_id}"
+        vlan_infos.append({"id": vlan_id, "name": vlan_name, "network": network, "gateway": gateway, "addresses": addresses})
+        plan["vlan_configs"].append({"id": vlan_id, "name": vlan_name, "network": str(network), "gateway": str(gateway)})
+
+    for info in vlan_infos:
+        vlan_id = info["id"]
+        switch_commands.extend(["vlan " + str(vlan_id), f"name {info['name']}", "exit"])
+        router_commands.extend(
+            [
+                f"interface GigabitEthernet0/0.{vlan_id}",
+                f"description Gateway_for_{info['name']}",
+                f"encapsulation dot1Q {vlan_id}" + (" native" if native_vlan == vlan_id else ""),
+                f"ip address {info['gateway']} {_mask(info['network'])}",
+                "no shutdown",
+                "exit",
+            ]
+        )
+
+    switch_commands.extend(
+        [
+            "interface GigabitEthernet0/1",
+            "description TRUNK_TO_ROUTER",
+            "switchport mode trunk",
+            f"switchport trunk allowed vlan {allowed_vlans}",
+        ]
+    )
+    if native_vlan is not None:
+        switch_commands.append(f"switchport trunk native vlan {native_vlan}")
+    switch_commands.extend(["no shutdown", "exit"])
+
+    next_port = 1
+    dns_ip = ""
+    if servers_per_vlan:
+        first_server_address = vlan_infos[0]["addresses"][hosts_per_vlan]
+        dns_ip = str(first_server_address)
+
+    dns_records: list[dict[str, str]] = []
+    dns_server_name = ""
+    for vlan_index, info in enumerate(vlan_infos, start=1):
+        vlan_id = info["id"]
+        network = info["network"]
+        gateway = info["gateway"]
+        addresses = info["addresses"]
+        for host_index, address in enumerate(addresses[:hosts_per_vlan], start=1):
+            host = f"PC-{slug}-V{vlan_id}-{host_index}"
+            port = f"FastEthernet0/{next_port}"
+            next_port += 1
+            plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT", "vlan": vlan_id})
+            plan["links"].append({"a": switch, "pa": port, "b": host, "pb": "FastEthernet0", "cable": "straight", "vlan": vlan_id, "note": f"access VLAN {vlan_id}"})
+            plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": str(gateway), "dns": dns_ip})
+            switch_commands.extend(["interface " + port, f"description ACCESS_VLAN_{vlan_id}", "switchport mode access", f"switchport access vlan {vlan_id}", "spanning-tree portfast", "no shutdown", "exit"])
+
+        for server_index, address in enumerate(addresses[hosts_per_vlan:], start=1):
+            server = f"SRV-{slug}-V{vlan_id}-{server_index}"
+            port = f"FastEthernet0/{next_port}"
+            next_port += 1
+            plan["devices"].append({"name": server, "category": "server", "model": "Server-PT", "vlan": vlan_id})
+            plan["links"].append({"a": switch, "pa": port, "b": server, "pb": "FastEthernet0", "cable": "straight", "vlan": vlan_id, "note": f"server VLAN {vlan_id}"})
+            plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": str(gateway), "dns": dns_ip or str(address)})
+            services: dict[str, Any] = {"http": True}
+            dns_records.append({"name": f"vlan{vlan_id}.{domain}", "ip": str(address)})
+            if not dns_server_name:
+                dns_server_name = server
+                services["dns"] = {"enabled": True, "records": dns_records}
+            plan["server_configs"].append({"name": server, **services})
+            first_server_by_vlan[vlan_id] = str(address)
+            switch_commands.extend(["interface " + port, f"description SERVER_VLAN_{vlan_id}", "switchport mode access", f"switchport access vlan {vlan_id}", "spanning-tree portfast", "no shutdown", "exit"])
+
+    if dns_server_name:
+        for config in plan["server_configs"]:
+            if config["name"] == dns_server_name:
+                config["dns"] = {"enabled": True, "records": dns_records}
+                break
+
+    router_commands.append("end")
+    switch_commands.append("end")
+    plan["ios_configs"] = [
+        {"device": router, "init_dialog": True, "commands": router_commands},
+        {"device": switch, "init_dialog": True, "commands": switch_commands},
+    ]
+    plan["metadata"]["server_gateways"] = first_server_by_vlan
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
 
 
 def edge_security(
@@ -761,6 +931,20 @@ def main(argv: list[str] | None = None) -> int:
     wifi_p.add_argument("--no-layout", action="store_true")
     wifi_p.add_argument("--output", type=Path)
 
+    roas_p = sub.add_parser("vlan-router-on-stick", help="generate a router-on-a-stick VLAN trunk lab")
+    roas_p.add_argument("--name", default="ROAS")
+    roas_p.add_argument("--vlans", type=int, default=3)
+    roas_p.add_argument("--hosts-per-vlan", type=int, default=2)
+    roas_p.add_argument("--servers-per-vlan", type=int, default=0)
+    roas_p.add_argument("--address-pool", default="192.168.20.0/22")
+    roas_p.add_argument("--vlan-prefix", type=int, default=24)
+    roas_p.add_argument("--vlan-base", type=int, default=10)
+    roas_p.add_argument("--native-vlan", type=int)
+    roas_p.add_argument("--domain", default="roas.local")
+    roas_p.add_argument("--layout-style", choices=STYLES, default="hierarchical")
+    roas_p.add_argument("--no-layout", action="store_true")
+    roas_p.add_argument("--output", type=Path)
+
     edge_p = sub.add_parser("edge-security", help="generate an ISP edge NAT/ACL/DMZ security lab")
     edge_p.add_argument("--name", default="EDGE")
     edge_p.add_argument("--inside-hosts", type=int, default=3)
@@ -847,6 +1031,25 @@ def main(argv: list[str] | None = None) -> int:
                     gateway=args.gateway,
                     dns=args.dns,
                     ssid=args.ssid,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "vlan-router-on-stick":
+            _emit(
+                vlan_router_on_stick(
+                    name=args.name,
+                    vlans=args.vlans,
+                    hosts_per_vlan=args.hosts_per_vlan,
+                    servers_per_vlan=args.servers_per_vlan,
+                    address_pool=args.address_pool,
+                    vlan_prefix=args.vlan_prefix,
+                    vlan_base=args.vlan_base,
+                    native_vlan=args.native_vlan,
+                    domain=args.domain,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

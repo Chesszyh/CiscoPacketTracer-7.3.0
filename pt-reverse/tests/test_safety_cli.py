@@ -166,6 +166,35 @@ class SafetyCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown IOS interface", result.stdout)
 
+    def test_ios_config_known_subinterface_is_accepted_offline(self) -> None:
+        result = self.run_plan(
+            {
+                "devices": [{"name": "R1", "category": "router", "model": "2911"}],
+                "ios_configs": [
+                    {
+                        "device": "R1",
+                        "commands": [
+                            "interface GigabitEthernet0/0.10",
+                            "encapsulation dot1Q 10",
+                            "ip address 192.168.10.1 255.255.255.0",
+                            "no shutdown",
+                        ],
+                    }
+                ],
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_ios_config_unknown_subinterface_base_fails_offline(self) -> None:
+        result = self.run_plan(
+            {
+                "devices": [{"name": "R1", "category": "router", "model": "2911"}],
+                "ios_configs": [{"device": "R1", "commands": ["interface GigabitEthernet0/99.10", "ip address 10.0.0.1 255.255.255.0"]}],
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown IOS interface", result.stdout)
+
     def test_ios_config_interface_without_no_shutdown_warns_offline(self) -> None:
         result = self.run_plan(
             {

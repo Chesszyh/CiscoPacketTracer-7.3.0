@@ -280,6 +280,31 @@ class RenderCliTest(unittest.TestCase):
         self.assertEqual(data["counts"]["security_policies"], 2)
         self.assertEqual(data["security_policies"][1]["type"], "outside_acl")
 
+    def test_markdown_and_summary_render_vlan_configs(self) -> None:
+        plan = {
+            "devices": [{"name": "SW1", "category": "switch", "model": "2960-24TT"}],
+            "links": [],
+            "vlan_configs": [
+                {"id": 10, "name": "STAFF", "network": "192.168.10.0/24", "gateway": "192.168.10.1"},
+                {"id": 20, "name": "STUDENTS", "network": "192.168.20.0/24", "gateway": "192.168.20.1"},
+            ],
+        }
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            markdown_result = self.run_render("markdown", path)
+            summary_result = self.run_render("summary", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
+        self.assertIn("## VLAN Configs", markdown_result.stdout)
+        self.assertIn("| 10 | STAFF | 192.168.10.0/24 | 192.168.10.1 |", markdown_result.stdout)
+        self.assertEqual(summary_result.returncode, 0, summary_result.stderr)
+        data = json.loads(summary_result.stdout)
+        self.assertEqual(data["counts"]["vlan_configs"], 2)
+        self.assertEqual(data["vlans"][1]["name"], "STUDENTS")
+
     def test_summary_outputs_machine_readable_counts(self) -> None:
         result = self.run_render("summary", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))
         self.assertEqual(result.returncode, 0, result.stderr)
