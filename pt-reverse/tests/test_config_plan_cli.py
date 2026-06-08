@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Tests for offline IOS config generation from topology plans."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PLAN = ROOT / "bin" / "pt730-config-plan"
+SAFETY = ROOT / "bin" / "pt730-safety"
+
+
+class ConfigPlanCliTest(unittest.TestCase):
+    def topology(self) -> dict[str, Any]:
+        return {
+            "devices": [
+                {"name": "MLS1", "category": "switch", "model": "2960-24TT"},
+                {"name": "SW-OFFICE", "category": "switch", "model": "2960-24TT"},
+                {"name": "PC-OFFICE-1", "category": "pc", "model": "PC-PT"},
+                {"name": "SW-SRV", "category": "switch", "model": "2960-24TT"},
+                {"name": "WEB-SRV", "category": "server", "model": "Server-PT"},
+            ],
+            "links": [
+                {"a": "MLS1", "pa": "FastEthernet0/1", "b": "SW-OFFICE", "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": 20},
+                {"a": "SW-OFFICE", "pa": "FastEthernet0/1", "b": "PC-OFFICE-1", "pb": "FastEthernet0", "cable": "straight", "vlan": 20},
+                {"a": "MLS1", "pa": "FastEthernet0/2", "b": "SW-SRV", "pb": "GigabitEthernet0/1", "cable": "cross", "vlan": 10},
+                {"a": "SW-SRV", "pa": "FastEthernet0/1", "b": "WEB-SRV", "pb": "FastEthernet0", "cable": "straight", "vlan": 10},
+            ],
+            "ios_configs": [{"device": "MLS1", "source": "manual", "commands": ["enable", "show version"]}],
+        }
+
+    def run_config_plan(self, plan: dict[str, Any], *args: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            return subprocess.run(
+                [str(CONFIG_PLAN), "campus", path, *args],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_schema_describes_config_plan_surface(self) -> None:
+        result = subprocess.run(
+            [str(CONFIG_PLAN), "schema"],
+            cwd=ROOT.parent,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIn("campus", data["commands"])
+        self.assertIn("switch-switch links become trunk interfaces", data["rules"])
+
+    def test_campus_generates_switch_ios_configs_from_vlan_links(self) -> None:
+        result = self.run_config_plan(self.topology())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        configs = {config["device"]: config for config in data["ios_configs"] if config.get("source") == "pt730-config-plan campus"}
+        self.assertEqual(set(configs), {"MLS1", "SW-OFFICE", "SW-SRV"})
+
+        office_commands = [command.strip() for command in configs["SW-OFFICE"]["commands"]]
+        self.assertIn("vlan 20", office_commands)
+        self.assertIn("interface GigabitEthernet0/1", office_commands)
+        self.assertIn("switchport mode trunk", office_commands)
+        self.assertIn("switchport trunk allowed vlan 20", office_commands)
+        self.assertIn("interface FastEthernet0/1", office_commands)
+        self.assertIn("switchport mode access", office_commands)
+        self.assertIn("switchport access vlan 20", office_commands)
+        self.assertIn("no shutdown", office_commands)
+
+        core_commands = [command.strip() for command in configs["MLS1"]["commands"]]
+        self.assertIn("vlan 10", core_commands)
+        self.assertIn("vlan 20", core_commands)
+        self.assertIn("interface FastEthernet0/1", core_commands)
+        self.assertIn("switchport trunk allowed vlan 20", core_commands)
+        self.assertIn("interface FastEthernet0/2", core_commands)
+        self.assertIn("switchport trunk allowed vlan 10", core_commands)
+
+        manual_configs = [config for config in data["ios_configs"] if config.get("source") == "manual"]
+        self.assertEqual(len(manual_configs), 1)
+
+    def test_ios_only_outputs_config_records(self) -> None:
+        result = self.run_config_plan(self.topology(), "--ios-only")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(set(data), {"ios_configs"})
+        self.assertEqual(len(data["ios_configs"]), 3)
+
+    def test_output_file_can_be_safety_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_path = Path(tmpdir) / "topology.json"
+            out_path = Path(tmpdir) / "configured.json"
+            in_path.write_text(json.dumps(self.topology()), encoding="utf-8")
+            result = subprocess.run(
+                [str(CONFIG_PLAN), "campus", str(in_path), "--output", str(out_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+            safety = subprocess.run(
+                [str(SAFETY), "plan", str(out_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(safety.returncode, 0, safety.stdout + safety.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

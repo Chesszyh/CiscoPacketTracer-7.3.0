@@ -13,6 +13,7 @@ from catalog_cli import RISKY_MODELS, SAFE_MODELS, VERIFIED_CABLE_CODES, VERIFIE
 OFFLINE_TOOLS = [
     "pt730-capabilities",
     "pt730-catalog",
+    "pt730-config-plan",
     "pt730-compose",
     "pt730-ip-plan",
     "pt730-ios-template",
@@ -75,6 +76,7 @@ def manifest() -> dict[str, Any]:
         "guarded_operations": GUARDED_OPERATIONS,
         "blocked_patterns": BLOCKED_PATTERNS,
         "ios_template_features": ["schema", "vlans", "access_interfaces", "trunks", "ripv2", "static_routes", "standard_acls", "extended_acls", "interface_acl_bindings", "nat_overload"],
+        "config_plan_features": ["schema", "campus", "vlan_declarations", "access_ports", "trunk_ports", "topology_ios_configs"],
         "layout_styles": ["auto", "hierarchical", "campus", "lan", "ring", "grid"],
         "compose_features": ["schema", "campus", "core_ring", "server_block", "access_segments", "segments_from_ip_plan", "representative_hosts", "static_ip_configs", "server_services", "auto_layout"],
         "ip_plan_features": ["schema", "campus_vlsm", "gateway_reservation", "compose_segments", "unused_pool_summary"],
@@ -85,6 +87,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-ip-plan campus <ip-plan.json> --output <planned-segments.json>",
             "pt-reverse/bin/pt730-compose schema",
             "pt-reverse/bin/pt730-compose campus <campus-spec.json> --output <plan.json>",
+            "pt-reverse/bin/pt730-config-plan campus <plan.json> --output <configured-plan.json>",
             "pt-reverse/bin/pt730-layout <plan.json> --output <layout.json>",
             "pt-reverse/bin/pt730-layout <plan.json> --style campus --preserve-existing --output <layout.json>",
             "pt-reverse/bin/pt730-safety plan <plan.json>",
