@@ -41,6 +41,13 @@ pt-reverse/bin/pt730-render summary pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```
 
+Install the Codex skill wrapper from this repo when an agent should discover the
+workflow automatically:
+
+```bash
+ln -sfn "$PWD/pt-reverse/skills/cisco-packet-tracer-730" "$HOME/.codex/skills/cisco-packet-tracer-730"
+```
+
 The known-good launch path is:
 
 ```bash

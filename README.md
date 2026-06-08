@@ -22,6 +22,8 @@ Tracer separately and keep the application files outside Git.
   Tracer lab files.
 - `pt-reverse/course-design/`: college-network design plan, generated audit
   artifacts, and switch configuration snippets.
+- `pt-reverse/skills/`: Codex skill wrappers for agent-friendly PT 7.3.0 CLI
+  workflows.
 - `pt-reverse/upstream/MCP-Packet-Tracer`: upstream catalog submodule used by
   `pt730-catalog`.
 
@@ -30,6 +32,12 @@ Tracer separately and keep the application files outside Git.
 ```bash
 git submodule update --init --recursive
 pt-reverse/bin/pt730-selftest
+```
+
+Optional Codex skill install:
+
+```bash
+ln -sfn "$PWD/pt-reverse/skills/cisco-packet-tracer-730" "$HOME/.codex/skills/cisco-packet-tracer-730"
 ```
 
 Use the offline tools first:

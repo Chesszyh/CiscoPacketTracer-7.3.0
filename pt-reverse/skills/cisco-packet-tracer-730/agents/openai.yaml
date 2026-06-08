@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cisco PT 7.3 CLI"
+  short_description: "Use Packet Tracer 7.3 CLI workflows"
+  default_prompt: "Use $cisco-packet-tracer-730 to plan and render a Packet Tracer 7.3 topology."
