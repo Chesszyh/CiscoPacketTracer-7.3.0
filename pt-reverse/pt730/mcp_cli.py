@@ -590,6 +590,37 @@ def tool_template_vlan_router_on_stick(root: Path, args: dict[str, Any]) -> dict
     return run_cli(root, command)
 
 
+def tool_template_switching_lab(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-template"))]
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+    command.append("switching-lab")
+    for key, flag in (
+        ("name", "--name"),
+        ("address_pool", "--address-pool"),
+        ("output", "--output"),
+    ):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    for key, flag, default in (
+        ("vlans", "--vlans", 3),
+        ("hosts_per_vlan", "--hosts-per-vlan", 2),
+        ("access_switches", "--access-switches", 2),
+        ("vlan_prefix", "--vlan-prefix", 24),
+        ("vlan_base", "--vlan-base", 10),
+    ):
+        command.extend([flag, str(int_arg(args, key, default=default))])
+    layout_style = str_arg(args, "layout_style", required=False)
+    if layout_style:
+        if layout_style not in LAYOUT_STYLES:
+            raise ToolError("layout_style must be one of: auto, campus, grid, hierarchical, lan, ring")
+        command.extend(["--layout-style", layout_style])
+    if bool_arg(args, "no_layout", default=False):
+        command.append("--no-layout")
+    return run_cli(root, command)
+
+
 def tool_template_edge_security(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-template"))]
     if bool_arg(args, "compact", default=False):
@@ -1546,6 +1577,7 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_template_lan_star", "Generate a router-switch-PC/server star LAN topology JSON.", schema({"name": string, "pcs": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_lan_star),
         tool("pt730_template_wireless_lan", "Generate a router-switch-AP-laptop wireless LAN topology JSON with safe PT 7.3 models.", schema({"name": string, "aps": integer, "laptops": integer, "servers": integer, "network": string, "gateway": string, "dns": string, "ssid": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_wireless_lan),
         tool("pt730_template_vlan_router_on_stick", "Generate a router-on-a-stick VLAN trunk lab topology JSON with router subinterfaces.", schema({"name": string, "vlans": integer, "hosts_per_vlan": integer, "servers_per_vlan": integer, "address_pool": string, "vlan_prefix": integer, "vlan_base": integer, "native_vlan": integer, "domain": string, "client_addressing": {"type": "string", "enum": ["static", "dhcp"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_vlan_router_on_stick),
+        tool("pt730_template_switching_lab", "Generate a Layer-2 switching lab with dual distribution switches, STP, EtherChannel, VLAN trunks, access ports, and representative PCs.", schema({"name": string, "vlans": integer, "hosts_per_vlan": integer, "access_switches": integer, "address_pool": string, "vlan_prefix": integer, "vlan_base": integer, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_switching_lab),
         tool("pt730_template_edge_security", "Generate an ISP edge NAT/ACL/DMZ security lab topology JSON.", schema({"name": string, "inside_hosts": integer, "dmz_servers": integer, "internet_hosts": integer, "inside_network": string, "dmz_network": string, "wan_network": string, "internet_network": string, "domain": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_edge_security),
         tool("pt730_template_router_ring", "Generate a serial router ring topology JSON with RIP configs.", schema({"name": string, "routers": integer, "interconnect_pool": string, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_router_ring),
         tool("pt730_template_wan_ring", "Generate a multi-site serial WAN ring with per-site LANs, services, and optional routing configs.", schema({"name": string, "sites": integer, "hosts_per_site": integer, "servers_per_site": integer, "interconnect_pool": string, "lan_pool": string, "lan_prefix": integer, "routing": {"type": "string", "enum": ["none", "rip", "ospf", "static"]}, "layout_style": {"type": "string", "enum": ["auto", "hierarchical", "campus", "lan", "ring", "grid"]}, "no_layout": boolean, "compact": boolean, "output": string}), tool_template_wan_ring),

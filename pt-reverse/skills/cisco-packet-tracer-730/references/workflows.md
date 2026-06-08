@@ -186,6 +186,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24 --output lan-star.json
 pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24 --output wireless-lan.json
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10 --client-addressing dhcp --output vlan-router-on-stick.json
+pt-reverse/bin/pt730-template switching-lab --vlans 3 --hosts-per-vlan 2 --access-switches 2 --output switching-lab.json
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local --output edge-security.json
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28 --output router-ring.json
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf --output wan-ring.json
@@ -217,6 +218,13 @@ switch trunk/access IOS commands, static or DHCP host configs, optional router
 DHCP pools under `dhcp_pools`, and optional per-VLAN HTTP/DNS server records.
 DHCP client live lease validation remains guarded; offline generation and
 rendering are safe.
+
+`switching-lab` uses verified `2960-24TT` and `PC-PT` models. It writes dual
+distribution switches, dual-homed access switches, VLAN trunk/access commands,
+STP primary/secondary root roles, Port-channel1 EtherChannel, PortFast/BPDU
+Guard, static representative PCs, `vlan_configs`, and per-switch `ios_configs`.
+It is Layer-2 only; use router-on-a-stick or campus L3 templates for inter-VLAN
+routing.
 
 `wan-ring --routing ospf` writes router IDs, passive LAN interfaces, and
 per-router `network ... area 0` statements for each direct LAN/serial subnet.

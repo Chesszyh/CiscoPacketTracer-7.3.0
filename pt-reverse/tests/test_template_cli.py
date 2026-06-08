@@ -65,6 +65,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("wan-ring", data["commands"])
         self.assertIn("wireless-lan", data["commands"])
         self.assertIn("vlan-router-on-stick", data["commands"])
+        self.assertIn("switching-lab", data["commands"])
         self.assertIn("edge-security", data["commands"])
         self.assertIn("campus", data["commands"])
         self.assertIn("redundant-campus", data["commands"])
@@ -72,6 +73,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("lan-star", data["templates"])
         self.assertIn("wireless-lan", data["templates"])
         self.assertIn("vlan-router-on-stick", data["templates"])
+        self.assertIn("switching-lab", data["templates"])
         self.assertIn("edge-security", data["templates"])
         self.assertIn("router-ring", data["templates"])
         self.assertIn("wan-ring", data["templates"])
@@ -83,6 +85,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("--routing none|rip|ospf", data["templates"]["redundant-campus"]["options"])
         self.assertIn("--routing none|rip|ospf|static", data["templates"]["enterprise-edge"]["options"])
         self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
+        self.assertIn("--access-switches", data["templates"]["switching-lab"]["options"])
 
     def test_lan_star_generates_static_hosts_server_services_and_layout(self) -> None:
         result = self.run_template(
@@ -276,6 +279,48 @@ class TemplateCliTest(unittest.TestCase):
         self.assertEqual(plan["dhcp_pools"][0]["end"], "192.168.50.3")
         joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
         self.assertNotIn("dns-server", joined)
+        self.assert_safe_and_renderable(plan)
+
+    def test_switching_lab_generates_stp_etherchannel_and_access_vlans(self) -> None:
+        result = self.run_template(
+            "switching-lab",
+            "--name",
+            "SW",
+            "--vlans",
+            "3",
+            "--hosts-per-vlan",
+            "2",
+            "--access-switches",
+            "2",
+            "--address-pool",
+            "192.168.48.0/22",
+            "--vlan-base",
+            "10",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertIn("SW-SW-DIST-A", names)
+        self.assertIn("SW-SW-DIST-B", names)
+        self.assertIn("SW-SW-ACC-1", names)
+        self.assertIn("PC-SW-V12-2", names)
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        self.assertEqual(len(plan["devices"]), 10)
+        self.assertEqual(len(plan["links"]), 12)
+        self.assertEqual(len(plan["pc_configs"]), 6)
+        self.assertEqual(len(plan["vlan_configs"]), 3)
+        self.assertEqual([config["id"] for config in plan["vlan_configs"]], [10, 11, 12])
+        self.assertEqual({link.get("vlan") for link in plan["links"] if "vlan" in link}, {10, 11, 12})
+        self.assertEqual(plan["metadata"]["source"], "pt730-template switching-lab")
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("spanning-tree vlan 10,11,12 root primary", joined)
+        self.assertIn("spanning-tree vlan 10,11,12 root secondary", joined)
+        self.assertIn("channel-group 1 mode active", joined)
+        self.assertIn("interface Port-channel1", joined)
+        self.assertIn("switchport trunk allowed vlan 10,11,12", joined)
+        self.assertIn("switchport access vlan 12", joined)
+        self.assertIn("spanning-tree bpduguard enable", joined)
+        self.assertNotIn("3560-24PS", json.dumps(plan))
         self.assert_safe_and_renderable(plan)
 
     def test_edge_security_generates_nat_acl_dmz_and_static_routes(self) -> None:

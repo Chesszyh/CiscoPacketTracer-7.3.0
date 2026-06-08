@@ -47,7 +47,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
+        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "switching-lab", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -60,6 +60,10 @@ def schema() -> dict[str, Any]:
             "vlan-router-on-stick": {
                 "description": "One 2911 router, one 2960 switch, 802.1Q trunk, router subinterfaces, access VLANs, static/DHCP hosts, optional router DHCP pools, and optional HTTP/DNS servers.",
                 "options": ["--name", "--vlans", "--hosts-per-vlan", "--servers-per-vlan", "--address-pool", "--vlan-prefix", "--vlan-base", "--native-vlan", "--domain", "--client-addressing static|dhcp", "--layout-style", "--no-layout"],
+            },
+            "switching-lab": {
+                "description": "Layer-2 switching lab with dual distribution switches, access switches, VLANs, STP root roles, EtherChannel trunk, portfast/bpduguard edge ports, and static representative PCs.",
+                "options": ["--name", "--vlans", "--hosts-per-vlan", "--access-switches", "--address-pool", "--vlan-prefix", "--vlan-base", "--layout-style", "--no-layout"],
             },
             "edge-security": {
                 "description": "ISP edge router, inside LAN, DMZ servers, Internet test host, NAT overload, outside ACL, and static routes.",
@@ -565,6 +569,187 @@ def vlan_router_on_stick(
         {"device": switch, "init_dialog": True, "commands": switch_commands},
     ]
     plan["metadata"]["server_gateways"] = first_server_by_vlan
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
+def switching_lab(
+    *,
+    name: str,
+    vlans: int,
+    hosts_per_vlan: int,
+    access_switches: int,
+    address_pool: str,
+    vlan_prefix: int,
+    vlan_base: int,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if vlans < 1:
+        raise ValueError("switching-lab requires at least one VLAN")
+    if hosts_per_vlan < 1:
+        raise ValueError("switching-lab requires at least one host per VLAN")
+    if access_switches < 1:
+        raise ValueError("switching-lab requires at least one access switch")
+    if access_switches > 24:
+        raise ValueError("switching-lab supports up to 24 access switches per distribution switch")
+    endpoints = vlans * hosts_per_vlan
+    if endpoints > access_switches * 24:
+        raise ValueError("switching-lab requested hosts exceed available FastEthernet access ports")
+
+    pool = ipaddress.ip_network(address_pool, strict=False)
+    networks = _subnets(pool, vlan_prefix, vlans, label="vlan-prefix")
+    vlan_ids = [vlan_base + index for index in range(vlans)]
+    allowed_vlans = ",".join(str(vlan_id) for vlan_id in vlan_ids)
+    slug = name.upper()
+    dist_a = f"SW-{slug}-DIST-A"
+    dist_b = f"SW-{slug}-DIST-B"
+    access_names = [f"SW-{slug}-ACC-{index}" for index in range(1, access_switches + 1)]
+
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": dist_a, "category": "switch", "model": "2960-24TT", "role": "distribution"},
+            {"name": dist_b, "category": "switch", "model": "2960-24TT", "role": "distribution"},
+            *[{"name": switch, "category": "switch", "model": "2960-24TT", "role": "access"} for switch in access_names],
+        ],
+        "links": [
+            {"a": dist_a, "pa": "GigabitEthernet0/1", "b": dist_b, "pb": "GigabitEthernet0/1", "cable": "cross", "note": f"Port-channel1 member trunk VLANs {allowed_vlans}"},
+            {"a": dist_a, "pa": "GigabitEthernet0/2", "b": dist_b, "pb": "GigabitEthernet0/2", "cable": "cross", "note": f"Port-channel1 member trunk VLANs {allowed_vlans}"},
+        ],
+        "pc_configs": [],
+        "vlan_configs": [],
+        "ios_configs": [],
+        "metadata": {
+            "source": "pt730-template switching-lab",
+            "name": name,
+            "address_pool": str(pool),
+            "vlan_base": vlan_base,
+            "features": ["l2_switching", "rapid_pvst", "stp_root_roles", "etherchannel", "dual_homed_access", "trunk_ports", "access_vlan_ports", "portfast_bpduguard"],
+        },
+    }
+
+    for index, switch in enumerate(access_names, start=1):
+        plan["links"].extend(
+            [
+                {"a": dist_a, "pa": f"FastEthernet0/{index}", "b": switch, "pb": "GigabitEthernet0/1", "cable": "cross", "note": f"dual-homed trunk A VLANs {allowed_vlans}"},
+                {"a": dist_b, "pa": f"FastEthernet0/{index}", "b": switch, "pb": "GigabitEthernet0/2", "cable": "cross", "note": f"dual-homed trunk B VLANs {allowed_vlans}"},
+            ]
+        )
+
+    access_port_next = {switch: 1 for switch in access_names}
+    access_host_ports: dict[str, list[tuple[str, int]]] = {switch: [] for switch in access_names}
+    vlan_host_summary: list[dict[str, Any]] = []
+    endpoint_index = 0
+    for vlan_index, (vlan_id, network) in enumerate(zip(vlan_ids, networks), start=1):
+        host_addresses = _host_list(network, count=hosts_per_vlan, skip=set())
+        plan["vlan_configs"].append(
+            {
+                "id": vlan_id,
+                "name": f"L2_VLAN_{vlan_id}",
+                "network": str(network),
+                "gateway": "",
+                "description": "Layer-2 switching lab VLAN without a routed gateway",
+            }
+        )
+        vlan_host_summary.append({"vlan": vlan_id, "network": str(network), "hosts": hosts_per_vlan})
+        for host_index, address in enumerate(host_addresses, start=1):
+            switch = access_names[endpoint_index % len(access_names)]
+            port_index = access_port_next[switch]
+            if port_index > 24:
+                raise ValueError(f"{switch}: no free FastEthernet access ports")
+            access_port_next[switch] += 1
+            endpoint_index += 1
+            port = f"FastEthernet0/{port_index}"
+            host = f"PC-{slug}-V{vlan_id}-{host_index}"
+            plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT", "vlan": vlan_id})
+            plan["links"].append({"a": switch, "pa": port, "b": host, "pb": "FastEthernet0", "cable": "straight", "vlan": vlan_id, "note": f"access VLAN {vlan_id}"})
+            plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": "", "dns": ""})
+            access_host_ports[switch].append((port, vlan_id))
+
+    def vlan_commands() -> list[str]:
+        commands: list[str] = []
+        for vlan_id in vlan_ids:
+            commands.extend([f"vlan {vlan_id}", f" name L2_VLAN_{vlan_id}", "exit"])
+        return commands
+
+    def trunk_commands(interface: str, description: str) -> list[str]:
+        return [
+            f"interface {interface}",
+            f"description {description}",
+            "switchport mode trunk",
+            f"switchport trunk allowed vlan {allowed_vlans}",
+            "no shutdown",
+            "exit",
+        ]
+
+    def distribution_commands(device: str, root_role: str, peer: str) -> list[str]:
+        commands = [
+            "enable",
+            "configure terminal",
+            f"hostname {device}",
+            "no ip domain-lookup",
+            *vlan_commands(),
+            "spanning-tree mode rapid-pvst",
+            f"spanning-tree vlan {allowed_vlans} root {root_role}",
+        ]
+        for interface in ("GigabitEthernet0/1", "GigabitEthernet0/2"):
+            commands.extend(
+                [
+                    f"interface {interface}",
+                    f"description PORT_CHANNEL_1_TO_{peer}",
+                    "switchport mode trunk",
+                    f"switchport trunk allowed vlan {allowed_vlans}",
+                    "channel-group 1 mode active",
+                    "no shutdown",
+                    "exit",
+                ]
+            )
+        commands.extend(
+            [
+                "interface Port-channel1",
+                f"description LACP_TRUNK_TO_{peer}",
+                "switchport mode trunk",
+                f"switchport trunk allowed vlan {allowed_vlans}",
+                "no shutdown",
+                "exit",
+            ]
+        )
+        for index, switch in enumerate(access_names, start=1):
+            commands.extend(trunk_commands(f"FastEthernet0/{index}", f"TRUNK_TO_{switch}"))
+        commands.append("end")
+        return commands
+
+    plan["ios_configs"].append({"device": dist_a, "init_dialog": True, "commands": distribution_commands(dist_a, "primary", dist_b)})
+    plan["ios_configs"].append({"device": dist_b, "init_dialog": True, "commands": distribution_commands(dist_b, "secondary", dist_a)})
+    for switch in access_names:
+        commands = [
+            "enable",
+            "configure terminal",
+            f"hostname {switch}",
+            "no ip domain-lookup",
+            *vlan_commands(),
+            "spanning-tree mode rapid-pvst",
+            "spanning-tree portfast default",
+            "spanning-tree bpduguard default",
+            *trunk_commands("GigabitEthernet0/1", f"UPLINK_TO_{dist_a}"),
+            *trunk_commands("GigabitEthernet0/2", f"UPLINK_TO_{dist_b}"),
+        ]
+        for port, vlan_id in sorted(access_host_ports[switch], key=lambda item: tuple(int(part) for part in item[0].replace("FastEthernet0/", "").split("/"))):
+            commands.extend(
+                [
+                    f"interface {port}",
+                    f"description ACCESS_VLAN_{vlan_id}",
+                    "switchport mode access",
+                    f"switchport access vlan {vlan_id}",
+                    "spanning-tree portfast",
+                    "spanning-tree bpduguard enable",
+                    "no shutdown",
+                    "exit",
+                ]
+            )
+        commands.append("end")
+        plan["ios_configs"].append({"device": switch, "init_dialog": True, "commands": commands})
+
+    plan["metadata"]["vlan_host_summary"] = vlan_host_summary
     return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
 
 
@@ -1930,6 +2115,18 @@ def main(argv: list[str] | None = None) -> int:
     roas_p.add_argument("--no-layout", action="store_true")
     roas_p.add_argument("--output", type=Path)
 
+    switching_p = sub.add_parser("switching-lab", help="generate a dual-distribution L2 switching lab with STP and EtherChannel")
+    switching_p.add_argument("--name", default="SWLAB")
+    switching_p.add_argument("--vlans", type=int, default=3)
+    switching_p.add_argument("--hosts-per-vlan", type=int, default=2)
+    switching_p.add_argument("--access-switches", type=int, default=2)
+    switching_p.add_argument("--address-pool", default="192.168.48.0/22")
+    switching_p.add_argument("--vlan-prefix", type=int, default=24)
+    switching_p.add_argument("--vlan-base", type=int, default=10)
+    switching_p.add_argument("--layout-style", choices=STYLES, default="campus")
+    switching_p.add_argument("--no-layout", action="store_true")
+    switching_p.add_argument("--output", type=Path)
+
     edge_p = sub.add_parser("edge-security", help="generate an ISP edge NAT/ACL/DMZ security lab")
     edge_p.add_argument("--name", default="EDGE")
     edge_p.add_argument("--inside-hosts", type=int, default=3)
@@ -2078,6 +2275,23 @@ def main(argv: list[str] | None = None) -> int:
                     native_vlan=args.native_vlan,
                     domain=args.domain,
                     client_addressing=args.client_addressing,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "switching-lab":
+            _emit(
+                switching_lab(
+                    name=args.name,
+                    vlans=args.vlans,
+                    hosts_per_vlan=args.hosts_per_vlan,
+                    access_switches=args.access_switches,
+                    address_pool=args.address_pool,
+                    vlan_prefix=args.vlan_prefix,
+                    vlan_base=args.vlan_base,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

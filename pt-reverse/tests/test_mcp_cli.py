@@ -51,6 +51,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_template_lan_star", names)
         self.assertIn("pt730_template_wireless_lan", names)
         self.assertIn("pt730_template_vlan_router_on_stick", names)
+        self.assertIn("pt730_template_switching_lab", names)
         self.assertIn("pt730_template_edge_security", names)
         self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
@@ -130,6 +131,8 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("output", lab_report["inputSchema"]["properties"])
         roas = next(tool for tool in tools if tool["name"] == "pt730_template_vlan_router_on_stick")
         self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
+        switching = next(tool for tool in tools if tool["name"] == "pt730_template_switching_lab")
+        self.assertIn("access_switches", switching["inputSchema"]["properties"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
         self.assertIn("ospf", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
         campus = next(tool for tool in tools if tool["name"] == "pt730_template_campus")
@@ -1143,6 +1146,45 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(wan_plan["metadata"]["source"], "pt730-template wan-ring")
         self.assertEqual(len(wan_plan["ios_configs"]), 3)
         self.assertIn("router ospf 1", "\n".join(command for config in wan_plan["ios_configs"] for command in config["commands"]))
+
+    def test_switching_lab_template_tool_generates_l2_switching_topology(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_switching_lab",
+                        "arguments": {
+                            "name": "L2",
+                            "vlans": 3,
+                            "hosts_per_vlan": 2,
+                            "access_switches": 2,
+                            "address_pool": "192.168.48.0/22",
+                            "vlan_prefix": 24,
+                            "vlan_base": 10,
+                            "layout_style": "campus",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("switching-lab", command)
+        self.assertIn("--access-switches", command)
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template switching-lab")
+        self.assertEqual(len(plan["vlan_configs"]), 3)
+        self.assertEqual(len(plan["pc_configs"]), 6)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("spanning-tree vlan 10,11,12 root primary", joined)
+        self.assertIn("channel-group 1 mode active", joined)
+        self.assertIn("interface Port-channel1", joined)
+        self.assertIn("spanning-tree bpduguard enable", joined)
 
     def test_campus_template_tool_generates_complex_topology_with_l3_configs(self) -> None:
         responses = self.run_mcp(

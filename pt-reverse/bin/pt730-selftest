@@ -94,6 +94,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_lan_star","arguments":{"name":"AGENT","pcs":1,"servers":1,"network":"192.168.60.0/24","gateway":"192.168.60.1","dns":"192.168.60.254","layout_style":"grid","no_layout":true,"compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_wireless_lan","arguments":{"name":"AGENT","aps":2,"laptops":3,"servers":1,"network":"192.168.80.0/24","gateway":"192.168.80.1","ssid":"PT730-LAB","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_vlan_router_on_stick","arguments":{"name":"AGENT","vlans":2,"hosts_per_vlan":1,"servers_per_vlan":1,"address_pool":"192.168.30.0/23","native_vlan":10,"client_addressing":"dhcp","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_switching_lab","arguments":{"name":"AGENT","vlans":2,"hosts_per_vlan":1,"access_switches":2,"address_pool":"192.168.48.0/23","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_edge_security","arguments":{"name":"AGENT","inside_hosts":2,"dmz_servers":2,"internet_hosts":1,"domain":"edge.local","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_wan_ring","arguments":{"name":"AGENT","sites":3,"hosts_per_site":1,"servers_per_site":1,"routing":"ospf","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_campus","arguments":{"name":"AGENT","cores":2,"segments":2,"hosts_per_segment":1,"servers":2,"l3":true,"routing":"ospf","compact":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
@@ -168,6 +169,9 @@ ok "pipeline checks"
 "$BIN/pt730-template" vlan-router-on-stick --name DHCP --vlans 2 --hosts-per-vlan 2 --servers-per-vlan 1 --address-pool 192.168.40.0/23 --client-addressing dhcp --output "$tmp/vlan-router-on-stick-dhcp.json"
 "$BIN/pt730-safety" plan "$tmp/vlan-router-on-stick-dhcp.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/vlan-router-on-stick-dhcp.json" >/dev/null
+"$BIN/pt730-template" switching-lab --name AGENT --vlans 3 --hosts-per-vlan 2 --access-switches 2 --address-pool 192.168.48.0/22 --output "$tmp/switching-lab.json"
+"$BIN/pt730-safety" plan "$tmp/switching-lab.json" >/dev/null
+"$BIN/pt730-render" summary "$tmp/switching-lab.json" >/dev/null
 "$BIN/pt730-template" edge-security --name AGENT --inside-hosts 2 --dmz-servers 2 --internet-hosts 1 --domain edge.local --output "$tmp/edge-security.json"
 "$BIN/pt730-safety" plan "$tmp/edge-security.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/edge-security.json" >/dev/null
