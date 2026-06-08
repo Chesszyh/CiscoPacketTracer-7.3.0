@@ -192,6 +192,38 @@ class ConfigPlanCliTest(unittest.TestCase):
             )
             self.assertEqual(safety.returncode, 0, safety.stdout + safety.stderr)
 
+    def test_export_configs_writes_device_cfg_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_path = Path(tmpdir) / "topology.json"
+            configured_path = Path(tmpdir) / "configured.json"
+            output_dir = Path(tmpdir) / "configs"
+            in_path.write_text(json.dumps(self.topology()), encoding="utf-8")
+            generated = subprocess.run(
+                [str(CONFIG_PLAN), "campus", str(in_path), "--output", str(configured_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            exported = subprocess.run(
+                [str(CONFIG_PLAN), "export-configs", str(configured_path), "--output-dir", str(output_dir)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(exported.returncode, 0, exported.stderr)
+            manifest = json.loads(exported.stdout)
+            self.assertEqual(manifest["count"], 4)
+            office_cfg = output_dir / "SW-OFFICE.cfg"
+            self.assertTrue(office_cfg.exists())
+            self.assertIn("switchport access vlan 20", office_cfg.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

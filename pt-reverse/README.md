@@ -251,6 +251,9 @@ Add `--l3 --routing rip` to derive SVI gateways, routed switch interlinks, and
 RIPv2 from host gateway/mask values plus CIDR metadata on core links.  Use
 `--l3 --routing static` to emit static routes between the derived SVI networks
 instead of RIP.
+Use `pt730-config-plan export-configs <configured-plan.json> --output-dir
+<configs-dir>` to write the generated `ios_configs` into per-device `.cfg`
+files for reports or manual paste-in.
 Use `pt730-layout <plan.json> --output <layout.json>` to assign deterministic
 coordinates before safety checks, rendering, or live apply.  Supported styles
 are `auto`, `hierarchical`, `campus`, `lan`, `ring`, and `grid`; use

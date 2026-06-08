@@ -101,6 +101,8 @@ ok "compose checks"
 "$BIN/pt730-config-plan" campus "$tmp/compose-plan.json" --output "$tmp/configured-plan.json"
 "$BIN/pt730-safety" plan "$tmp/configured-plan.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/configured-plan.json" >/dev/null
+"$BIN/pt730-config-plan" export-configs "$tmp/configured-plan.json" --output-dir "$tmp/configs" | python3 -m json.tool >/dev/null
+test -s "$tmp/configs/MLS1.cfg"
 "$BIN/pt730-config-plan" campus "$ROOT/pt-reverse/course-design/college-network-topology-pt73-safe.json" --l3 --routing rip --output "$tmp/l3-configured-plan.json"
 "$BIN/pt730-safety" plan "$tmp/l3-configured-plan.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/l3-configured-plan.json" >/dev/null

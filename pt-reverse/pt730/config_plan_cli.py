@@ -372,9 +372,44 @@ def configured_plan(plan: dict[str, Any], *, include_l3: bool = False, routing: 
     return result
 
 
+def _commands_text(config: dict[str, Any]) -> str:
+    raw = config.get("commands", config.get("config", config.get("text", "")))
+    if isinstance(raw, list):
+        lines = [str(line).rstrip() for line in raw]
+        text = "\n".join(lines)
+    else:
+        text = str(raw).replace("\r\n", "\n").rstrip()
+    return text + "\n" if text else ""
+
+
+def _safe_stem(value: str) -> str:
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+    return stem.strip("._") or "config"
+
+
+def export_config_files(plan: dict[str, Any], output_dir: Path, *, source: str | None = None) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    used: dict[str, int] = {}
+    files: list[dict[str, Any]] = []
+    for index, config in enumerate(plan.get("ios_configs", []), start=1):
+        if not isinstance(config, dict):
+            continue
+        if source is not None and str(config.get("source", "")) != source:
+            continue
+        device = _pick(config, ("device", "name", "router", "switch")) or f"config-{index}"
+        stem = _safe_stem(device)
+        used[stem] = used.get(stem, 0) + 1
+        suffix = "" if used[stem] == 1 else f"-{used[stem]}"
+        path = output_dir / f"{stem}{suffix}.cfg"
+        text = _commands_text(config)
+        path.write_text(text, encoding="utf-8")
+        files.append({"device": device, "source": str(config.get("source", "")), "path": str(path), "bytes": len(text.encode("utf-8"))})
+    return {"kind": "pt730-config-files", "count": len(files), "files": files}
+
+
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "campus"],
+        "commands": ["schema", "campus", "export-configs"],
         "rules": [
             "switch-switch links become trunk interfaces",
             "switch-endpoint links become access interfaces",
@@ -385,7 +420,7 @@ def schema() -> dict[str, Any]:
             "--routing static adds static routes between derived SVI networks",
             "existing ios_configs with other sources are preserved",
         ],
-        "options": ["--l3", "--routing none|rip|static", "--ios-only", "--compact", "--output"],
+        "options": ["--l3", "--routing none|rip|static", "--ios-only", "--compact", "--output", "export-configs --output-dir"],
         "output": "full topology JSON by default; use --ios-only for {ios_configs:[...]}",
     }
 
@@ -411,6 +446,11 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--l3", action="store_true", help="derive SVI gateways and routed switch-switch links")
     campus_p.add_argument("--routing", choices=("none", "rip", "static"), default="none", help="routing config to derive with --l3")
 
+    export_p = sub.add_parser("export-configs", help="write ios_configs from a topology JSON into .cfg files")
+    export_p.add_argument("plan", type=Path)
+    export_p.add_argument("--output-dir", type=Path, required=True)
+    export_p.add_argument("--source", help="only export ios_configs matching this source")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "schema":
@@ -424,6 +464,9 @@ def main(argv: list[str] | None = None) -> int:
                 emit_json({"ios_configs": generated}, args.output, compact=args.compact)
             else:
                 emit_json(configured_plan(plan, include_l3=include_l3, routing=args.routing), args.output, compact=args.compact)
+            return 0
+        if args.cmd == "export-configs":
+            emit_json(export_config_files(_load_plan(args.plan), args.output_dir, source=args.source), None, compact=args.compact)
             return 0
         raise ValueError(f"unknown command: {args.cmd}")
     except Exception as exc:  # noqa: BLE001
