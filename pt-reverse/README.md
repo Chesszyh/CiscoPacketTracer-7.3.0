@@ -56,11 +56,10 @@ pt-reverse/bin/pt730-mcp
 ```
 
 The MCP wrapper exposes offline tools and guarded live tools.  Any live
-Packet Tracer contact requires `allow_live=true`; `pt730_live_apply` and
-device-level tools such as `pt730_live_ios`, `pt730_live_pc_static`,
-`pt730_live_term`, `pt730_live_ping`, and `pt730_live_server_inspect` support
-`dry_run=true` previews that return the underlying CLI command without touching
-Packet Tracer.
+Packet Tracer contact requires `allow_live=true`; `pt730_live_apply`,
+IOS/terminal/ping tools, PC static/DHCP tools, Server-PT service tools, FTP
+client tools, and simulation/PDU tools support `dry_run=true` previews that
+return the underlying CLI command without touching Packet Tracer.
 
 The known-good launch path is:
 

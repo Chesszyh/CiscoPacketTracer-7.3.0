@@ -60,6 +60,10 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("allow_live_gated_device_tools", data["mcp_features"])
         self.assertIn("live_apply_dry_run", data["mcp_features"])
         self.assertIn("live_device_dry_run", data["mcp_features"])
+        self.assertIn("live_pc_dhcp_dry_run", data["mcp_features"])
+        self.assertIn("live_server_service_dry_run", data["mcp_features"])
+        self.assertIn("live_ftp_dry_run", data["mcp_features"])
+        self.assertIn("live_sim_dry_run", data["mcp_features"])
         self.assertIn("pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec <campus-spec.json> --output-dir <out-dir> --routing rip", data["recommended_workflow"])
@@ -75,6 +79,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("pt-reverse/bin/pt730-mcp --list-tools", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-mcp  # stdio MCP server; live tools require allow_live=true", data["recommended_workflow"])
         self.assertIn("MCP pt730_live_ios/pt730_live_pc_static/pt730_live_term/pt730_live_ping/pt730_live_server_inspect support dry_run=true command previews", data["recommended_workflow"])
+        self.assertIn("MCP pt730_live_pc_inspect/pt730_live_pc_dhcp/pt730_live_server_service/pt730_live_server_dns_add/pt730_live_server_ftp_add/pt730_live_server_dhcp_config/pt730_live_ftp/pt730_live_sim support dry_run=true command previews", data["recommended_workflow"])
 
     def test_table_output_is_human_readable(self) -> None:
         result = self.run_cmd("--table")

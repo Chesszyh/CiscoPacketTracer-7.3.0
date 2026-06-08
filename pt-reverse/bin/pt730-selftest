@@ -92,6 +92,10 @@ expect_fail eval-risk-guard "$BIN/pt730-eval" --expr 'x.getProcess("DhcpClientPr
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_render","arguments":{"format":"summary","plan":"pt-reverse/examples/simple-lan.json"}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_apply","arguments":{"plan":"pt-reverse/examples/simple-lan.json","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_ios","arguments":{"device":"R1","commands":["show ip interface brief"],"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_pc_dhcp","arguments":{"device":"PC1","renew":true,"wait":10,"expect_network":"192.168.1.0/24","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_server_dns_add","arguments":{"device":"SRV1","hostname":"www.example.local","ip":"172.16.1.10","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_ftp","arguments":{"client":"PC1","server":"172.16.1.10","commands":["dir"],"dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_live_sim","arguments":{"action":"simple_pdu","source":"PC1","target":"SRV1","dry_run":true}}}' | "$BIN/pt730-mcp" | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-ip-plan" campus "$ROOT/pt-reverse/examples/ip-plan-campus.json" --output "$tmp/ip-plan.json"
 python3 -m json.tool "$tmp/ip-plan.json" >/dev/null

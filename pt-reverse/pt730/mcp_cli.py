@@ -57,6 +57,18 @@ def bool_arg(args: dict[str, Any], name: str, *, default: bool = False) -> bool:
     return value
 
 
+def required_bool_arg(args: dict[str, Any], name: str) -> bool:
+    if name not in args:
+        raise ToolError(f"missing required argument: {name}")
+    return bool_arg(args, name)
+
+
+def optional_int_arg(args: dict[str, Any], name: str) -> int | None:
+    if name not in args or args.get(name) is None:
+        return None
+    return int_arg(args, name, default=0)
+
+
 def enum_arg(args: dict[str, Any], name: str, allowed: set[str], *, default: str | None = None) -> str:
     value = str_arg(args, name, required=default is None, default=default or "")
     if value not in allowed:
@@ -378,6 +390,32 @@ def tool_live_pc_static(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_live_cli(root, args, "pt730_live_pc_static", command)
 
 
+def tool_live_pc_inspect(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-pc")), "--timeout", str(int_arg(args, "timeout", default=10))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["inspect", str_arg(args, "device"), "--port", str_arg(args, "port", required=False, default="FastEthernet0")])
+    return run_live_cli(root, args, "pt730_live_pc_inspect", command)
+
+
+def tool_live_pc_dhcp(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-pc")), "--timeout", str(int_arg(args, "timeout", default=10))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["dhcp", str_arg(args, "device"), "--port", str_arg(args, "port", required=False, default="FastEthernet0")])
+    if bool_arg(args, "renew", default=False):
+        command.append("--renew")
+    wait = int_arg(args, "wait", default=0)
+    if wait:
+        command.extend(["--wait", str(wait)])
+    expect_network = str_arg(args, "expect_network", required=False)
+    if expect_network:
+        command.extend(["--expect-network", expect_network])
+    return run_live_cli(root, args, "pt730_live_pc_dhcp", command)
+
+
 def tool_live_term(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     commands = list_str_arg(args, "commands", required=False)
     file_path = str_arg(args, "file", required=False)
@@ -436,6 +474,127 @@ def tool_live_server_inspect(root: Path, args: dict[str, Any]) -> dict[str, Any]
     return run_live_cli(root, args, "pt730_live_server_inspect", command)
 
 
+def tool_live_server_service(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    service = enum_arg(args, "service", {"http", "dns", "ftp", "tftp", "ntp", "syslog", "smtp", "pop3", "email", "dhcp"})
+    enabled = required_bool_arg(args, "enabled")
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend([service, str_arg(args, "device")])
+    if service == "dhcp":
+        command.extend(["--port", str_arg(args, "port", required=False, default="FastEthernet0")])
+    if enabled:
+        command.append("--enable")
+    else:
+        command.append("--disable")
+    if service == "email":
+        domain = str_arg(args, "domain", required=False)
+        if domain:
+            command.extend(["--domain", domain])
+    return run_live_cli(root, args, "pt730_live_server_service", command)
+
+
+def tool_live_server_dns_add(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["dns-add", str_arg(args, "device"), str_arg(args, "hostname"), str_arg(args, "ip")])
+    if bool_arg(args, "no_enable", default=False):
+        command.append("--no-enable")
+    return run_live_cli(root, args, "pt730_live_server_dns_add", command)
+
+
+def tool_live_server_ftp_add(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["ftp-add", str_arg(args, "device"), str_arg(args, "username"), str_arg(args, "password")])
+    command.extend(["--permissions", str_arg(args, "permissions", required=False, default="RWDNL")])
+    if bool_arg(args, "no_enable", default=False):
+        command.append("--no-enable")
+    return run_live_cli(root, args, "pt730_live_server_ftp_add", command)
+
+
+def tool_live_server_dhcp_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-server")), "--timeout", str(int_arg(args, "timeout", default=15))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["dhcp-config", str_arg(args, "device"), "--port", str_arg(args, "port", required=False, default="FastEthernet0")])
+    pool_index = optional_int_arg(args, "pool_index")
+    if pool_index is not None:
+        command.extend(["--pool-index", str(pool_index)])
+    for key, flag in (
+        ("network", "--network"),
+        ("mask", "--mask"),
+        ("start", "--start"),
+        ("end", "--end"),
+        ("gateway", "--gateway"),
+        ("dns", "--dns"),
+    ):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    max_users = optional_int_arg(args, "max_users")
+    if max_users is not None:
+        command.extend(["--max-users", str(max_users)])
+    if bool_arg(args, "enable", default=False):
+        command.append("--enable")
+    return run_live_cli(root, args, "pt730_live_server_dhcp_config", command)
+
+
+def tool_live_ftp(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-ftp")), str_arg(args, "client"), str_arg(args, "server")]
+    command.extend(["--username", str_arg(args, "username", required=False, default="cisco")])
+    command.extend(["--password", str_arg(args, "password", required=False, default="cisco")])
+    for item in list_str_arg(args, "commands", required=False):
+        command.extend(["--cmd", item])
+    file_path = str_arg(args, "file", required=False)
+    if file_path:
+        command.extend(["--file", file_path])
+    if bool_arg(args, "keep_blank", default=False):
+        command.append("--keep-blank")
+    expect = str_arg(args, "expect", required=False)
+    if expect:
+        command.extend(["--expect", expect])
+    if bool_arg(args, "no_quit", default=False):
+        command.append("--no-quit")
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    command.extend(["--timeout", str(int_arg(args, "timeout", default=10))])
+    command.extend(["--connect-wait", str(int_arg(args, "connect_wait", default=8))])
+    command.extend(["--command-wait", str(int_arg(args, "command_wait", default=8))])
+    command.extend(["--tail-lines", str(int_arg(args, "tail_lines", default=120))])
+    return run_live_cli(root, args, "pt730_live_ftp", command)
+
+
+def tool_live_sim(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    action = enum_arg(args, "action", {"status", "reset", "fast_forward", "event_list", "simple_pdu"})
+    command = [str(bin_path(root, "pt730-sim")), "--timeout", str(int_arg(args, "timeout", default=10))]
+    bridge = str_arg(args, "bridge", required=False)
+    if bridge:
+        command.extend(["--bridge", bridge])
+    if action == "status":
+        command.append("status")
+    elif action == "reset":
+        command.append("reset")
+    elif action == "fast_forward":
+        command.extend(["fast-forward", "--steps", str(int_arg(args, "steps", default=1))])
+    elif action == "event_list":
+        command.append("event-list")
+        if required_bool_arg(args, "enabled"):
+            command.append("--on")
+        else:
+            command.append("--off")
+    elif action == "simple_pdu":
+        command.extend(["simple-pdu", str_arg(args, "source"), str_arg(args, "target")])
+    return run_live_cli(root, args, "pt730_live_sim", command)
+
+
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required or [], "additionalProperties": False}
 
@@ -467,10 +626,18 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_live_apply", "Apply a topology plan to live Packet Tracer, or run offline dry_run without live access.", schema({"plan": string, "dry_run": boolean, "allow_live": boolean, "replace": boolean, "batch_size": integer, "allow_risky": boolean, "strict_safety": boolean, "timeout": integer}, ["plan"]), tool_live_apply),
         tool("pt730_live_save_as", "Save the current live Packet Tracer file to a Linux path. Requires allow_live=true.", schema({"allow_live": boolean, "path": string, "direct": boolean, "timeout": integer}, ["allow_live", "path"]), tool_live_save_as),
         tool("pt730_live_ios", "Send IOS commands to a live router/switch, or return a safe dry_run command preview.", schema({"device": string, "commands": string_array, "file": string, "init_dialog": boolean, "save": boolean, "keep_comments": boolean, "output": {"type": "string", "enum": ["tail", "full", "none"]}, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_ios),
+        tool("pt730_live_pc_inspect", "Inspect live PC/server/laptop port IP state, or return a safe dry_run command preview.", schema({"device": string, "port": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_pc_inspect),
         tool("pt730_live_pc_static", "Set a static IPv4 address on a live PC/server port, or return a safe dry_run command preview.", schema({"device": string, "port": string, "ip": string, "mask": string, "gateway": string, "dns": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "ip", "mask"]), tool_live_pc_static),
+        tool("pt730_live_pc_dhcp", "Enable or renew DHCP client mode on a live PC/server/laptop port, or return a safe dry_run command preview.", schema({"device": string, "port": string, "renew": boolean, "wait": integer, "expect_network": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_pc_dhcp),
         tool("pt730_live_term", "Send generic terminal commands to a live device, optionally waiting for expected output, or return a safe dry_run command preview.", schema({"device": string, "commands": string_array, "file": string, "keep_blank": boolean, "wait": integer, "expect": string, "output": {"type": "string", "enum": ["tail", "full", "none"]}, "tail_lines": integer, "all_output": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_term),
         tool("pt730_live_ping", "Run an IOS ping from a live router/switch, or return a safe dry_run command preview.", schema({"device": string, "target": string, "wait": integer, "expect": integer, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "target"]), tool_live_ping),
         tool("pt730_live_server_inspect", "Inspect live Server-PT service state, or return a safe dry_run command preview.", schema({"device": string, "port": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_server_inspect),
+        tool("pt730_live_server_service", "Enable or disable a live Server-PT service, or return a safe dry_run command preview.", schema({"device": string, "service": {"type": "string", "enum": ["http", "dns", "ftp", "tftp", "ntp", "syslog", "smtp", "pop3", "email", "dhcp"]}, "enabled": boolean, "domain": string, "port": string, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "service", "enabled"]), tool_live_server_service),
+        tool("pt730_live_server_dns_add", "Add a live Server-PT DNS A record, or return a safe dry_run command preview.", schema({"device": string, "hostname": string, "ip": string, "no_enable": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "hostname", "ip"]), tool_live_server_dns_add),
+        tool("pt730_live_server_ftp_add", "Add or replace a live Server-PT FTP user, or return a safe dry_run command preview.", schema({"device": string, "username": string, "password": string, "permissions": string, "no_enable": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device", "username", "password"]), tool_live_server_ftp_add),
+        tool("pt730_live_server_dhcp_config", "Configure a live Server-PT DHCP pool, or return a safe dry_run command preview.", schema({"device": string, "port": string, "pool_index": integer, "network": string, "mask": string, "start": string, "end": string, "gateway": string, "dns": string, "max_users": integer, "enable": boolean, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["device"]), tool_live_server_dhcp_config),
+        tool("pt730_live_ftp", "Run a Packet Tracer PC FTP client session, or return a safe dry_run command preview.", schema({"client": string, "server": string, "username": string, "password": string, "commands": string_array, "file": string, "keep_blank": boolean, "expect": string, "no_quit": boolean, "bridge": string, "connect_wait": integer, "command_wait": integer, "tail_lines": integer, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["client", "server"]), tool_live_ftp),
+        tool("pt730_live_sim", "Control limited Packet Tracer simulation/PDU surfaces, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["status", "reset", "fast_forward", "event_list", "simple_pdu"]}, "source": string, "target": string, "enabled": boolean, "steps": integer, "bridge": string, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["action"]), tool_live_sim),
     ]
 
 

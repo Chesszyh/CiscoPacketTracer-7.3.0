@@ -21,7 +21,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
    ```bash
    pt-reverse/bin/pt730-mcp
    ```
-   Use `pt-reverse/bin/pt730-mcp --list-tools` to inspect tools. Live MCP tools require `allow_live=true`; `pt730_live_apply` and device tools such as `pt730_live_ios`, `pt730_live_pc_static`, `pt730_live_term`, `pt730_live_ping`, and `pt730_live_server_inspect` support `dry_run=true` command previews without contacting Packet Tracer.
+   Use `pt-reverse/bin/pt730-mcp --list-tools` to inspect tools. Live MCP tools require `allow_live=true`; `pt730_live_apply`, IOS/terminal/ping tools, PC static/DHCP tools, Server-PT service tools, FTP client tools, and simulation/PDU tools support `dry_run=true` command previews without contacting Packet Tracer.
 
 4. Before live apply, run:
    ```bash
@@ -41,7 +41,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
 - Generate a campus/course design: use `pt730-ip-plan`, then `pt730-compose`, then `pt730-config-plan`, or run `pt730-pipeline campus`.
 - Render outputs for review: use `pt730-render svg`, `drawio`, `html`, `markdown`, `summary`, and `course-audit`.
 - Export IOS configs: use `pt730-config-plan export-configs`.
-- Preview live IOS/PC/terminal/ping/server MCP calls with `dry_run=true` before any `allow_live=true` execution.
+- Preview live IOS/PC DHCP/server service/FTP/simulation MCP calls with `dry_run=true` before any `allow_live=true` execution.
 - Query or apply live Packet Tracer only after bridge recovery/safety checks.
 
 For exact command patterns, read `references/workflows.md` only when needed.
