@@ -97,6 +97,11 @@ ok "ip planning checks"
 "$BIN/pt730-safety" plan "$tmp/compose-plan.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/compose-plan.json" >/dev/null
 ok "compose checks"
+"$BIN/pt730-pipeline" schema | python3 -m json.tool >/dev/null
+"$BIN/pt730-pipeline" campus --ip-plan "$ROOT/pt-reverse/examples/ip-plan-campus.json" --compose-spec "$ROOT/pt-reverse/examples/compose-campus.json" --output-dir "$tmp/pipeline" --routing rip >/dev/null
+test -s "$tmp/pipeline/topology.layout.json"
+test -s "$tmp/pipeline/configs/MLS1.cfg"
+ok "pipeline checks"
 "$BIN/pt730-config-plan" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-config-plan" campus "$tmp/compose-plan.json" --output "$tmp/configured-plan.json"
 "$BIN/pt730-safety" plan "$tmp/configured-plan.json" >/dev/null

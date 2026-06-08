@@ -19,6 +19,8 @@ pt-reverse/bin/pt730-recover --notify
 pt-reverse/bin/pt730-selftest
 pt-reverse/bin/pt730-capabilities
 pt-reverse/bin/pt730-models manifest
+pt-reverse/bin/pt730-pipeline schema
+pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing rip
 pt-reverse/bin/pt730-ip-plan schema
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json
 pt-reverse/bin/pt730-compose schema
@@ -126,6 +128,7 @@ pt-reverse/bin/pt730-app count
 pt-reverse/bin/pt730-topo query
 pt-reverse/bin/pt730-topo query --summary
 pt-reverse/bin/pt730-topo summarize-query pt-reverse/examples/simple-lan-live-query.json
+pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing rip
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
 pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --l3 --routing rip --output compose-campus.configured.json
@@ -243,6 +246,10 @@ Use `pt730-compose campus <spec.json> --segments-from-ip-plan <planned.json>
 --output <plan.json>` to expand a compact agent-friendly campus spec into
 devices, safe ports, links, static host IPs, server services, and default layout
 coordinates before touching Packet Tracer.
+Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
+<campus-spec.json> --output-dir <out-dir> --routing rip` to run the offline
+agent workflow in one command and write a manifest, safety report, rendered
+tables, topology JSON files, and per-device configs.
 Set `core.interconnect_pool` in the compose spec to assign `/30` L3 subnets to
 core switch links for later config planning.
 Use `pt730-config-plan campus <plan.json> --output <configured-plan.json>` to
