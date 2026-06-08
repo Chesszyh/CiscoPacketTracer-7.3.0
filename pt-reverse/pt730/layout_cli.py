@@ -340,24 +340,52 @@ def _layout_ring(plan: dict[str, Any], options: LayoutOptions) -> dict[str, tupl
         angle = -math.pi / 2 + (2 * math.pi * index / len(ring))
         positions[name] = _point(cx + math.cos(angle) * radius, cy + math.sin(angle) * radius, options)
 
+    def child_base(px: int, py: int, *, x_scale: float, y_scale: float) -> tuple[int, int]:
+        dx = px - cx
+        dy = py - cy
+        length = math.hypot(dx, dy) or 1.0
+        unit_x = dx / length
+        unit_y = dy / length
+        base_x = px + unit_x * options.spacing_x * x_scale
+        base_y = py + unit_y * options.spacing_y * y_scale
+        if base_x < options.margin or base_x > options.canvas_width - options.margin:
+            base_x = px - unit_x * options.spacing_x * x_scale
+        if base_y < options.margin or base_y > options.canvas_height - options.margin:
+            base_y = py - unit_y * options.spacing_y * y_scale
+        return _point(base_x, base_y, options)
+
     ring_set = set(ring)
+    placed = set(ring)
     children_by_parent: dict[str, list[str]] = {name: [] for name in ring}
     for name in all_names:
         if name in ring_set:
             continue
-        parent = _best_parent(name, graph, by_name, ring_set) or ring[0]
-        children_by_parent.setdefault(parent, []).append(name)
+        parent = _best_parent(name, graph, by_name, ring_set)
+        if parent is not None:
+            children_by_parent.setdefault(parent, []).append(name)
     for parent in ring:
         children = _sort_names(children_by_parent.get(parent, []))
         if not children:
             continue
         px, py = positions[parent]
-        dx = px - cx
-        dy = py - cy
-        length = math.hypot(dx, dy) or 1.0
-        base_x = px + dx / length * options.spacing_x * 0.75
-        base_y = py + dy / length * options.spacing_y * 0.75
-        positions.update(_fanout(children, _point(base_x, base_y, options), int(base_y), options))
+        base = child_base(px, py, x_scale=0.75, y_scale=0.75)
+        positions.update(_fanout(children, base, base[1], options))
+        placed.update(children)
+
+    network_set = set(positions)
+    children_by_parent = {name: [] for name in network_set}
+    for name in all_names:
+        if name in placed:
+            continue
+        parent = _best_parent(name, graph, by_name, network_set) or ring[0]
+        children_by_parent.setdefault(parent, []).append(name)
+    for parent in _sort_names(list(children_by_parent)):
+        children = _sort_names(children_by_parent.get(parent, []))
+        if not children or parent not in positions:
+            continue
+        px, py = positions[parent]
+        base = child_base(px, py, x_scale=0.60, y_scale=0.60)
+        positions.update(_fanout(children, base, base[1], options))
     return positions
 
 

@@ -85,7 +85,7 @@ def manifest() -> dict[str, Any]:
         "ip_plan_features": ["schema", "campus_vlsm", "gateway_reservation", "compose_segments", "unused_pool_summary"],
         "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "svg_render", "drawio_render", "html_render", "config_file_export"],
         "render_features": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course_audit", "visual_themes", "link_label_toggle", "model_label_toggle"],
-        "template_features": ["schema", "lan_star", "router_ring", "campus", "campus_l3_configs", "static_host_ips", "server_http", "server_dns", "server_ftp", "server_email", "serial_modules", "ripv2", "auto_layout"],
+        "template_features": ["schema", "lan_star", "router_ring", "wan_ring", "campus", "campus_l3_configs", "static_host_ips", "site_lans", "server_http", "server_dns", "server_ftp", "server_email", "serial_modules", "ripv2", "static_routes", "auto_layout"],
         "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "schema_wrappers", "template_option_wrappers", "workflow_option_wrappers", "layout_option_wrappers", "config_export_option_wrappers", "catalog_wrappers", "safety_js_wrappers", "allow_live_gated_live_tools", "allow_live_gated_device_tools", "write_gated_model_records", "topo_query_export_wrappers", "model_registry_wrappers", "live_lifecycle_dry_run", "live_eval_dry_run", "live_smoke_dry_run", "live_apply_dry_run", "live_device_dry_run", "live_pc_dhcp_dry_run", "live_server_service_dry_run", "live_server_account_config_dry_run", "live_ftp_dry_run", "live_sim_dry_run"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
@@ -93,7 +93,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-mcp --list-tools",
             "pt-reverse/bin/pt730-mcp  # stdio MCP server; live tools require allow_live=true",
             "MCP pt730_schema exposes template/ip_plan/compose/config_plan/pipeline/ios_template input schemas",
-            "MCP pt730_template_lan_star/pt730_template_router_ring/pt730_template_campus expose full template CLI options including layout_style/no_layout/compact",
+            "MCP pt730_template_lan_star/pt730_template_router_ring/pt730_template_wan_ring/pt730_template_campus expose full template CLI options including layout_style/no_layout/compact",
             "MCP pt730_ip_plan_campus/pt730_compose_campus/pt730_pipeline_campus expose compact and layout_style workflow controls",
             "MCP pt730_render exposes visual theme/link label/model label controls for SVG, draw.io, HTML, and Mermaid where supported",
             "MCP pt730_layout exposes canvas_width/canvas_height/spacing_x/spacing_y/margin/compact layout controls",
@@ -108,6 +108,7 @@ def manifest() -> dict[str, Any]:
             "MCP pt730_live_eval/pt730_live_smoke support dry_run=true command previews and require allow_live=true for live execution",
             "pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24",
             "pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28",
+            "pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing rip",
             "pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip",
             "pt-reverse/bin/pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec <campus-spec.json> --output-dir <out-dir> --routing rip",
             "pt-reverse/bin/pt730-ip-plan schema",
@@ -156,8 +157,8 @@ def manifest() -> dict[str, Any]:
     }
 
 
-def print_json(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, indent=2))
+def print_json(value: Any, *, compact: bool) -> None:
+    print(json.dumps(value, ensure_ascii=False, indent=None if compact else 2, separators=(",", ":") if compact else None))
 
 
 def print_table(data: dict[str, Any]) -> None:
@@ -184,12 +185,13 @@ def print_table(data: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--table", action="store_true", help="print a compact human-readable summary")
+    parser.add_argument("--compact", action="store_true", help="emit compact JSON when not using --table")
     args = parser.parse_args(argv)
     data = manifest()
     if args.table:
         print_table(data)
     else:
-        print_json(data)
+        print_json(data, compact=args.compact)
     return 0
 
 

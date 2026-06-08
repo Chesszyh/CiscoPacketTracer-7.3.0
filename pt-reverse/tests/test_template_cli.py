@@ -62,9 +62,11 @@ class TemplateCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertIn("lan-star", data["commands"])
         self.assertIn("router-ring", data["commands"])
+        self.assertIn("wan-ring", data["commands"])
         self.assertIn("campus", data["commands"])
         self.assertIn("lan-star", data["templates"])
         self.assertIn("router-ring", data["templates"])
+        self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
 
     def test_lan_star_generates_static_hosts_server_services_and_layout(self) -> None:
@@ -103,6 +105,47 @@ class TemplateCliTest(unittest.TestCase):
         commands = [command.strip() for command in plan["ios_configs"][0]["commands"]]
         self.assertIn("router rip", commands)
         self.assertIn("clock rate 64000", commands)
+        self.assert_safe_and_renderable(plan)
+
+    def test_wan_ring_generates_site_lans_services_and_routing_configs(self) -> None:
+        result = self.run_template(
+            "wan-ring",
+            "--name",
+            "BRANCH",
+            "--sites",
+            "3",
+            "--hosts-per-site",
+            "2",
+            "--servers-per-site",
+            "1",
+            "--interconnect-pool",
+            "10.30.0.0/28",
+            "--lan-pool",
+            "192.168.100.0/22",
+            "--routing",
+            "static",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertIn("R-BRANCH-1", names)
+        self.assertIn("SW-BRANCH-2", names)
+        self.assertIn("PC-BRANCH-3-2", names)
+        self.assertIn("SRV-BRANCH-1-1", names)
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        self.assertEqual(len(plan["devices"]), 15)
+        self.assertEqual(len(plan["modules"]), 3)
+        self.assertEqual(len(plan["links"]), 15)
+        self.assertEqual(len(plan["pc_configs"]), 9)
+        self.assertEqual(len(plan["ios_configs"]), 3)
+        self.assertEqual(plan["metadata"]["source"], "pt730-template wan-ring")
+        services = {config["name"]: config for config in plan["server_configs"]}
+        self.assertIn("dns", services["SRV-BRANCH-1-1"])
+        self.assertEqual(len(services["SRV-BRANCH-1-1"]["dns"]["records"]), 3)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ip route 192.168.101.0 255.255.255.0 10.30.0.2", joined)
+        self.assertIn("interface Serial0/0/0", joined)
+        self.assertNotIn("3560-24PS", json.dumps(plan))
         self.assert_safe_and_renderable(plan)
 
     def test_campus_generates_core_access_servers_services_and_l3_configs(self) -> None:

@@ -43,7 +43,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "router-ring", "campus"],
+        "commands": ["schema", "lan-star", "router-ring", "wan-ring", "campus"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -52,6 +52,10 @@ def schema() -> dict[str, Any]:
             "router-ring": {
                 "description": "Serial WAN ring of 2911 routers with HWIC-2T modules and RIPv2 configs.",
                 "options": ["--name", "--routers", "--interconnect-pool", "--layout-style", "--no-layout"],
+            },
+            "wan-ring": {
+                "description": "Serial multi-site WAN ring with one access LAN per site, representative PCs/servers, HTTP/DNS services, and optional RIP/static routing.",
+                "options": ["--name", "--sites", "--hosts-per-site", "--servers-per-site", "--interconnect-pool", "--lan-pool", "--lan-prefix", "--routing none|rip|static", "--layout-style", "--no-layout"],
             },
             "campus": {
                 "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs.",
@@ -217,6 +221,143 @@ def _host_list(network: ipaddress.IPv4Network, *, count: int, skip: set[ipaddres
     raise ValueError(f"{network}: not enough usable host addresses")
 
 
+def wan_ring(
+    *,
+    name: str,
+    sites: int,
+    hosts_per_site: int,
+    servers_per_site: int,
+    interconnect_pool: str,
+    lan_pool: str,
+    lan_prefix: int,
+    routing: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if sites < 2:
+        raise ValueError("wan-ring requires at least two sites")
+    if hosts_per_site < 0 or servers_per_site < 0:
+        raise ValueError("hosts-per-site and servers-per-site must be >= 0")
+    if hosts_per_site + servers_per_site > 23:
+        raise ValueError("wan-ring supports up to 23 hosts/servers per site on one 2960 access switch")
+
+    serial_pool = ipaddress.ip_network(interconnect_pool, strict=False)
+    serial_subnets = _subnets(serial_pool, 30, sites, label="interconnect-pool")
+    lan_supernet = ipaddress.ip_network(lan_pool, strict=False)
+    lan_subnets = _subnets(lan_supernet, lan_prefix, sites, label="lan-prefix")
+    slug = name.upper()
+    routers = [f"R-{slug}-{index}" for index in range(1, sites + 1)]
+
+    site_infos: list[dict[str, Any]] = []
+    for index, network in enumerate(lan_subnets, start=1):
+        gateway = _host(network, 1)
+        addresses = _host_list(network, count=hosts_per_site + servers_per_site, skip={gateway})
+        site_infos.append(
+            {
+                "index": index,
+                "network": network,
+                "gateway": gateway,
+                "host_addresses": addresses[:hosts_per_site],
+                "server_addresses": addresses[hosts_per_site:],
+            }
+        )
+
+    dns_ip = ""
+    for site in site_infos:
+        if site["server_addresses"]:
+            dns_ip = str(site["server_addresses"][0])
+            break
+
+    plan: dict[str, Any] = {
+        "devices": [{"name": router, "category": "router", "model": "2911"} for router in routers],
+        "modules": [{"device": router, "slot": "0/0", "model": "HWIC-2T"} for router in routers],
+        "links": [],
+        "pc_configs": [],
+        "server_configs": [],
+        "ios_configs": [],
+        "metadata": {
+            "source": "pt730-template wan-ring",
+            "name": name,
+            "interconnect_pool": str(serial_pool),
+            "lan_pool": str(lan_supernet),
+        },
+    }
+    configs: dict[str, list[str]] = {
+        router: ["enable", "configure terminal", f"hostname {router}"] for router in routers
+    }
+    rip_networks: set[str] = set()
+    clockwise_next_hop: dict[str, ipaddress.IPv4Address] = {}
+    server_configs_by_name: dict[str, dict[str, Any]] = {}
+    dns_records: list[dict[str, str]] = []
+    dns_server_name = ""
+
+    for router, site in zip(routers, site_infos):
+        site_index = site["index"]
+        network = site["network"]
+        gateway = site["gateway"]
+        switch = f"SW-{slug}-{site_index}"
+        plan["devices"].append({"name": switch, "category": "switch", "model": "2960-24TT"})
+        plan["links"].append({"a": router, "pa": "GigabitEthernet0/0", "b": switch, "pb": "FastEthernet0/1", "cable": "straight", "note": f"site {site_index} LAN"})
+        configs[router].extend(["interface GigabitEthernet0/0", f"ip address {gateway} {_mask(network)}", "no shutdown", "exit"])
+        rip_networks.add(_rip_network(gateway))
+
+        next_switch_port = 2
+        for host_index, address in enumerate(site["host_addresses"], start=1):
+            host = f"PC-{slug}-{site_index}-{host_index}"
+            plan["devices"].append({"name": host, "category": "pc", "model": "PC-PT"})
+            plan["links"].append({"a": switch, "pa": f"FastEthernet0/{next_switch_port}", "b": host, "pb": "FastEthernet0", "cable": "straight", "note": f"site {site_index} host"})
+            next_switch_port += 1
+            plan["pc_configs"].append({"name": host, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": str(gateway), "dns": dns_ip})
+
+        for server_index, address in enumerate(site["server_addresses"], start=1):
+            server = f"SRV-{slug}-{site_index}-{server_index}"
+            plan["devices"].append({"name": server, "category": "server", "model": "Server-PT"})
+            plan["links"].append({"a": switch, "pa": f"FastEthernet0/{next_switch_port}", "b": server, "pb": "FastEthernet0", "cable": "straight", "note": f"site {site_index} server"})
+            next_switch_port += 1
+            plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(address), "mask": _mask(network), "gateway": str(gateway), "dns": dns_ip or str(address)})
+            server_configs_by_name[server] = {"name": server, "http": True}
+            dns_records.append({"name": f"www.site{site_index}.{name.lower()}.local", "ip": str(address)})
+            if not dns_server_name:
+                dns_server_name = server
+
+    if dns_server_name:
+        server_configs_by_name[dns_server_name]["dns"] = {"enabled": True, "records": dns_records}
+    plan["server_configs"] = list(server_configs_by_name.values())
+
+    for index, subnet in enumerate(serial_subnets):
+        a = routers[index]
+        b = routers[(index + 1) % sites]
+        hosts = list(subnet.hosts())
+        a_ip = hosts[0]
+        b_ip = hosts[1]
+        a_port = "Serial0/0/0"
+        b_port = "Serial0/0/1"
+        plan["links"].append({"a": a, "pa": a_port, "b": b, "pb": b_port, "cable": "serial", "note": str(subnet), "l3_subnet": str(subnet)})
+        configs[a].extend(["interface " + a_port, f"ip address {a_ip} {_mask(subnet)}", "clock rate 64000", "no shutdown", "exit"])
+        configs[b].extend(["interface " + b_port, f"ip address {b_ip} {_mask(subnet)}", "no shutdown", "exit"])
+        clockwise_next_hop[a] = b_ip
+        rip_networks.add(_rip_network(a_ip))
+        rip_networks.add(_rip_network(b_ip))
+
+    for router_index, router in enumerate(routers):
+        commands = configs[router]
+        if routing == "rip":
+            commands.extend(["router rip", "version 2", "no auto-summary"])
+            for network in sorted(rip_networks, key=lambda value: tuple(int(part) for part in value.split("."))):
+                commands.append(f"network {network}")
+            commands.append("exit")
+        elif routing == "static":
+            next_hop = clockwise_next_hop[router]
+            for lan_index, network in enumerate(lan_subnets):
+                if lan_index == router_index:
+                    continue
+                commands.append(f"ip route {network.network_address} {network.netmask} {next_hop}")
+        commands.append("end")
+        plan["ios_configs"].append({"device": router, "init_dialog": True, "commands": commands})
+
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
 def campus(
     *,
     name: str,
@@ -332,6 +473,19 @@ def main(argv: list[str] | None = None) -> int:
     ring_p.add_argument("--no-layout", action="store_true")
     ring_p.add_argument("--output", type=Path)
 
+    wan_p = sub.add_parser("wan-ring", help="generate a serial multi-site WAN ring with access LANs")
+    wan_p.add_argument("--name", default="WAN")
+    wan_p.add_argument("--sites", type=int, default=3)
+    wan_p.add_argument("--hosts-per-site", type=int, default=2)
+    wan_p.add_argument("--servers-per-site", type=int, default=1)
+    wan_p.add_argument("--interconnect-pool", default="10.30.0.0/28")
+    wan_p.add_argument("--lan-pool", default="192.168.100.0/22")
+    wan_p.add_argument("--lan-prefix", type=int, default=24)
+    wan_p.add_argument("--routing", choices=("none", "rip", "static"), default="rip")
+    wan_p.add_argument("--layout-style", choices=STYLES, default="ring")
+    wan_p.add_argument("--no-layout", action="store_true")
+    wan_p.add_argument("--output", type=Path)
+
     campus_p = sub.add_parser("campus", help="generate a representative campus topology")
     campus_p.add_argument("--name", default="CAMPUS")
     campus_p.add_argument("--cores", type=int, default=2)
@@ -378,6 +532,24 @@ def main(argv: list[str] | None = None) -> int:
                     name=args.name,
                     routers=args.routers,
                     interconnect_pool=args.interconnect_pool,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "wan-ring":
+            _emit(
+                wan_ring(
+                    name=args.name,
+                    sites=args.sites,
+                    hosts_per_site=args.hosts_per_site,
+                    servers_per_site=args.servers_per_site,
+                    interconnect_pool=args.interconnect_pool,
+                    lan_pool=args.lan_pool,
+                    lan_prefix=args.lan_prefix,
+                    routing=args.routing,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

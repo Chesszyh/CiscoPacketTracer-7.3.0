@@ -195,6 +195,43 @@ class LayoutCliTest(unittest.TestCase):
             self.assertGreaterEqual(y, 0)
             self.assertLessEqual(y, 700)
 
+    def test_ring_layout_keeps_second_level_site_fanout_near_site_switches(self) -> None:
+        plan = {
+            "devices": [
+                {"name": "R1", "category": "router", "model": "2911"},
+                {"name": "R2", "category": "router", "model": "2911"},
+                {"name": "R3", "category": "router", "model": "2911"},
+                {"name": "SW1", "category": "switch", "model": "2960-24TT"},
+                {"name": "SW2", "category": "switch", "model": "2960-24TT"},
+                {"name": "SW3", "category": "switch", "model": "2960-24TT"},
+                {"name": "PC1", "category": "pc", "model": "PC-PT"},
+                {"name": "PC2", "category": "pc", "model": "PC-PT"},
+                {"name": "PC3", "category": "pc", "model": "PC-PT"},
+            ],
+            "links": [
+                {"a": "R1", "pa": "Serial0/0/0", "b": "R2", "pb": "Serial0/0/1", "cable": "serial"},
+                {"a": "R2", "pa": "Serial0/0/0", "b": "R3", "pb": "Serial0/0/1", "cable": "serial"},
+                {"a": "R3", "pa": "Serial0/0/0", "b": "R1", "pb": "Serial0/0/1", "cable": "serial"},
+                {"a": "R1", "pa": "GigabitEthernet0/0", "b": "SW1", "pb": "FastEthernet0/1", "cable": "straight"},
+                {"a": "R2", "pa": "GigabitEthernet0/0", "b": "SW2", "pb": "FastEthernet0/1", "cable": "straight"},
+                {"a": "R3", "pa": "GigabitEthernet0/0", "b": "SW3", "pb": "FastEthernet0/1", "cable": "straight"},
+                {"a": "SW1", "pa": "FastEthernet0/2", "b": "PC1", "pb": "FastEthernet0", "cable": "straight"},
+                {"a": "SW2", "pa": "FastEthernet0/2", "b": "PC2", "pb": "FastEthernet0", "cable": "straight"},
+                {"a": "SW3", "pa": "FastEthernet0/2", "b": "PC3", "pb": "FastEthernet0", "cable": "straight"},
+            ],
+        }
+        result = self.run_layout(plan, "--style", "ring", "--canvas-width", "900", "--canvas-height", "700")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        devices = {device["name"]: device for device in json.loads(result.stdout)["devices"]}
+        self.assertGreater(abs(devices["PC2"]["x"] - devices["SW2"]["x"]), 0)
+        self.assertLess(abs(devices["PC2"]["x"] - devices["SW2"]["x"]), abs(devices["PC2"]["x"] - devices["SW1"]["x"]))
+        self.assertLess(abs(devices["PC3"]["x"] - devices["SW3"]["x"]), abs(devices["PC3"]["x"] - devices["SW1"]["x"]))
+        for device in devices.values():
+            self.assertGreaterEqual(device["x"], 0)
+            self.assertLessEqual(device["x"], 900)
+            self.assertGreaterEqual(device["y"], 0)
+            self.assertLessEqual(device["y"], 700)
+
 
 if __name__ == "__main__":
     unittest.main()

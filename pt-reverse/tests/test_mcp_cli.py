@@ -44,6 +44,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
+        self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
         self.assertIn("pt730_catalog", names)
         self.assertIn("pt730_safety_js", names)
@@ -440,27 +441,57 @@ class McpCliTest(unittest.TestCase):
                         },
                     },
                 },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_wan_ring",
+                        "arguments": {
+                            "name": "BRANCH",
+                            "sites": 3,
+                            "hosts_per_site": 1,
+                            "servers_per_site": 1,
+                            "interconnect_pool": "10.40.0.0/28",
+                            "lan_pool": "192.168.120.0/22",
+                            "lan_prefix": 24,
+                            "routing": "static",
+                            "layout_style": "ring",
+                            "compact": True,
+                        },
+                    },
+                },
             ]
         )
         lan_result = responses[0]["result"]
         ring_result = responses[1]["result"]
+        wan_result = responses[2]["result"]
         self.assertEqual(lan_result["isError"], False)
         self.assertEqual(ring_result["isError"], False)
+        self.assertEqual(wan_result["isError"], False)
         lan_command = lan_result["structuredContent"]["command"]
         ring_command = ring_result["structuredContent"]["command"]
+        wan_command = wan_result["structuredContent"]["command"]
         self.assertIn("--compact", lan_command)
         self.assertIn("--dns", lan_command)
         self.assertIn("--layout-style", lan_command)
         self.assertIn("--no-layout", lan_command)
         self.assertIn("--name", ring_command)
         self.assertIn("--layout-style", ring_command)
+        self.assertIn("wan-ring", wan_command)
+        self.assertIn("--hosts-per-site", wan_command)
+        self.assertIn("--routing", wan_command)
         lan_plan = json.loads(lan_result["structuredContent"]["stdout"])
         ring_plan = json.loads(ring_result["structuredContent"]["stdout"])
+        wan_plan = json.loads(wan_result["structuredContent"]["stdout"])
         self.assertEqual(lan_plan["metadata"]["name"], "AGENT")
         self.assertEqual(lan_plan["pc_configs"][0]["dns"], "192.168.60.254")
         self.assertFalse(any("x" in device or "y" in device for device in lan_plan["devices"]))
         self.assertEqual(ring_plan["metadata"]["name"], "WAN")
         self.assertEqual(len(ring_plan["devices"]), 3)
+        self.assertEqual(wan_plan["metadata"]["source"], "pt730-template wan-ring")
+        self.assertEqual(len(wan_plan["ios_configs"]), 3)
+        self.assertIn("ip route", "\n".join(command for config in wan_plan["ios_configs"] for command in config["commands"]))
 
     def test_campus_template_tool_generates_complex_topology_with_l3_configs(self) -> None:
         responses = self.run_mcp(

@@ -58,8 +58,10 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("model_label_toggle", data["render_features"])
         self.assertIn("lan_star", data["template_features"])
         self.assertIn("router_ring", data["template_features"])
+        self.assertIn("wan_ring", data["template_features"])
         self.assertIn("campus", data["template_features"])
         self.assertIn("campus_l3_configs", data["template_features"])
+        self.assertIn("site_lans", data["template_features"])
         self.assertIn("server_dns", data["template_features"])
         self.assertIn("tools_call", data["mcp_features"])
         self.assertIn("schema_wrappers", data["mcp_features"])
@@ -86,6 +88,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("live_sim_dry_run", data["mcp_features"])
         self.assertIn("pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28", data["recommended_workflow"])
+        self.assertIn("pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing rip", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec <campus-spec.json> --output-dir <out-dir> --routing rip", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-layout <plan.json> --output <layout.json>", data["recommended_workflow"])
@@ -100,7 +103,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("pt-reverse/bin/pt730-mcp --list-tools", data["recommended_workflow"])
         self.assertIn("pt-reverse/bin/pt730-mcp  # stdio MCP server; live tools require allow_live=true", data["recommended_workflow"])
         self.assertIn("MCP pt730_schema exposes template/ip_plan/compose/config_plan/pipeline/ios_template input schemas", data["recommended_workflow"])
-        self.assertIn("MCP pt730_template_lan_star/pt730_template_router_ring/pt730_template_campus expose full template CLI options including layout_style/no_layout/compact", data["recommended_workflow"])
+        self.assertIn("MCP pt730_template_lan_star/pt730_template_router_ring/pt730_template_wan_ring/pt730_template_campus expose full template CLI options including layout_style/no_layout/compact", data["recommended_workflow"])
         self.assertIn("MCP pt730_ip_plan_campus/pt730_compose_campus/pt730_pipeline_campus expose compact and layout_style workflow controls", data["recommended_workflow"])
         self.assertIn("MCP pt730_render exposes visual theme/link label/model label controls for SVG, draw.io, HTML, and Mermaid where supported", data["recommended_workflow"])
         self.assertIn("MCP pt730_layout exposes canvas_width/canvas_height/spacing_x/spacing_y/margin/compact layout controls", data["recommended_workflow"])
@@ -119,6 +122,13 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Offline tools", result.stdout)
         self.assertIn("Live tools", result.stdout)
+
+    def test_compact_output_is_machine_readable_without_indentation(self) -> None:
+        result = self.run_cmd("--compact")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("\n  ", result.stdout)
+        data = json.loads(result.stdout)
+        self.assertIn("wan_ring", data["template_features"])
 
 
 if __name__ == "__main__":
