@@ -26,6 +26,7 @@ pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssi
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --client-addressing dhcp
 pt-reverse/bin/pt730-template switching-lab --vlans 3 --hosts-per-vlan 2 --access-switches 2
+pt-reverse/bin/pt730-template server-services --clients 3 --services all --domain services.local
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
@@ -87,9 +88,10 @@ config-plan, pipeline, lab, and IOS-template input schemas. Model registry reads
 exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
 Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
-VLAN, switching-lab, edge-security, router-ring, WAN-ring, campus,
-redundant-campus, and enterprise-edge template options including DNS, SSID,
-802.1Q, STP, EtherChannel, access/trunk ports, NAT/ACL, DMZ, HSRP/STP, DHCP
+VLAN, switching-lab, server-services, edge-security, router-ring, WAN-ring,
+campus, redundant-campus, and enterprise-edge template options including DNS,
+SSID, 802.1Q, STP, EtherChannel, access/trunk ports, Server-PT
+HTTP/DNS/FTP/TFTP/Email/NTP/Syslog/DHCP metadata, NAT/ACL, DMZ, HSRP/STP, DHCP
 relay, branch WAN, ISP/Internet, RIP/OSPF/static WAN and campus L3 routing,
 layout, no-layout, compact, router DHCP pools, DHCP client hosts, and naming
 controls from the underlying `pt730-template` CLI.
@@ -218,6 +220,7 @@ pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.
 pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --client-addressing dhcp
 pt-reverse/bin/pt730-template switching-lab --vlans 3 --hosts-per-vlan 2 --access-switches 2
+pt-reverse/bin/pt730-template server-services --clients 3 --services all --domain services.local
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
@@ -354,16 +357,19 @@ devices, safe ports, links, static host IPs, server services, and default layout
 coordinates before touching Packet Tracer.
 Use `pt730-template lan-star ...`, `pt730-template wireless-lan ...`,
 `pt730-template vlan-router-on-stick ...`, `pt730-template switching-lab ...`,
-`pt730-template edge-security ...`, `pt730-template router-ring ...`,
-`pt730-template wan-ring ...`, `pt730-template campus ...`, and
-`pt730-template enterprise-edge ...` when an agent needs a common lab topology
-without first writing a topology JSON file.
+`pt730-template server-services ...`, `pt730-template edge-security ...`,
+`pt730-template router-ring ...`, `pt730-template wan-ring ...`,
+`pt730-template campus ...`, and `pt730-template enterprise-edge ...` when an
+agent needs a common lab topology without first writing a topology JSON file.
 Wireless-LAN templates use locally verified `AccessPoint-PT` and `Laptop-PT`
 models, emit AP/SSID metadata, and keep wireless cable code `8109` as a
 non-strict safety warning until live validation is explicitly requested.
 Router-on-a-stick templates generate 802.1Q router subinterfaces, switch
 trunk/access ports, VLAN metadata, static or DHCP client hosts, optional router
 DHCP pools, and optional per-VLAN HTTP/DNS servers.
+Server-services templates generate a router gateway, access switch, Server-PT
+service metadata for HTTP/DNS/FTP/TFTP/Email/NTP/Syslog/DHCP, and DHCP or
+static client PCs.
 Edge-security templates use verified router/switch/PC/server models to build an
 ISP edge, inside LAN, DMZ, Internet test host, NAT overload, outside ACL, and
 static routes. WAN-ring templates generate multi-site router WANs with per-site

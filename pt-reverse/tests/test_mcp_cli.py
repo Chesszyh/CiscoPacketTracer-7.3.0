@@ -52,6 +52,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_template_wireless_lan", names)
         self.assertIn("pt730_template_vlan_router_on_stick", names)
         self.assertIn("pt730_template_switching_lab", names)
+        self.assertIn("pt730_template_server_services", names)
         self.assertIn("pt730_template_edge_security", names)
         self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
@@ -133,6 +134,8 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("dhcp", roas["inputSchema"]["properties"]["client_addressing"]["enum"])
         switching = next(tool for tool in tools if tool["name"] == "pt730_template_switching_lab")
         self.assertIn("access_switches", switching["inputSchema"]["properties"])
+        server_services = next(tool for tool in tools if tool["name"] == "pt730_template_server_services")
+        self.assertIn("services", server_services["inputSchema"]["properties"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
         self.assertIn("ospf", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
         campus = next(tool for tool in tools if tool["name"] == "pt730_template_campus")
@@ -1185,6 +1188,48 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("channel-group 1 mode active", joined)
         self.assertIn("interface Port-channel1", joined)
         self.assertIn("spanning-tree bpduguard enable", joined)
+
+    def test_server_services_template_tool_generates_services_topology(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_server_services",
+                        "arguments": {
+                            "name": "SVC",
+                            "clients": 2,
+                            "network": "192.168.210.0/24",
+                            "gateway": "192.168.210.1",
+                            "domain": "svc.local",
+                            "services": "http,dns,ftp,dhcp",
+                            "layout_style": "lan",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("server-services", command)
+        self.assertIn("--services", command)
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template server-services")
+        self.assertEqual(plan["metadata"]["domain"], "svc.local")
+        self.assertEqual(len(plan["pc_configs"]), 3)
+        self.assertTrue(plan["pc_configs"][1]["dhcp"])
+        services = plan["server_configs"][0]
+        self.assertIn("http", services)
+        self.assertIn("dns", services)
+        self.assertIn("ftp", services)
+        self.assertIn("dhcp", services)
+        self.assertNotIn("email", services)
+        self.assertEqual(services["dhcp"]["start"], "192.168.210.3")
+        self.assertEqual(services["dhcp"]["end"], "192.168.210.4")
 
     def test_campus_template_tool_generates_complex_topology_with_l3_configs(self) -> None:
         responses = self.run_mcp(

@@ -66,6 +66,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("wireless-lan", data["commands"])
         self.assertIn("vlan-router-on-stick", data["commands"])
         self.assertIn("switching-lab", data["commands"])
+        self.assertIn("server-services", data["commands"])
         self.assertIn("edge-security", data["commands"])
         self.assertIn("campus", data["commands"])
         self.assertIn("redundant-campus", data["commands"])
@@ -74,6 +75,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("wireless-lan", data["templates"])
         self.assertIn("vlan-router-on-stick", data["templates"])
         self.assertIn("switching-lab", data["templates"])
+        self.assertIn("server-services", data["templates"])
         self.assertIn("edge-security", data["templates"])
         self.assertIn("router-ring", data["templates"])
         self.assertIn("wan-ring", data["templates"])
@@ -86,6 +88,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("--routing none|rip|ospf|static", data["templates"]["enterprise-edge"]["options"])
         self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
         self.assertIn("--access-switches", data["templates"]["switching-lab"]["options"])
+        self.assertIn("--services all|http,dns,ftp,tftp,email,ntp,syslog,dhcp", data["templates"]["server-services"]["options"])
 
     def test_lan_star_generates_static_hosts_server_services_and_layout(self) -> None:
         result = self.run_template(
@@ -321,6 +324,78 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("switchport access vlan 12", joined)
         self.assertIn("spanning-tree bpduguard enable", joined)
         self.assertNotIn("3560-24PS", json.dumps(plan))
+        self.assert_safe_and_renderable(plan)
+
+    def test_server_services_generates_service_metadata_dhcp_clients_and_ios(self) -> None:
+        result = self.run_template(
+            "server-services",
+            "--name",
+            "SVC",
+            "--clients",
+            "3",
+            "--network",
+            "192.168.200.0/24",
+            "--domain",
+            "services.local",
+            "--services",
+            "all",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertEqual(
+            names,
+            {
+                "R-SVC-GW",
+                "SW-SVC-SERVICES",
+                "SRV-SVC-SERVICES",
+                "PC-SVC-CLIENT-1",
+                "PC-SVC-CLIENT-2",
+                "PC-SVC-CLIENT-3",
+            },
+        )
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        self.assertEqual(len(plan["links"]), 5)
+        self.assertEqual(len(plan["pc_configs"]), 4)
+        self.assertEqual(len(plan["server_configs"]), 1)
+        self.assertEqual(plan["metadata"]["source"], "pt730-template server-services")
+        self.assertEqual(plan["pc_configs"][0]["ip"], "192.168.200.2")
+        self.assertTrue(all(config.get("dhcp") is True for config in plan["pc_configs"][1:]))
+        services = plan["server_configs"][0]
+        self.assertEqual(services["http"], True)
+        self.assertEqual(services["tftp"], True)
+        self.assertIn("dns", services)
+        self.assertIn("ftp", services)
+        self.assertIn("email", services)
+        self.assertIn("ntp", services)
+        self.assertIn("syslog", services)
+        self.assertIn("dhcp", services)
+        self.assertEqual(services["dns"]["records"][1]["name"], "www.services.local")
+        self.assertEqual(services["ftp"]["accounts"][0]["username"], "lab")
+        self.assertEqual(services["email"]["domain"], "services.local")
+        self.assertEqual(services["dhcp"]["start"], "192.168.200.3")
+        self.assertEqual(services["dhcp"]["end"], "192.168.200.5")
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ip address 192.168.200.1 255.255.255.0", joined)
+        self.assertIn("spanning-tree portfast", joined)
+        self.assert_safe_and_renderable(plan)
+
+    def test_server_services_can_disable_dhcp_for_static_clients(self) -> None:
+        result = self.run_template(
+            "server-services",
+            "--name",
+            "STATIC",
+            "--clients",
+            "2",
+            "--services",
+            "http,dns,ftp",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertNotIn("dhcp", plan["server_configs"][0])
+        self.assertEqual(plan["pc_configs"][1]["ip"], "192.168.200.3")
+        self.assertEqual(plan["pc_configs"][2]["ip"], "192.168.200.4")
+        self.assertFalse(any(config.get("dhcp") is True for config in plan["pc_configs"]))
         self.assert_safe_and_renderable(plan)
 
     def test_edge_security_generates_nat_acl_dmz_and_static_routes(self) -> None:

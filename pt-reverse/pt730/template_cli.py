@@ -16,6 +16,9 @@ from config_plan_cli import configured_plan
 from layout_cli import LayoutOptions, STYLES, layout_plan
 
 
+SERVER_SERVICE_CHOICES = {"http", "dns", "ftp", "tftp", "email", "ntp", "syslog", "dhcp"}
+
+
 def _mask(network: ipaddress.IPv4Network) -> str:
     return str(network.netmask)
 
@@ -47,7 +50,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "switching-lab", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
+        "commands": ["schema", "lan-star", "wireless-lan", "vlan-router-on-stick", "switching-lab", "server-services", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -64,6 +67,10 @@ def schema() -> dict[str, Any]:
             "switching-lab": {
                 "description": "Layer-2 switching lab with dual distribution switches, access switches, VLANs, STP root roles, EtherChannel trunk, portfast/bpduguard edge ports, and static representative PCs.",
                 "options": ["--name", "--vlans", "--hosts-per-vlan", "--access-switches", "--address-pool", "--vlan-prefix", "--vlan-base", "--layout-style", "--no-layout"],
+            },
+            "server-services": {
+                "description": "Server-PT services lab with router gateway, access switch, DHCP/static clients, HTTP/DNS/FTP/TFTP/Email/NTP/Syslog/DHCP service metadata, and IOS access-port configs.",
+                "options": ["--name", "--clients", "--network", "--gateway", "--domain", "--services all|http,dns,ftp,tftp,email,ntp,syslog,dhcp", "--layout-style", "--no-layout"],
             },
             "edge-security": {
                 "description": "ISP edge router, inside LAN, DMZ servers, Internet test host, NAT overload, outside ACL, and static routes.",
@@ -750,6 +757,170 @@ def switching_lab(
         plan["ios_configs"].append({"device": switch, "init_dialog": True, "commands": commands})
 
     plan["metadata"]["vlan_host_summary"] = vlan_host_summary
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
+def _selected_server_services(services: str) -> set[str]:
+    tokens = {item.strip().lower() for item in services.replace(";", ",").split(",") if item.strip()}
+    if not tokens or "all" in tokens:
+        return set(SERVER_SERVICE_CHOICES)
+    if "none" in tokens:
+        return set()
+    unknown = sorted(tokens - SERVER_SERVICE_CHOICES)
+    if unknown:
+        raise ValueError(f"unknown server service(s): {', '.join(unknown)}")
+    return tokens
+
+
+def server_services(
+    *,
+    name: str,
+    clients: int,
+    network: str,
+    gateway: str | None,
+    domain: str,
+    services: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if clients < 1:
+        raise ValueError("server-services requires at least one client")
+    if clients > 23:
+        raise ValueError("server-services supports up to 23 client PCs on one 2960 switch")
+    enabled = _selected_server_services(services)
+    if not enabled:
+        raise ValueError("server-services requires at least one enabled service")
+
+    net = ipaddress.ip_network(network, strict=False)
+    gw = ipaddress.ip_address(gateway) if gateway else _host(net, 1)
+    if gw not in net:
+        raise ValueError(f"gateway {gw} is outside {net}")
+    server_ip = _host_list(net, count=1, skip={gw})[0]
+    client_addresses = _host_list(net, count=clients, skip={gw, server_ip})
+    dns_ip = str(server_ip) if "dns" in enabled else ""
+    slug = name.upper()
+    router = f"R-{slug}-GW"
+    switch = f"SW-{slug}-SERVICES"
+    server = f"SRV-{slug}-SERVICES"
+    use_dhcp = "dhcp" in enabled
+
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": router, "category": "router", "model": "2911"},
+            {"name": switch, "category": "switch", "model": "2960-24TT"},
+            {"name": server, "category": "server", "model": "Server-PT"},
+        ],
+        "links": [
+            {"a": router, "pa": "GigabitEthernet0/0", "b": switch, "pb": "GigabitEthernet0/1", "cable": "straight", "note": "default gateway"},
+            {"a": switch, "pa": "FastEthernet0/1", "b": server, "pb": "FastEthernet0", "cable": "straight", "note": "Server-PT services"},
+        ],
+        "pc_configs": [
+            {"name": server, "port": "FastEthernet0", "ip": str(server_ip), "mask": _mask(net), "gateway": str(gw), "dns": dns_ip or str(server_ip)}
+        ],
+        "server_configs": [],
+        "ios_configs": [
+            {
+                "device": router,
+                "init_dialog": True,
+                "commands": [
+                    "enable",
+                    "configure terminal",
+                    f"hostname {router}",
+                    "interface GigabitEthernet0/0",
+                    "description LAN_GATEWAY",
+                    f"ip address {gw} {_mask(net)}",
+                    "no shutdown",
+                    "end",
+                ],
+            }
+        ],
+        "metadata": {
+            "source": "pt730-template server-services",
+            "name": name,
+            "network": str(net),
+            "gateway": str(gw),
+            "server": server,
+            "domain": domain,
+            "services": sorted(enabled),
+        },
+    }
+
+    for index, address in enumerate(client_addresses, start=1):
+        client = f"PC-{slug}-CLIENT-{index}"
+        plan["devices"].append({"name": client, "category": "pc", "model": "PC-PT"})
+        plan["links"].append({"a": switch, "pa": f"FastEthernet0/{index + 1}", "b": client, "pb": "FastEthernet0", "cable": "straight", "note": "service test client"})
+        if use_dhcp:
+            plan["pc_configs"].append({"name": client, "port": "FastEthernet0", "dhcp": True})
+        else:
+            plan["pc_configs"].append({"name": client, "port": "FastEthernet0", "ip": str(address), "mask": _mask(net), "gateway": str(gw), "dns": dns_ip})
+
+    server_config: dict[str, Any] = {"name": server}
+    if "http" in enabled:
+        server_config["http"] = True
+    if "tftp" in enabled:
+        server_config["tftp"] = True
+    if "ftp" in enabled:
+        server_config["ftp"] = {"enabled": True, "accounts": [{"username": "lab", "password": "packet", "permissions": "RWDNL"}]}
+    if "dns" in enabled:
+        server_config["dns"] = {
+            "enabled": True,
+            "records": [
+                {"name": domain, "ip": str(server_ip)},
+                {"name": f"www.{domain}", "ip": str(server_ip)},
+                {"name": f"ftp.{domain}", "ip": str(server_ip)},
+                {"name": f"mail.{domain}", "ip": str(server_ip)},
+                {"name": f"ntp.{domain}", "ip": str(server_ip)},
+                {"name": f"syslog.{domain}", "ip": str(server_ip)},
+            ],
+        }
+    if "email" in enabled:
+        server_config["email"] = {"enabled": True, "domain": domain, "accounts": [{"username": "student", "password": "packet"}]}
+    if "ntp" in enabled:
+        server_config["ntp"] = {"enabled": True, "authentication": False, "key_id": "0", "md5": ""}
+    if "syslog" in enabled:
+        server_config["syslog"] = {"enabled": True, "port": 514}
+    if use_dhcp:
+        server_config["dhcp"] = {
+            "enabled": True,
+            "network": str(net.network_address),
+            "mask": _mask(net),
+            "start": str(client_addresses[0]),
+            "end": str(client_addresses[-1]),
+            "gateway": str(gw),
+            "dns": dns_ip,
+            "max_users": len(client_addresses),
+        }
+    plan["server_configs"].append(server_config)
+
+    switch_commands = [
+        "enable",
+        "configure terminal",
+        f"hostname {switch}",
+        "interface GigabitEthernet0/1",
+        "description UPLINK_TO_GATEWAY",
+        "no shutdown",
+        "exit",
+        "interface FastEthernet0/1",
+        "description SERVER_SERVICES",
+        "switchport mode access",
+        "spanning-tree portfast",
+        "no shutdown",
+        "exit",
+    ]
+    for index in range(1, clients + 1):
+        switch_commands.extend(
+            [
+                f"interface FastEthernet0/{index + 1}",
+                "description SERVICE_TEST_CLIENT",
+                "switchport mode access",
+                "spanning-tree portfast",
+                "no shutdown",
+                "exit",
+            ]
+        )
+    switch_commands.append("end")
+    plan["ios_configs"].append({"device": switch, "init_dialog": True, "commands": switch_commands})
+
     return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
 
 
@@ -2127,6 +2298,17 @@ def main(argv: list[str] | None = None) -> int:
     switching_p.add_argument("--no-layout", action="store_true")
     switching_p.add_argument("--output", type=Path)
 
+    services_p = sub.add_parser("server-services", help="generate a Server-PT services lab with DHCP/static clients")
+    services_p.add_argument("--name", default="SERVICES")
+    services_p.add_argument("--clients", type=int, default=3)
+    services_p.add_argument("--network", default="192.168.200.0/24")
+    services_p.add_argument("--gateway")
+    services_p.add_argument("--domain", default="services.local")
+    services_p.add_argument("--services", default="all", help="comma-separated services: all,http,dns,ftp,tftp,email,ntp,syslog,dhcp")
+    services_p.add_argument("--layout-style", choices=STYLES, default="lan")
+    services_p.add_argument("--no-layout", action="store_true")
+    services_p.add_argument("--output", type=Path)
+
     edge_p = sub.add_parser("edge-security", help="generate an ISP edge NAT/ACL/DMZ security lab")
     edge_p.add_argument("--name", default="EDGE")
     edge_p.add_argument("--inside-hosts", type=int, default=3)
@@ -2292,6 +2474,22 @@ def main(argv: list[str] | None = None) -> int:
                     address_pool=args.address_pool,
                     vlan_prefix=args.vlan_prefix,
                     vlan_base=args.vlan_base,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "server-services":
+            _emit(
+                server_services(
+                    name=args.name,
+                    clients=args.clients,
+                    network=args.network,
+                    gateway=args.gateway,
+                    domain=args.domain,
+                    services=args.services,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),
