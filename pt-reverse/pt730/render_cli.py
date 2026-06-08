@@ -367,6 +367,50 @@ def svg(plan: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def svg_fragment(plan: dict[str, Any]) -> str:
+    lines = svg(plan).splitlines()
+    if lines and lines[0].startswith("<?xml"):
+        lines = lines[1:]
+    return "\n".join(lines)
+
+
+def html_report(plan: dict[str, Any]) -> str:
+    report = markdown(plan)
+    return "\n".join(
+        [
+            "<!doctype html>",
+            '<html lang="en">',
+            "<head>",
+            '  <meta charset="utf-8">',
+            '  <meta name="viewport" content="width=device-width, initial-scale=1">',
+            "  <title>Packet Tracer Topology Plan</title>",
+            "  <style>",
+            "    body { margin: 0; background: #f1f5f9; color: #0f172a; font-family: Inter, Segoe UI, Arial, sans-serif; }",
+            "    main { max-width: 1180px; margin: 0 auto; padding: 24px; }",
+            "    h1 { font-size: 24px; margin: 0 0 18px; }",
+            "    section { margin-top: 20px; }",
+            "    .diagram { overflow: auto; background: white; border: 1px solid #cbd5e1; }",
+            "    .diagram svg { display: block; min-width: 100%; }",
+            "    pre { overflow: auto; white-space: pre-wrap; background: white; border: 1px solid #cbd5e1; padding: 16px; line-height: 1.45; }",
+            "  </style>",
+            "</head>",
+            "<body>",
+            "  <main>",
+            "    <h1>Packet Tracer Topology Plan</h1>",
+            '    <section class="diagram" aria-label="Topology diagram">',
+            svg_fragment(plan),
+            "    </section>",
+            '    <section aria-label="Topology report">',
+            f"      <pre>{svg_text(report)}</pre>",
+            "    </section>",
+            "  </main>",
+            "</body>",
+            "</html>",
+            "",
+        ]
+    )
+
+
 def cell(value: Any) -> str:
     text = "" if value is None else str(value)
     return text.replace("|", "\\|").replace("\n", "<br>")
@@ -673,6 +717,10 @@ def main(argv: list[str] | None = None) -> int:
     svg_p.add_argument("plan", type=Path)
     svg_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
 
+    html_p = sub.add_parser("html", help="render a plan as a self-contained HTML review page")
+    html_p.add_argument("plan", type=Path)
+    html_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+
     markdown_p = sub.add_parser("markdown", help="render a plan as Markdown tables")
     markdown_p.add_argument("plan", type=Path)
     markdown_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
@@ -696,6 +744,11 @@ def main(argv: list[str] | None = None) -> int:
             plan = _load_plan(args.plan)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(svg(plan), args.output)
+            return 0
+        if args.cmd == "html":
+            plan = _load_plan(args.plan)
+            _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
+            emit(html_report(plan), args.output)
             return 0
         if args.cmd == "markdown":
             plan = _load_plan(args.plan)

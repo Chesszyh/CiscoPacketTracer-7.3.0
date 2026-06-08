@@ -45,6 +45,7 @@ pt-reverse/bin/pt730-config-plan export-configs compose-campus.configured.json -
 pt-reverse/bin/pt730-safety plan pt-reverse/course-design/college-network-topology-pt73-safe.json
 pt-reverse/bin/pt730-layout pt-reverse/course-design/college-network-topology-pt73-safe.json --style campus --preserve-existing --output college-network-topology-pt73-safe.layout.json
 pt-reverse/bin/pt730-render svg pt-reverse/course-design/college-network-topology-pt73-safe.json --output college-network-topology-pt73-safe.svg
+pt-reverse/bin/pt730-render html pt-reverse/course-design/college-network-topology-pt73-safe.json --output college-network-topology-pt73-safe.html
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```

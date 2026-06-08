@@ -82,8 +82,8 @@ def manifest() -> dict[str, Any]:
         "layout_styles": ["auto", "hierarchical", "campus", "lan", "ring", "grid"],
         "compose_features": ["schema", "campus", "core_ring", "core_interconnect_pool", "server_block", "access_segments", "segments_from_ip_plan", "representative_hosts", "static_ip_configs", "server_services", "auto_layout"],
         "ip_plan_features": ["schema", "campus_vlsm", "gateway_reservation", "compose_segments", "unused_pool_summary"],
-        "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "svg_render", "config_file_export"],
-        "render_features": ["mermaid", "markdown", "summary", "svg", "course_audit"],
+        "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "svg_render", "html_render", "config_file_export"],
+        "render_features": ["mermaid", "markdown", "summary", "svg", "html", "course_audit"],
         "template_features": ["schema", "lan_star", "router_ring", "static_host_ips", "server_http", "serial_modules", "ripv2", "auto_layout"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
@@ -103,6 +103,7 @@ def manifest() -> dict[str, Any]:
             "pt-reverse/bin/pt730-layout <plan.json> --style campus --preserve-existing --output <layout.json>",
             "pt-reverse/bin/pt730-safety plan <plan.json>",
             "pt-reverse/bin/pt730-render svg <plan.json> --output <diagram.svg>",
+            "pt-reverse/bin/pt730-render html <plan.json> --output <review.html>",
             "pt-reverse/bin/pt730-render markdown <plan.json> --output <review.md>",
             "pt-reverse/bin/pt730-render summary <plan.json> --output <review.json>",
             "pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json --output pt-reverse/course-design/college-network-topology-pt73-safe.audit.json",

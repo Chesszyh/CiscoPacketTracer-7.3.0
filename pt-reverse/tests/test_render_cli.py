@@ -73,6 +73,28 @@ class RenderCliTest(unittest.TestCase):
         finally:
             out.unlink(missing_ok=True)
 
+    def test_html_renders_embedded_diagram_and_report(self) -> None:
+        result = self.run_render("html", str(ROOT / "examples" / "simple-lan.json"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("<!doctype html>", result.stdout)
+        self.assertIn("<svg", result.stdout)
+        self.assertIn("R_DEMO", result.stdout)
+        self.assertIn("Packet Tracer Topology Plan", result.stdout)
+        self.assertIn("192.168.50.10", result.stdout)
+
+    def test_html_output_option_writes_file(self) -> None:
+        out = ROOT / "tests" / ".render-output.html"
+        out.unlink(missing_ok=True)
+        try:
+            result = self.run_render("html", str(ROOT / "examples" / "simple-lan.json"), "--output", str(out))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", text)
+            self.assertIn("PC_DEMO", text)
+        finally:
+            out.unlink(missing_ok=True)
+
     def test_markdown_renders_address_and_link_metadata(self) -> None:
         result = self.run_render("markdown", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))
         self.assertEqual(result.returncode, 0, result.stderr)

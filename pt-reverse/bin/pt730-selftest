@@ -97,11 +97,13 @@ ok "ip planning checks"
 "$BIN/pt730-safety" plan "$tmp/compose-plan.json" >/dev/null
 "$BIN/pt730-render" summary "$tmp/compose-plan.json" >/dev/null
 "$BIN/pt730-render" svg "$tmp/compose-plan.json" >/dev/null
+"$BIN/pt730-render" html "$tmp/compose-plan.json" >/dev/null
 ok "compose checks"
 "$BIN/pt730-pipeline" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-pipeline" campus --ip-plan "$ROOT/pt-reverse/examples/ip-plan-campus.json" --compose-spec "$ROOT/pt-reverse/examples/compose-campus.json" --output-dir "$tmp/pipeline" --routing rip >/dev/null
 test -s "$tmp/pipeline/topology.layout.json"
 test -s "$tmp/pipeline/topology.svg"
+test -s "$tmp/pipeline/topology.html"
 test -s "$tmp/pipeline/configs/MLS1.cfg"
 ok "pipeline checks"
 "$BIN/pt730-template" schema | python3 -m json.tool >/dev/null
@@ -134,6 +136,7 @@ python3 -m json.tool "$tmp/layout-campus.json" >/dev/null
 ok "layout checks"
 "$BIN/pt730-render" mermaid "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" svg "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
+"$BIN/pt730-render" html "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" markdown "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" summary "$ROOT/pt-reverse/examples/simple-lan.json" >/dev/null
 "$BIN/pt730-render" course-audit "$ROOT/pt-reverse/course-design/college-network-topology-pt73-safe.json" >/dev/null
@@ -164,6 +167,8 @@ printf '%s' '{"devices":[{"name":"R1","model":"2911","command_line":{"prompt":"R
 test -s "$tmp/simple-lan.md"
 "$BIN/pt730-render" svg "$ROOT/pt-reverse/examples/simple-lan.json" --output "$tmp/simple-lan.svg"
 test -s "$tmp/simple-lan.svg"
+"$BIN/pt730-render" html "$ROOT/pt-reverse/examples/simple-lan.json" --output "$tmp/simple-lan.html"
+test -s "$tmp/simple-lan.html"
 ok "safety policy checks"
 
 if [[ "$LIVE" -eq 1 ]]; then
