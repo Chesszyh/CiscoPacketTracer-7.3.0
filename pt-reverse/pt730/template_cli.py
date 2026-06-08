@@ -43,11 +43,15 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "router-ring", "wan-ring", "campus"],
+        "commands": ["schema", "lan-star", "wireless-lan", "router-ring", "wan-ring", "campus"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
                 "options": ["--name", "--pcs", "--servers", "--network", "--gateway", "--dns", "--layout-style", "--no-layout"],
+            },
+            "wireless-lan": {
+                "description": "One router, one access switch, safe AccessPoint-PT APs, Laptop-PT clients, optional HTTP/DNS servers, and static host IPs.",
+                "options": ["--name", "--aps", "--laptops", "--servers", "--network", "--gateway", "--dns", "--ssid", "--layout-style", "--no-layout"],
             },
             "router-ring": {
                 "description": "Serial WAN ring of 2911 routers with HWIC-2T modules and RIPv2 configs.",
@@ -129,6 +133,93 @@ def lan_star(*, name: str, pcs: int, servers: int, network: str, gateway: str | 
         plan["links"].append({"a": switch, "pa": f"FastEthernet0/{len(plan['links']) + 1}", "b": server, "pb": "FastEthernet0", "cable": "straight"})
         plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(ip_addr), "mask": _mask(net), "gateway": str(gw), "dns": dns or str(ip_addr)})
         plan["server_configs"].append({"name": server, "http": True})
+
+    return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
+
+
+def wireless_lan(
+    *,
+    name: str,
+    aps: int,
+    laptops: int,
+    servers: int,
+    network: str,
+    gateway: str | None,
+    dns: str | None,
+    ssid: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if aps < 1:
+        raise ValueError("wireless-lan requires at least one AP")
+    if laptops < 0 or servers < 0:
+        raise ValueError("laptops and servers must be >= 0")
+    if laptops + servers < 1:
+        raise ValueError("wireless-lan requires at least one laptop or server")
+    if aps + servers > 23:
+        raise ValueError("wireless-lan supports up to 23 AP/server uplinks on one 2960 access switch")
+    net = ipaddress.ip_network(network, strict=False)
+    gw = ipaddress.ip_address(gateway) if gateway else _host(net, 1)
+    if gw not in net:
+        raise ValueError(f"gateway {gw} is outside {net}")
+    host_addresses = _host_list(net, count=laptops + servers, skip={gw})
+    server_addresses = host_addresses[laptops:]
+    dns_ip = dns or (str(server_addresses[0]) if server_addresses else "")
+    slug = name.upper()
+    router = f"R-{slug}"
+    switch = f"SW-{slug}"
+
+    plan: dict[str, Any] = {
+        "devices": [
+            {"name": router, "category": "router", "model": "2911"},
+            {"name": switch, "category": "switch", "model": "2960-24TT"},
+        ],
+        "links": [{"a": router, "pa": "GigabitEthernet0/0", "b": switch, "pb": "FastEthernet0/1", "cable": "straight", "note": "wired gateway"}],
+        "pc_configs": [],
+        "server_configs": [],
+        "ap_configs": [],
+        "ios_configs": [
+            {
+                "device": router,
+                "init_dialog": True,
+                "commands": [
+                    "enable",
+                    "configure terminal",
+                    f"hostname {router}",
+                    "interface GigabitEthernet0/0",
+                    f"ip address {gw} {_mask(net)}",
+                    "no shutdown",
+                    "end",
+                ],
+            }
+        ],
+        "metadata": {"source": "pt730-template wireless-lan", "name": name, "network": str(net), "ssid": ssid},
+    }
+
+    ap_names: list[str] = []
+    for index in range(1, aps + 1):
+        ap = f"AP-{slug}-{index}"
+        ap_names.append(ap)
+        plan["devices"].append({"name": ap, "category": "accesspoint", "model": "AccessPoint-PT", "ssid": ssid})
+        plan["links"].append({"a": switch, "pa": f"FastEthernet0/{index + 1}", "b": ap, "pb": "Port 0", "cable": "straight", "note": f"AP uplink SSID {ssid}"})
+        plan["ap_configs"].append({"name": ap, "ssid": ssid, "mode": "access-point", "note": "offline metadata only; live AP configuration remains guarded"})
+
+    for index, address in enumerate(host_addresses[:laptops], start=1):
+        laptop = f"LAP-{slug}-{index}"
+        ap = ap_names[(index - 1) % len(ap_names)]
+        plan["devices"].append({"name": laptop, "category": "laptop", "model": "Laptop-PT", "ssid": ssid})
+        plan["links"].append({"a": ap, "pa": "Port 0", "b": laptop, "pb": "FastEthernet0", "cable": "wireless", "note": f"wireless association SSID {ssid}"})
+        plan["pc_configs"].append({"name": laptop, "port": "FastEthernet0", "ip": str(address), "mask": _mask(net), "gateway": str(gw), "dns": dns_ip})
+
+    for index, address in enumerate(server_addresses, start=1):
+        server = f"SRV-{slug}-{index}"
+        plan["devices"].append({"name": server, "category": "server", "model": "Server-PT"})
+        plan["links"].append({"a": switch, "pa": f"FastEthernet0/{aps + index + 1}", "b": server, "pb": "FastEthernet0", "cable": "straight", "note": "wired service host"})
+        plan["pc_configs"].append({"name": server, "port": "FastEthernet0", "ip": str(address), "mask": _mask(net), "gateway": str(gw), "dns": dns_ip or str(address)})
+        services: dict[str, Any] = {"http": True}
+        if index == 1:
+            services["dns"] = {"enabled": True, "records": [{"name": f"wifi.{name.lower()}.local", "ip": str(address)}]}
+        plan["server_configs"].append({"name": server, **services})
 
     return _maybe_layout(plan, style=layout_style, no_layout=no_layout)
 
@@ -465,6 +556,19 @@ def main(argv: list[str] | None = None) -> int:
     lan_p.add_argument("--no-layout", action="store_true")
     lan_p.add_argument("--output", type=Path)
 
+    wifi_p = sub.add_parser("wireless-lan", help="generate a router-switch-AP-laptop wireless LAN")
+    wifi_p.add_argument("--name", default="WIFI")
+    wifi_p.add_argument("--aps", type=int, default=1)
+    wifi_p.add_argument("--laptops", type=int, default=3)
+    wifi_p.add_argument("--servers", type=int, default=1)
+    wifi_p.add_argument("--network", default="192.168.80.0/24")
+    wifi_p.add_argument("--gateway")
+    wifi_p.add_argument("--dns")
+    wifi_p.add_argument("--ssid", default="PT730-LAB")
+    wifi_p.add_argument("--layout-style", choices=STYLES, default="lan")
+    wifi_p.add_argument("--no-layout", action="store_true")
+    wifi_p.add_argument("--output", type=Path)
+
     ring_p = sub.add_parser("router-ring", help="generate a serial router ring with RIPv2")
     ring_p.add_argument("--name", default="RING")
     ring_p.add_argument("--routers", type=int, default=4)
@@ -519,6 +623,24 @@ def main(argv: list[str] | None = None) -> int:
                     network=args.network,
                     gateway=args.gateway,
                     dns=args.dns,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "wireless-lan":
+            _emit(
+                wireless_lan(
+                    name=args.name,
+                    aps=args.aps,
+                    laptops=args.laptops,
+                    servers=args.servers,
+                    network=args.network,
+                    gateway=args.gateway,
+                    dns=args.dns,
+                    ssid=args.ssid,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

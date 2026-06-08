@@ -63,8 +63,10 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("lan-star", data["commands"])
         self.assertIn("router-ring", data["commands"])
         self.assertIn("wan-ring", data["commands"])
+        self.assertIn("wireless-lan", data["commands"])
         self.assertIn("campus", data["commands"])
         self.assertIn("lan-star", data["templates"])
+        self.assertIn("wireless-lan", data["templates"])
         self.assertIn("router-ring", data["templates"])
         self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
@@ -92,6 +94,61 @@ class TemplateCliTest(unittest.TestCase):
         self.assertEqual(len(plan["pc_configs"]), 4)
         self.assertEqual(plan["pc_configs"][0]["gateway"], "192.168.10.1")
         self.assertEqual(plan["server_configs"][0]["http"], True)
+        self.assert_safe_and_renderable(plan)
+
+    def test_wireless_lan_generates_safe_aps_laptops_services_and_layout(self) -> None:
+        result = self.run_template(
+            "wireless-lan",
+            "--name",
+            "WIFI",
+            "--aps",
+            "2",
+            "--laptops",
+            "4",
+            "--servers",
+            "1",
+            "--network",
+            "192.168.80.0/24",
+            "--gateway",
+            "192.168.80.1",
+            "--ssid",
+            "CLASSROOM",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertEqual(
+            names,
+            {
+                "R-WIFI",
+                "SW-WIFI",
+                "AP-WIFI-1",
+                "AP-WIFI-2",
+                "LAP-WIFI-1",
+                "LAP-WIFI-2",
+                "LAP-WIFI-3",
+                "LAP-WIFI-4",
+                "SRV-WIFI-1",
+            },
+        )
+        self.assertTrue(all("x" in device and "y" in device for device in plan["devices"]))
+        models = {device["model"] for device in plan["devices"]}
+        self.assertEqual(models, {"2911", "2960-24TT", "AccessPoint-PT", "Laptop-PT", "Server-PT"})
+        self.assertEqual(len(plan["links"]), 8)
+        self.assertEqual(len([link for link in plan["links"] if link.get("cable") == "wireless"]), 4)
+        self.assertEqual(len(plan["pc_configs"]), 5)
+        self.assertEqual(len(plan["ap_configs"]), 2)
+        self.assertEqual(plan["ap_configs"][0]["ssid"], "CLASSROOM")
+        self.assertEqual(plan["pc_configs"][0]["gateway"], "192.168.80.1")
+        self.assertEqual(plan["pc_configs"][0]["dns"], "192.168.80.6")
+        self.assertEqual(plan["server_configs"][0]["http"], True)
+        self.assertIn("dns", plan["server_configs"][0])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template wireless-lan")
+        self.assertEqual(plan["metadata"]["ssid"], "CLASSROOM")
+        encoded = json.dumps(plan)
+        self.assertNotIn("WirelessEndDevice-PT", encoded)
+        self.assertNotIn("SMARTPHONE-PT", encoded)
+        self.assertNotIn("WRT300N", encoded)
         self.assert_safe_and_renderable(plan)
 
     def test_router_ring_generates_serial_modules_links_and_rip_configs(self) -> None:

@@ -45,6 +45,7 @@ Use the offline tools first:
 
 ```bash
 pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24
+pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing rip
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing rip
@@ -77,9 +78,10 @@ JavaScript safety checks are exposed offline through MCP, along with
 `pt730_schema` for retrieving template, IP-plan, compose, config-plan, pipeline,
 and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
-Built-in template MCP tools expose LAN-star, router-ring, WAN-ring, and campus
-template options including DNS, layout, no-layout, compact, L3, routing, and
-naming controls from the underlying `pt730-template` CLI.
+Built-in template MCP tools expose LAN-star, wireless-LAN, router-ring,
+WAN-ring, and campus template options including DNS, SSID, layout, no-layout,
+compact, L3, routing, and naming controls from the underlying `pt730-template`
+CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls

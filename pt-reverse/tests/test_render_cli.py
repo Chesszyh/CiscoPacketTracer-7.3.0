@@ -120,6 +120,49 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("fillOpacity=18", result.stdout)
         self.assertIn("dashed=1", result.stdout)
 
+    def test_wireless_ap_rendering_and_summary_metadata(self) -> None:
+        plan = {
+            "devices": [
+                {"name": "SW-WIFI", "category": "switch", "model": "2960-24TT", "x": 100, "y": 100},
+                {"name": "AP-WIFI-1", "category": "accesspoint", "model": "AccessPoint-PT", "x": 260, "y": 100},
+                {"name": "LAP-WIFI-1", "category": "laptop", "model": "Laptop-PT", "x": 260, "y": 240},
+            ],
+            "links": [
+                {"a": "SW-WIFI", "pa": "FastEthernet0/2", "b": "AP-WIFI-1", "pb": "Port 0", "cable": "straight"},
+                {"a": "AP-WIFI-1", "pa": "Port 0", "b": "LAP-WIFI-1", "pb": "FastEthernet0", "cable": "wireless", "note": "wireless association SSID PT730-LAB"},
+            ],
+            "pc_configs": [
+                {"name": "LAP-WIFI-1", "ip": "192.168.80.2", "mask": "255.255.255.0", "gateway": "192.168.80.1", "dns": "192.168.80.10"}
+            ],
+            "ap_configs": [{"name": "AP-WIFI-1", "ssid": "PT730-LAB", "mode": "access-point"}],
+        }
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            svg_result = self.run_render("svg", path, "--group-by", "network")
+            drawio_result = self.run_render("drawio", path)
+            markdown_result = self.run_render("markdown", path)
+            summary_result = self.run_render("summary", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(svg_result.returncode, 0, svg_result.stderr)
+        self.assertIn('class="device wireless"', svg_result.stdout)
+        self.assertIn('class="link wireless-link"', svg_result.stdout)
+        self.assertIn("192.168.80.0/24 gw 192.168.80.1", svg_result.stdout)
+        self.assertEqual(drawio_result.returncode, 0, drawio_result.stderr)
+        self.assertIn("dashed=1", drawio_result.stdout)
+        self.assertIn("strokeColor=#0e7490", drawio_result.stdout)
+        self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
+        self.assertIn("## Wireless AP Configs", markdown_result.stdout)
+        self.assertIn("| AP-WIFI-1 | PT730-LAB | access-point |", markdown_result.stdout)
+        self.assertEqual(summary_result.returncode, 0, summary_result.stderr)
+        data = json.loads(summary_result.stdout)
+        self.assertEqual(data["counts"]["ap_configs"], 1)
+        self.assertEqual(data["wireless"]["aps"], 1)
+        self.assertEqual(data["wireless"]["ssids"], ["PT730-LAB"])
+        self.assertEqual(data["wireless"]["links"], 1)
+
     def test_drawio_output_option_writes_file(self) -> None:
         out = ROOT / "tests" / ".render-output.drawio"
         out.unlink(missing_ok=True)

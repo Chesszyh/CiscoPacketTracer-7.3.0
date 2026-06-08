@@ -56,6 +56,9 @@ def render_palette(theme: str) -> dict[str, str]:
             "server_stroke": "#fbbf24",
             "pc_fill": "#312e81",
             "pc_stroke": "#a5b4fc",
+            "wireless_fill": "#164e63",
+            "wireless_stroke": "#67e8f9",
+            "wireless_link": "#22d3ee",
             "device_fill": "#1f2937",
             "device_stroke": "#94a3b8",
             "group_fill": "#1e293b",
@@ -81,6 +84,9 @@ def render_palette(theme: str) -> dict[str, str]:
             "server_stroke": "#b45309",
             "pc_fill": "#e0e7ff",
             "pc_stroke": "#4338ca",
+            "wireless_fill": "#cffafe",
+            "wireless_stroke": "#0891b2",
+            "wireless_link": "#0e7490",
             "device_fill": "#f1f5f9",
             "device_stroke": "#64748b",
             "group_fill": "#fff3d7",
@@ -105,6 +111,9 @@ def render_palette(theme: str) -> dict[str, str]:
         "server_stroke": "#b45309",
         "pc_fill": "#e0e7ff",
         "pc_stroke": "#4338ca",
+        "wireless_fill": "#cffafe",
+        "wireless_stroke": "#0891b2",
+        "wireless_link": "#0e7490",
         "device_fill": "#f1f5f9",
         "device_stroke": "#64748b",
         "group_fill": "#e2e8f0",
@@ -307,6 +316,8 @@ def svg_device_kind(device: dict[str, Any]) -> str:
         return "switch"
     if "server" in joined:
         return "server"
+    if "accesspoint" in joined or "access point" in joined or name.startswith("ap-"):
+        return "wireless"
     if "pc" in joined or "host" in joined or "laptop" in joined:
         return "pc"
     return "device"
@@ -411,7 +422,7 @@ def visual_groups(plan: dict[str, Any], devices: list[dict[str, Any]], group_by:
             for member in list(members):
                 for neighbor in direct_neighbors.get(member, set()):
                     neighbor_device = next((device for device in devices if pick(device, ("name", "id")) == neighbor), {})
-                    if svg_device_kind(neighbor_device) in {"switch", "router"}:
+                    if svg_device_kind(neighbor_device) in {"switch", "router", "wireless"}:
                         members.add(neighbor)
             if members:
                 gateway = group.get("gateway")
@@ -436,7 +447,7 @@ def visual_groups(plan: dict[str, Any], devices: list[dict[str, Any]], group_by:
                 if match:
                     groups.setdefault(f"Site {match.group(1)}", set()).add(name)
     elif mode == "category":
-        labels = {"router": "Routers", "switch": "Switches", "server": "Servers", "pc": "Hosts", "device": "Other Devices"}
+        labels = {"router": "Routers", "switch": "Switches", "server": "Servers", "pc": "Hosts", "wireless": "Wireless", "device": "Other Devices"}
         for device in devices:
             name = pick(device, ("name", "id"))
             groups.setdefault(labels.get(svg_device_kind(device), "Other Devices"), set()).add(name)
@@ -489,6 +500,12 @@ def svg_link_label(link: dict[str, Any]) -> str:
     return " / ".join(part for part in parts if part)
 
 
+def is_wireless_link(link: dict[str, Any]) -> bool:
+    cable = pick(link, ("cable", "type", "link_type", "cable_type")).lower()
+    note = pick(link, ("note", "description")).lower()
+    return "wireless" in cable or "wireless" in note
+
+
 def svg_device_group(device: dict[str, Any], x: float, y: float, *, options: RenderOptions) -> list[str]:
     kind = svg_device_kind(device)
     name = pick(device, ("name", "id"))
@@ -508,6 +525,10 @@ def svg_device_group(device: dict[str, Any], x: float, y: float, *, options: Ren
     elif kind == "pc":
         lines.append('    <rect x="-54" y="-36" width="108" height="62" rx="6" />')
         lines.append('    <path d="M -24 34 H 24 M -10 26 V 34 M 10 26 V 34" />')
+    elif kind == "wireless":
+        lines.append('    <rect x="-54" y="-34" width="108" height="68" rx="8" />')
+        lines.append('    <circle cx="0" cy="2" r="5" />')
+        lines.append('    <path d="M -30 -2 Q 0 -30 30 -2 M -19 10 Q 0 -9 19 10" />')
     else:
         lines.append('    <rect x="-58" y="-32" width="116" height="64" rx="8" />')
     lines.append(f'    <text class="device-name" x="0" y="52">{svg_text(name)}</text>')
@@ -540,13 +561,16 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
         f"    .device-model {{ fill: {palette['muted']}; font-size: 10px; }}",
         "    .device rect, .device ellipse { stroke-width: 2; }",
         "    .device path { fill: none; stroke-width: 2; stroke-linecap: round; }",
+        "    .device circle { stroke-width: 2; }",
         f"    .group-box {{ fill: {palette['group_fill']}; fill-opacity: 0.22; stroke: {palette['group_stroke']}; stroke-width: 1.4; stroke-dasharray: 8 6; }}",
         f"    .group-label {{ fill: {palette['muted']}; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }}",
         f"    .router ellipse {{ fill: {palette['router_fill']}; stroke: {palette['router_stroke']}; }} .router path {{ stroke: {palette['router_stroke']}; }}",
         f"    .switch rect {{ fill: {palette['switch_fill']}; stroke: {palette['switch_stroke']}; }} .switch path {{ stroke: {palette['switch_stroke']}; }}",
         f"    .server rect {{ fill: {palette['server_fill']}; stroke: {palette['server_stroke']}; }} .server path {{ stroke: {palette['server_stroke']}; }}",
         f"    .pc rect {{ fill: {palette['pc_fill']}; stroke: {palette['pc_stroke']}; }} .pc path {{ stroke: {palette['pc_stroke']}; }}",
-        f"    .device.device rect {{ fill: {palette['device_fill']}; stroke: {palette['device_stroke']}; }}",
+        f"    .wireless rect, .wireless circle {{ fill: {palette['wireless_fill']}; stroke: {palette['wireless_stroke']}; }} .wireless path {{ stroke: {palette['wireless_stroke']}; }}",
+        f"    .wireless-link {{ stroke: {palette['wireless_link']}; stroke-dasharray: 7 7; }}",
+        f"    .device:not(.router):not(.switch):not(.server):not(.pc):not(.wireless) rect {{ fill: {palette['device_fill']}; stroke: {palette['device_stroke']}; }}",
         "  </style>",
     ]
 
@@ -565,7 +589,8 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
             continue
         x1, y1 = positions[a]
         x2, y2 = positions[b]
-        lines.append(f'  <line class="link" x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" />')
+        classes = "link wireless-link" if is_wireless_link(link) else "link"
+        lines.append(f'  <line class="{classes}" x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" />')
         link_label = svg_link_label(link)
         if options.link_labels and link_label:
             mid_x = (x1 + x2) / 2
@@ -640,6 +665,8 @@ def drawio_style(kind: str, *, theme: str) -> tuple[str, float, float]:
         return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['server_fill']};strokeColor={palette['server_stroke']};fontColor={palette['text']};fontStyle=1;", 116.0, 76.0)
     if kind == "pc":
         return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['pc_fill']};strokeColor={palette['pc_stroke']};fontColor={palette['text']};fontStyle=1;", 116.0, 70.0)
+    if kind == "wireless":
+        return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['wireless_fill']};strokeColor={palette['wireless_stroke']};fontColor={palette['text']};fontStyle=1;", 116.0, 70.0)
     return (f"rounded=1;whiteSpace=wrap;html=1;fillColor={palette['device_fill']};strokeColor={palette['device_stroke']};fontColor={palette['text']};fontStyle=1;", 116.0, 64.0)
 
 
@@ -693,7 +720,9 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
         if a not in ids or b not in ids:
             continue
         label_text = svg_link_label(link) if options.link_labels else ""
-        edge_style = f"endArrow=none;html=1;rounded=0;strokeColor={palette['link']};fontColor={palette['label']};labelBackgroundColor={palette['label_back']};"
+        edge_color = palette["wireless_link"] if is_wireless_link(link) else palette["link"]
+        dashed = "dashed=1;" if is_wireless_link(link) else ""
+        edge_style = f"endArrow=none;html=1;rounded=0;{dashed}strokeColor={edge_color};fontColor={palette['label']};labelBackgroundColor={palette['label_back']};"
         lines.append(f'        <mxCell id="e{next_id}" value="{svg_text(label_text)}" style="{svg_text(edge_style)}" edge="1" parent="1" source="{ids[a]}" target="{ids[b]}">')
         lines.append('          <mxGeometry relative="1" as="geometry" />')
         lines.append("        </mxCell>")
@@ -805,6 +834,20 @@ def markdown(plan: dict[str, Any]) -> str:
         lines.extend(markdown_table(["Network", "Gateway", "DNS", "Configured Hosts", "Sample Hosts"], address_rows))
         lines.append("")
 
+    ap_rows = []
+    for config in plan.get("ap_configs", []):
+        if isinstance(config, dict):
+            ap_rows.append([
+                pick(config, ("name", "device", "ap")),
+                pick(config, ("ssid",)),
+                pick(config, ("mode",)),
+                pick(config, ("note", "description")),
+            ])
+    if ap_rows:
+        lines.extend(["## Wireless AP Configs", ""])
+        lines.extend(markdown_table(["Name", "SSID", "Mode", "Note"], ap_rows))
+        lines.append("")
+
     server_rows = []
     for config in plan.get("server_configs", []):
         if isinstance(config, dict):
@@ -893,6 +936,7 @@ def summary(plan: dict[str, Any]) -> str:
             "modules": len(plan.get("modules", [])),
             "links": len(plan.get("links", [])),
             "pc_configs": len(plan.get("pc_configs", [])),
+            "ap_configs": len(plan.get("ap_configs", [])),
             "server_configs": len(plan.get("server_configs", [])),
             "ios_configs": len(plan.get("ios_configs", [])),
         },
@@ -908,6 +952,11 @@ def summary(plan: dict[str, Any]) -> str:
         ],
         "vlan_link_counts": dict(sorted(vlan_counts.items(), key=lambda item: int(item[0]) if item[0].isdigit() else item[0])),
         "noted_links": noted_links,
+        "wireless": {
+            "aps": len(plan.get("ap_configs", [])),
+            "ssids": sorted({pick(config, ("ssid",)) for config in plan.get("ap_configs", []) if isinstance(config, dict) and pick(config, ("ssid",))}),
+            "links": len([link for link in plan.get("links", []) if isinstance(link, dict) and is_wireless_link(link)]),
+        },
         "server_service_counts": {name: len(rows) for name, rows in service_rows.items()},
     }
     return json.dumps(data, ensure_ascii=False, indent=2) + "\n"

@@ -44,6 +44,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
+        self.assertIn("pt730_template_wireless_lan", names)
         self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
         self.assertIn("pt730_catalog", names)
@@ -457,6 +458,26 @@ class McpCliTest(unittest.TestCase):
                     "id": 2,
                     "method": "tools/call",
                     "params": {
+                        "name": "pt730_template_wireless_lan",
+                        "arguments": {
+                            "name": "WIFI",
+                            "aps": 2,
+                            "laptops": 3,
+                            "servers": 1,
+                            "network": "192.168.80.0/24",
+                            "gateway": "192.168.80.1",
+                            "dns": "192.168.80.254",
+                            "ssid": "CLASSROOM",
+                            "layout_style": "lan",
+                            "compact": True,
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
                         "name": "pt730_template_router_ring",
                         "arguments": {
                             "name": "WAN",
@@ -469,7 +490,7 @@ class McpCliTest(unittest.TestCase):
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 3,
+                    "id": 4,
                     "method": "tools/call",
                     "params": {
                         "name": "pt730_template_wan_ring",
@@ -490,29 +511,41 @@ class McpCliTest(unittest.TestCase):
             ]
         )
         lan_result = responses[0]["result"]
-        ring_result = responses[1]["result"]
-        wan_result = responses[2]["result"]
+        wireless_result = responses[1]["result"]
+        ring_result = responses[2]["result"]
+        wan_result = responses[3]["result"]
         self.assertEqual(lan_result["isError"], False)
+        self.assertEqual(wireless_result["isError"], False)
         self.assertEqual(ring_result["isError"], False)
         self.assertEqual(wan_result["isError"], False)
         lan_command = lan_result["structuredContent"]["command"]
+        wireless_command = wireless_result["structuredContent"]["command"]
         ring_command = ring_result["structuredContent"]["command"]
         wan_command = wan_result["structuredContent"]["command"]
         self.assertIn("--compact", lan_command)
         self.assertIn("--dns", lan_command)
         self.assertIn("--layout-style", lan_command)
         self.assertIn("--no-layout", lan_command)
+        self.assertIn("wireless-lan", wireless_command)
+        self.assertIn("--ssid", wireless_command)
+        self.assertIn("CLASSROOM", wireless_command)
+        self.assertIn("--dns", wireless_command)
         self.assertIn("--name", ring_command)
         self.assertIn("--layout-style", ring_command)
         self.assertIn("wan-ring", wan_command)
         self.assertIn("--hosts-per-site", wan_command)
         self.assertIn("--routing", wan_command)
         lan_plan = json.loads(lan_result["structuredContent"]["stdout"])
+        wireless_plan = json.loads(wireless_result["structuredContent"]["stdout"])
         ring_plan = json.loads(ring_result["structuredContent"]["stdout"])
         wan_plan = json.loads(wan_result["structuredContent"]["stdout"])
         self.assertEqual(lan_plan["metadata"]["name"], "AGENT")
         self.assertEqual(lan_plan["pc_configs"][0]["dns"], "192.168.60.254")
         self.assertFalse(any("x" in device or "y" in device for device in lan_plan["devices"]))
+        self.assertEqual(wireless_plan["metadata"]["source"], "pt730-template wireless-lan")
+        self.assertEqual(wireless_plan["metadata"]["ssid"], "CLASSROOM")
+        self.assertEqual(len(wireless_plan["ap_configs"]), 2)
+        self.assertEqual(wireless_plan["pc_configs"][0]["dns"], "192.168.80.254")
         self.assertEqual(ring_plan["metadata"]["name"], "WAN")
         self.assertEqual(len(ring_plan["devices"]), 3)
         self.assertEqual(wan_plan["metadata"]["source"], "pt730-template wan-ring")
