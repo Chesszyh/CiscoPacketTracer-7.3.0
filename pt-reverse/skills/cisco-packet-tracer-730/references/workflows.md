@@ -24,7 +24,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
-The MCP wrapper exposes offline tools by default: capabilities, templates, IP plan, compose, config plan, layout, render, safety, IOS template render, config export, and campus pipeline.
+The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks.
 
 ## Built-In Templates
 

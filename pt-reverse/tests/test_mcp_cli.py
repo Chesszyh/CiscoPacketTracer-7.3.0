@@ -43,8 +43,14 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_pipeline_campus", names)
         self.assertIn("pt730_template_lan_star", names)
+        self.assertIn("pt730_live_apply", names)
+        self.assertIn("pt730_live_query", names)
+        self.assertIn("pt730_live_count", names)
+        self.assertIn("pt730_live_save_as", names)
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
+        live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
+        self.assertIn("allow_live", live_count["inputSchema"]["required"])
 
     def test_tools_call_render_summary_returns_text_and_structured_content(self) -> None:
         responses = self.run_mcp(
@@ -97,6 +103,42 @@ class McpCliTest(unittest.TestCase):
             self.assertEqual(manifest["artifacts"]["drawio"], "topology.drawio")
             self.assertTrue((out_dir / "topology.drawio").exists())
 
+    def test_live_tool_without_allow_live_returns_protocol_error(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_count", "arguments": {}},
+                }
+            ]
+        )
+        self.assertEqual(responses[0]["error"]["code"], -32602)
+        self.assertIn("allow_live", responses[0]["error"]["message"])
+
+    def test_live_apply_dry_run_is_allowed_without_live_bridge(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_apply",
+                        "arguments": {
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "dry_run": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        self.assertIn('"devices": 3', result["content"][0]["text"])
+        self.assertIn("--dry-run", result["structuredContent"]["command"])
+
     def test_unknown_tool_returns_protocol_error(self) -> None:
         responses = self.run_mcp(
             [
@@ -104,7 +146,7 @@ class McpCliTest(unittest.TestCase):
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "tools/call",
-                    "params": {"name": "pt730_live_apply", "arguments": {}},
+                    "params": {"name": "pt730_not_a_tool", "arguments": {}},
                 }
             ]
         )

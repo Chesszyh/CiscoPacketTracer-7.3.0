@@ -21,7 +21,7 @@ Use this skill to operate the local Packet Tracer 7.3.0 automation toolkit throu
    ```bash
    pt-reverse/bin/pt730-mcp
    ```
-   Use `pt-reverse/bin/pt730-mcp --list-tools` to inspect exposed offline tools.
+   Use `pt-reverse/bin/pt730-mcp --list-tools` to inspect tools. Live MCP tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline.
 
 4. Before live apply, run:
    ```bash

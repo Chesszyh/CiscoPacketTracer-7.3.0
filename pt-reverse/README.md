@@ -55,6 +55,10 @@ Run the MCP stdio wrapper when an MCP client should call the offline tools:
 pt-reverse/bin/pt730-mcp
 ```
 
+The MCP wrapper exposes offline tools and guarded live tools.  Any live
+Packet Tracer contact requires `allow_live=true`; `pt730_live_apply` with
+`dry_run=true` remains an offline safety preflight.
+
 The known-good launch path is:
 
 ```bash

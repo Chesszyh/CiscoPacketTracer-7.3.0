@@ -66,6 +66,9 @@ Run the MCP stdio wrapper for agent tool calls:
 pt-reverse/bin/pt730-mcp
 ```
 
+MCP live tools require `allow_live=true`; `pt730_live_apply` with
+`dry_run=true` stays offline for preflight checks.
+
 Read `pt-reverse/SAFETY.md` before running live Packet Tracer operations.
 
 For a detailed Chinese workflow manual, read

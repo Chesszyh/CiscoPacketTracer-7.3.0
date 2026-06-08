@@ -86,11 +86,12 @@ def manifest() -> dict[str, Any]:
         "pipeline_features": ["schema", "campus", "ip_plan_to_compose", "l3_config_planning", "layout", "safety_report", "markdown_render", "summary_render", "svg_render", "drawio_render", "html_render", "config_file_export"],
         "render_features": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course_audit"],
         "template_features": ["schema", "lan_star", "router_ring", "static_host_ips", "server_http", "serial_modules", "ripv2", "auto_layout"],
-        "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "live_tools_not_exposed_by_default"],
+        "mcp_features": ["stdio_jsonrpc", "tools_list", "tools_call", "offline_cli_wrappers", "structured_content", "allow_live_gated_live_tools", "live_apply_dry_run"],
         "query_summary_fields": ["devices", "links", "ip_configs", "ios_devices", "server_services", "config_summaries", "acl_applications"],
         "recommended_workflow": [
             "pt-reverse/bin/pt730-selftest",
             "pt-reverse/bin/pt730-mcp --list-tools",
+            "pt-reverse/bin/pt730-mcp  # stdio MCP server; live tools require allow_live=true",
             "pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24",
             "pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28",
             "pt-reverse/bin/pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec <campus-spec.json> --output-dir <out-dir> --routing rip",

@@ -81,6 +81,11 @@ def run_cli(root: Path, command: list[str]) -> dict[str, Any]:
     }
 
 
+def require_live(args: dict[str, Any], tool_name: str) -> None:
+    if not bool_arg(args, "allow_live", default=False):
+        raise ToolError(f"{tool_name} requires allow_live=true because it can contact live Packet Tracer")
+
+
 def content_result(result: dict[str, Any]) -> dict[str, Any]:
     text = result["stdout"] if result["stdout"] else result["stderr"]
     if not text:
@@ -250,6 +255,47 @@ def tool_pipeline_campus(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_live_count(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    require_live(args, "pt730_live_count")
+    command = [str(bin_path(root, "pt730-app")), "--timeout", str(int_arg(args, "timeout", default=15)), "count"]
+    return run_cli(root, command)
+
+
+def tool_live_query(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    require_live(args, "pt730_live_query")
+    command = [str(bin_path(root, "pt730-topo")), "--timeout", str(int_arg(args, "timeout", default=20)), "query"]
+    if bool_arg(args, "summary", default=True):
+        command.append("--summary")
+    return run_cli(root, command)
+
+
+def tool_live_apply(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    dry_run = bool_arg(args, "dry_run", default=False)
+    if not dry_run:
+        require_live(args, "pt730_live_apply")
+    command = [str(bin_path(root, "pt730-topo")), "--timeout", str(int_arg(args, "timeout", default=20)), "apply", str_arg(args, "plan")]
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    batch_size = int_arg(args, "batch_size", default=0)
+    if batch_size:
+        command.extend(["--batch-size", str(batch_size)])
+    if bool_arg(args, "allow_risky", default=False):
+        command.append("--allow-risky")
+    if bool_arg(args, "strict_safety", default=False):
+        command.append("--strict-safety")
+    if dry_run:
+        command.append("--dry-run")
+    return run_cli(root, command)
+
+
+def tool_live_save_as(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    require_live(args, "pt730_live_save_as")
+    command = [str(bin_path(root, "pt730-app")), "--timeout", str(int_arg(args, "timeout", default=15)), "save-as", str_arg(args, "path")]
+    if bool_arg(args, "direct", default=False):
+        command.append("--direct")
+    return run_cli(root, command)
+
+
 def schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required or [], "additionalProperties": False}
 
@@ -275,6 +321,10 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_layout", "Assign deterministic coordinates to a topology plan.", schema({"plan": string, "style": string, "preserve_existing": boolean, "output": string}, ["plan"]), tool_layout),
         tool("pt730_ios_template_render", "Render high-level IOS template JSON into commands or topology ios_configs.", schema({"spec": string, "topology_json": boolean, "output": string}, ["spec"]), tool_ios_template_render),
         tool("pt730_pipeline_campus", "Run IP plan, compose, config planning, layout, safety, rendering, and config export offline.", schema({"compose_spec": string, "ip_plan": string, "output_dir": string, "routing": {"type": "string", "enum": ["none", "rip", "static"]}, "layout_style": string, "strict_safety": boolean, "course_audit": boolean}, ["compose_spec", "output_dir"]), tool_pipeline_campus),
+        tool("pt730_live_count", "Count devices/links on a live Packet Tracer canvas. Requires allow_live=true.", schema({"allow_live": boolean, "timeout": integer}, ["allow_live"]), tool_live_count),
+        tool("pt730_live_query", "Query the live Packet Tracer canvas. Requires allow_live=true.", schema({"allow_live": boolean, "summary": boolean, "timeout": integer}, ["allow_live"]), tool_live_query),
+        tool("pt730_live_apply", "Apply a topology plan to live Packet Tracer, or run offline dry_run without live access.", schema({"plan": string, "dry_run": boolean, "allow_live": boolean, "replace": boolean, "batch_size": integer, "allow_risky": boolean, "strict_safety": boolean, "timeout": integer}, ["plan"]), tool_live_apply),
+        tool("pt730_live_save_as", "Save the current live Packet Tracer file to a Linux path. Requires allow_live=true.", schema({"allow_live": boolean, "path": string, "direct": boolean, "timeout": integer}, ["allow_live", "path"]), tool_live_save_as),
     ]
 
 
