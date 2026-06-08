@@ -60,6 +60,17 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_live_server_dhcp_config", names)
         self.assertIn("pt730_live_ftp", names)
         self.assertIn("pt730_live_sim", names)
+        self.assertIn("pt730_topo_summarize_query", names)
+        self.assertIn("pt730_topo_export", names)
+        self.assertIn("pt730_models_manifest", names)
+        self.assertIn("pt730_models_queue", names)
+        self.assertIn("pt730_models_probe_plan", names)
+        self.assertIn("pt730_models_validate", names)
+        self.assertIn("pt730_models_validate_batch", names)
+        self.assertIn("pt730_live_app", names)
+        self.assertIn("pt730_live_bridge", names)
+        self.assertIn("pt730_live_launch", names)
+        self.assertIn("pt730_live_recover", names)
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
@@ -411,6 +422,126 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("--cmd", ftp_command)
         self.assertIn("pt730-sim", sim_command[0])
         self.assertIn("simple-pdu", sim_command)
+
+    def test_topo_offline_export_and_models_tools_return_results(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            raw_out = Path(tmpdir) / "query-raw.json"
+            summary_out = Path(tmpdir) / "query-summary.json"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_topo_summarize_query",
+                            "arguments": {
+                                "query_json": "pt-reverse/examples/simple-lan-live-query.json",
+                            },
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_topo_export",
+                            "arguments": {
+                                "from_query": "pt-reverse/examples/simple-lan-live-query.json",
+                                "raw_out": str(raw_out),
+                                "summary_out": str(summary_out),
+                            },
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_models_manifest", "arguments": {}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 4,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_models_probe_plan", "arguments": {"model": "2911"}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 5,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_models_validate", "arguments": {"model": "2911", "dry_run": True}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 6,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_models_validate_batch", "arguments": {"dry_run": True, "limit": 1}},
+                    },
+                ]
+            )
+            self.assertEqual(responses[0]["result"]["isError"], False)
+            self.assertEqual(responses[1]["result"]["isError"], False)
+            self.assertTrue(raw_out.exists())
+            self.assertTrue(summary_out.exists())
+            self.assertIn("safe", responses[2]["result"]["structuredContent"]["stdout"])
+            self.assertIn("2911", responses[3]["result"]["structuredContent"]["stdout"])
+            self.assertIn("dry_run", responses[4]["result"]["structuredContent"]["stdout"])
+            self.assertIn("dry_run", responses[5]["result"]["structuredContent"]["stdout"])
+
+    def test_live_lifecycle_tools_require_allow_live_or_dry_run(self) -> None:
+        blocked = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_app", "arguments": {"action": "save"}},
+                }
+            ]
+        )
+        self.assertEqual(blocked[0]["error"]["code"], -32602)
+        self.assertIn("allow_live", blocked[0]["error"]["message"])
+
+        previews = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_app", "arguments": {"action": "save_as", "path": "out.pkt", "dry_run": True}},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_bridge", "arguments": {"action": "status", "dry_run": True}},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_launch", "arguments": {"action": "status", "dry_run": True}},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {"name": "pt730_live_recover", "arguments": {"wait": 5, "notify": True, "dry_run": True}},
+                },
+            ]
+        )
+        app_command = previews[0]["result"]["structuredContent"]["command"]
+        bridge_command = previews[1]["result"]["structuredContent"]["command"]
+        launch_command = previews[2]["result"]["structuredContent"]["command"]
+        recover_command = previews[3]["result"]["structuredContent"]["command"]
+        self.assertIn("pt730-app", app_command[0])
+        self.assertIn("save-as", app_command)
+        self.assertIn("pt730-bridge", bridge_command[0])
+        self.assertIn("status", bridge_command)
+        self.assertIn("pt730-launch", launch_command[0])
+        self.assertIn("status", launch_command)
+        self.assertIn("pt730-recover", recover_command[0])
+        self.assertIn("--notify", recover_command)
 
     def test_live_apply_dry_run_is_allowed_without_live_bridge(self) -> None:
         responses = self.run_mcp(
