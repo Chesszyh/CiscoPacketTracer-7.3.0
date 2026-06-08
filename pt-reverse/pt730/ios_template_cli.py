@@ -22,6 +22,12 @@ def as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def as_value_list(value: Any) -> list[Any]:
+    if value in (None, ""):
+        return []
+    return value if isinstance(value, list) else [value]
+
+
 def require(value: Any, message: str) -> Any:
     if value in (None, ""):
         raise ValueError(message)
@@ -32,6 +38,20 @@ def vlan_list(value: Any) -> str:
     if isinstance(value, list):
         return ",".join(str(item) for item in value)
     return str(value)
+
+
+def render_switchport_commands(spec: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    mode = str(spec.get("mode", "")).lower()
+    if mode in ("routed", "l3") or spec.get("switchport") is False:
+        commands.append(" no switchport")
+    if mode == "trunk":
+        commands.extend([" switchport mode trunk", f" switchport trunk allowed vlan {vlan_list(spec.get('allowed_vlans', 'all'))}"])
+    elif mode == "access":
+        commands.extend([" switchport mode access", f" switchport access vlan {require(spec.get('vlan'), 'access interface vlan is required')}"])
+    if spec.get("ip"):
+        commands.append(f" ip address {spec['ip']} {require(spec.get('mask'), 'interface mask is required')}")
+    return commands
 
 
 def schema_doc() -> dict[str, Any]:
@@ -45,6 +65,21 @@ def schema_doc() -> dict[str, Any]:
             {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
             {"name": "GigabitEthernet0/2", "mode": "routed", "ip": "10.10.12.1", "mask": "255.255.255.252"},
             {"name": "FastEthernet0/1", "mode": "access", "vlan": 10},
+        ],
+        "spanning_tree": {
+            "mode": "rapid-pvst",
+            "root_primary": [10, 20],
+            "vlan_priorities": [{"vlan": 30, "priority": 4096}],
+            "portfast_default": True,
+            "bpduguard_default": True,
+        },
+        "etherchannels": [
+            {
+                "group": 1,
+                "mode": "active",
+                "interfaces": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
+                "port_channel": {"mode": "trunk", "allowed_vlans": [10, 20], "description": "UPLINK_BUNDLE"},
+            }
         ],
         "rip": {"version": 2, "networks": ["10.0.0.0"], "no_auto_summary": True},
         "ospf": {
@@ -78,6 +113,9 @@ def schema_doc() -> dict[str, Any]:
             "interfaces[].acl_in": "Adds ip access-group <value> in.",
             "interfaces[].acl_out": "Adds ip access-group <value> out.",
             "interfaces[].nat": "inside or outside; adds ip nat inside/outside.",
+            "spanning_tree": "Optional STP mode/root/priority/default edge-port settings.",
+            "spanning_tree.root_primary": "VLAN list for spanning-tree vlan <list> root primary.",
+            "etherchannels": "Array of {group, mode, interfaces, port_channel?} for channel-group and Port-channel config.",
             "rip.networks": "RIPv2 network statements.",
             "ospf.networks": "OSPF network statements; each entry is {network, wildcard, area}.",
             "ospf.passive_interfaces": "Optional passive-interface commands for OSPF.",
@@ -111,6 +149,25 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
             commands.append(f" name {vlan['name']}")
         commands.append("exit")
 
+    spanning_tree = spec.get("spanning_tree")
+    if isinstance(spanning_tree, dict):
+        if spanning_tree.get("mode"):
+            commands.append(f"spanning-tree mode {spanning_tree['mode']}")
+        for key, role in (("root_primary", "primary"), ("root_secondary", "secondary")):
+            value = spanning_tree.get(key)
+            if value not in (None, "", []):
+                commands.append(f"spanning-tree vlan {vlan_list(value)} root {role}")
+        for entry in as_list(spanning_tree.get("vlan_priorities")):
+            if not isinstance(entry, dict):
+                raise ValueError("spanning_tree vlan_priorities entries must be objects")
+            vlan = require(entry.get("vlan", entry.get("vlans")), "spanning_tree vlan priority vlan is required")
+            priority = require(entry.get("priority"), "spanning_tree vlan priority value is required")
+            commands.append(f"spanning-tree vlan {vlan_list(vlan)} priority {priority}")
+        if spanning_tree.get("portfast_default"):
+            commands.append("spanning-tree portfast default")
+        if spanning_tree.get("bpduguard_default"):
+            commands.append("spanning-tree bpduguard default")
+
     for interface in as_list(spec.get("interfaces")):
         if not isinstance(interface, dict):
             raise ValueError("interface entries must be objects")
@@ -118,15 +175,7 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
         commands.append(f"interface {name}")
         if interface.get("description"):
             commands.append(f" description {interface['description']}")
-        mode = str(interface.get("mode", "")).lower()
-        if mode in ("routed", "l3") or interface.get("switchport") is False:
-            commands.append(" no switchport")
-        if mode == "trunk":
-            commands.extend([" switchport mode trunk", f" switchport trunk allowed vlan {vlan_list(interface.get('allowed_vlans', 'all'))}"])
-        elif mode == "access":
-            commands.extend([" switchport mode access", f" switchport access vlan {require(interface.get('vlan'), 'access interface vlan is required')}"])
-        if interface.get("ip"):
-            commands.append(f" ip address {interface['ip']} {require(interface.get('mask'), 'interface mask is required')}")
+        commands.extend(render_switchport_commands(interface))
         acl_in = interface.get("acl_in", interface.get("access_group_in"))
         acl_out = interface.get("acl_out", interface.get("access_group_out"))
         if acl_in:
@@ -139,6 +188,31 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
             commands.append(" shutdown")
         else:
             commands.append(" no shutdown")
+        commands.append("exit")
+
+    for etherchannel in as_list(spec.get("etherchannels")):
+        if not isinstance(etherchannel, dict):
+            raise ValueError("etherchannel entries must be objects")
+        group = require(etherchannel.get("group", etherchannel.get("id")), "etherchannel group is required")
+        channel_mode = str(etherchannel.get("mode", "active"))
+        members = as_value_list(etherchannel.get("interfaces", etherchannel.get("members")))
+        if not members:
+            raise ValueError("etherchannel interfaces are required")
+        for interface_name in members:
+            commands.append(f"interface {interface_name}")
+            commands.append(f" channel-group {group} mode {channel_mode}")
+            commands.append(" no shutdown")
+            commands.append("exit")
+        port_channel = etherchannel.get("port_channel", etherchannel.get("portchannel", {}))
+        if port_channel is None:
+            port_channel = {}
+        if not isinstance(port_channel, dict):
+            raise ValueError("etherchannel port_channel must be an object")
+        commands.append(f"interface {port_channel.get('name', f'Port-channel{group}')}")
+        if port_channel.get("description"):
+            commands.append(f" description {port_channel['description']}")
+        commands.extend(render_switchport_commands(port_channel))
+        commands.append(" no shutdown")
         commands.append("exit")
 
     rip = spec.get("rip")

@@ -57,6 +57,7 @@ pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --ou
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
 pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --l3 --routing ospf --output compose-campus.configured.json
 pt-reverse/bin/pt730-config-plan export-configs compose-campus.configured.json --output-dir compose-campus-configs
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json --topology-json
 pt-reverse/bin/pt730-safety plan pt-reverse/course-design/college-network-topology-pt73-safe.json
 pt-reverse/bin/pt730-layout pt-reverse/course-design/college-network-topology-pt73-safe.json --style campus --preserve-existing --output college-network-topology-pt73-safe.layout.json
 pt-reverse/bin/pt730-render svg pt-reverse/course-design/college-network-topology-pt73-safe.json --output college-network-topology-pt73-safe.svg

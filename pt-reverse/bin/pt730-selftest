@@ -214,13 +214,14 @@ if PT730_MODEL_VALIDATIONS="$tmp/model-validations.json" "$BIN/pt730-safety" pla
   echo "expected validation overlay to reject risky model" >&2
   exit 1
 fi
-printf '%s' '{"device":"R1","hostname":"R1","vlans":[{"id":10}],"interfaces":[{"name":"GigabitEthernet0/0","ip":"10.0.0.1","mask":"255.255.255.0","acl_in":10}],"acls":[{"number":10,"rules":[{"action":"permit","source":"10.0.0.0","wildcard":"0.0.0.255"}]}]}' >"$tmp/ios-template.json"
+printf '%s' '{"device":"R1","hostname":"R1","vlans":[{"id":10}],"spanning_tree":{"mode":"rapid-pvst","root_primary":[10],"portfast_default":true},"etherchannels":[{"group":1,"mode":"active","interfaces":["GigabitEthernet0/1","GigabitEthernet0/2"],"port_channel":{"mode":"trunk","allowed_vlans":[10]}}],"interfaces":[{"name":"GigabitEthernet0/0","ip":"10.0.0.1","mask":"255.255.255.0","acl_in":10}],"acls":[{"number":10,"rules":[{"action":"permit","source":"10.0.0.0","wildcard":"0.0.0.255"}]}]}' >"$tmp/ios-template.json"
 "$BIN/pt730-ios-template" render "$tmp/ios-template.json" >/dev/null
 "$BIN/pt730-ios-template" render "$tmp/ios-template.json" --topology-json >/dev/null
 "$BIN/pt730-ios-template" schema | python3 -m json.tool >/dev/null
+"$BIN/pt730-ios-template" render "$ROOT/pt-reverse/examples/ios-template-switching.json" >/dev/null
 printf '%s' '{"devices":[{"device":"R1","hostname":"R1","rip":{"version":2,"networks":["10.0.0.0"]}},{"device":"SW1","hostname":"SW1","vlans":[{"id":10}]}]}' >"$tmp/ios-template-batch.json"
 "$BIN/pt730-ios-template" render "$tmp/ios-template-batch.json" --topology-json >/dev/null
-printf '%s' '{"devices":[{"name":"R1","model":"2911","command_line":{"prompt":"R1#","output_tail":"interface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip access-group 10 in\nrouter rip\n network 10.0.0.0\n"}}],"links":[]}' >"$tmp/query.json"
+printf '%s' '{"devices":[{"name":"R1","model":"2911","command_line":{"prompt":"R1#","output_tail":"spanning-tree mode rapid-pvst\nspanning-tree vlan 10 root primary\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip access-group 10 in\n channel-group 1 mode active\nrouter rip\n network 10.0.0.0\n"}}],"links":[]}' >"$tmp/query.json"
 "$BIN/pt730-topo" summarize-query "$tmp/query.json" >/dev/null
 "$BIN/pt730-topo" export --from-query "$tmp/query.json" --raw-out "$tmp/query-raw.json" --summary-out "$tmp/query-summary.json" >/dev/null
 "$BIN/pt730-topo" export --from-query "$tmp/query.json" --raw-out "$tmp/query-raw2.json" --summary-out "$tmp/query-summary2.json" --markdown-out "$tmp/query-summary.md" >/dev/null

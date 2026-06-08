@@ -144,7 +144,7 @@ class TopologyCliTest(unittest.TestCase):
                     "ports": [{"name": "GigabitEthernet0/0", "linked": True, "ip": "10.0.0.1", "mask": "255.255.255.0"}],
                     "command_line": {
                         "prompt": "R1#",
-                        "output_tail": "\nshow running-config\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip nat inside\n ip access-group 10 in\n no shutdown\nrouter rip\n version 2\n network 10.0.0.0\nrouter ospf 1\n router-id 10.255.0.1\n passive-interface GigabitEthernet0/0\n network 10.0.0.0 0.0.0.255 area 0\nip route 0.0.0.0 0.0.0.0 10.0.0.254\naccess-list 10 permit 10.0.0.0 0.0.0.255\nip nat inside source list 10 interface GigabitEthernet0/1 overload\n",
+                        "output_tail": "\nshow running-config\nspanning-tree mode rapid-pvst\nspanning-tree vlan 10 root primary\nspanning-tree vlan 20 priority 4096\nspanning-tree portfast default\nspanning-tree bpduguard default\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip nat inside\n ip access-group 10 in\n channel-group 1 mode active\n no shutdown\ninterface Port-channel1\n switchport mode trunk\n switchport trunk allowed vlan 10,20\n no shutdown\nrouter rip\n version 2\n network 10.0.0.0\nrouter ospf 1\n router-id 10.255.0.1\n passive-interface GigabitEthernet0/0\n network 10.0.0.0 0.0.0.255 area 0\nip route 0.0.0.0 0.0.0.0 10.0.0.254\naccess-list 10 permit 10.0.0.0 0.0.0.255\nip nat inside source list 10 interface GigabitEthernet0/1 overload\n",
                     },
                 },
                 {
@@ -187,6 +187,13 @@ class TopologyCliTest(unittest.TestCase):
         self.assertEqual(data["config_summaries"][0]["routing"]["ospf"]["passive_interfaces"], ["GigabitEthernet0/0"])
         self.assertEqual(data["config_summaries"][0]["routing"]["ospf"]["networks"][0]["wildcard"], "0.0.0.255")
         self.assertEqual(data["config_summaries"][0]["routing"]["static_routes"][0]["next_hop"], "10.0.0.254")
+        self.assertEqual(data["config_summaries"][0]["spanning_tree"]["mode"], "rapid-pvst")
+        self.assertEqual(data["config_summaries"][0]["spanning_tree"]["roots"][0]["role"], "primary")
+        self.assertEqual(data["config_summaries"][0]["spanning_tree"]["priorities"][0]["priority"], "4096")
+        self.assertTrue(data["config_summaries"][0]["spanning_tree"]["portfast_default"])
+        self.assertTrue(data["config_summaries"][0]["spanning_tree"]["bpduguard_default"])
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["channel_group"], "1")
+        self.assertEqual(data["config_summaries"][0]["interfaces"]["Port-channel1"]["trunk_allowed_vlans"], "10,20")
         self.assertIn("10", data["config_summaries"][0]["acl_numbers"])
         self.assertEqual(data["config_summaries"][0]["interfaces"]["GigabitEthernet0/0"]["acl_in"], "10")
         self.assertEqual(data["config_summaries"][0]["acl_applications"][0]["direction"], "in")

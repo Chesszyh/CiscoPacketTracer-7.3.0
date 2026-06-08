@@ -1,0 +1,33 @@
+{
+  "device": "SW_CORE",
+  "hostname": "SW_CORE",
+  "vlans": [
+    {"id": 10, "name": "SERVER"},
+    {"id": 20, "name": "OFFICE"},
+    {"id": 30, "name": "TEACHING"}
+  ],
+  "spanning_tree": {
+    "mode": "rapid-pvst",
+    "root_primary": [10, 20],
+    "vlan_priorities": [{"vlan": 30, "priority": 4096}],
+    "portfast_default": true,
+    "bpduguard_default": true
+  },
+  "etherchannels": [
+    {
+      "group": 1,
+      "mode": "active",
+      "interfaces": ["FastEthernet0/23", "FastEthernet0/24"],
+      "port_channel": {
+        "description": "ACCESS_UPLINK_BUNDLE",
+        "mode": "trunk",
+        "allowed_vlans": [10, 20, 30]
+      }
+    }
+  ],
+  "interfaces": [
+    {"name": "FastEthernet0/1", "mode": "access", "vlan": 20, "description": "OFFICE_PC"},
+    {"name": "FastEthernet0/2", "mode": "access", "vlan": 30, "description": "TEACHING_PC"}
+  ],
+  "save": false
+}

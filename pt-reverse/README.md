@@ -38,6 +38,7 @@ pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json
 pt-reverse/bin/pt730-config-plan schema
 pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json
@@ -461,12 +462,14 @@ Promoting to `safe` requires `--save-reopen`.
 
 `pt730-ios-template` turns higher-level JSON into IOS command sequences.  The
 first supported template surface covers VLANs, access/trunk interfaces, routed
-interfaces, interface ACL binding with `acl_in`/`acl_out`, RIPv2, static
-routes, standard/extended ACL lines, and NAT overload.
+interfaces, STP, EtherChannel/Port-channel, interface ACL binding with
+`acl_in`/`acl_out`, RIPv2, OSPF, static routes, standard/extended ACL lines,
+and NAT overload.
 
 ```bash
 pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 ```
 
@@ -481,8 +484,9 @@ that agents can copy before rendering commands.
 `pt730-topo query` now asks Packet Tracer for devices, links, ports, IP fields,
 IOS prompts, terminal output tails, and visible server-service states.  Add
 `--summary` for a compact agent/report-friendly view, including parsed IOS
-configuration hints for interfaces, VLANs, RIP networks, static routes, ACL
-numbers, interface ACL applications, and NAT.  You can also summarize a saved
+configuration hints for interfaces, VLANs, STP, EtherChannel membership, RIP
+networks, OSPF networks, static routes, ACL numbers, interface ACL
+applications, and NAT.  You can also summarize a saved
 query result offline:
 
 ```bash

@@ -1087,6 +1087,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     static_routes: list[dict[str, str]] = []
     rip_networks: list[str] = []
     ospf: dict[str, Any] = {"process_id": "", "router_id": "", "passive_interfaces": [], "networks": []}
+    spanning_tree: dict[str, Any] = {"mode": "", "roots": [], "priorities": [], "portfast_default": False, "bpduguard_default": False}
     acl_numbers: set[str] = set()
     acl_applications: list[dict[str, str]] = []
     nat = {"inside_interfaces": [], "outside_interfaces": [], "overload": False}
@@ -1132,6 +1133,19 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             acl_numbers.add(acl_match.group(1))
         if re.match(r"^ip\s+nat\s+inside\s+source\s+list\s+", line, flags=re.IGNORECASE):
             nat["overload"] = True
+        stp_mode_match = re.match(r"^spanning-tree\s+mode\s+(\S+)", line, flags=re.IGNORECASE)
+        if stp_mode_match:
+            spanning_tree["mode"] = stp_mode_match.group(1)
+        stp_root_match = re.match(r"^spanning-tree\s+vlan\s+(.+?)\s+root\s+(primary|secondary)$", line, flags=re.IGNORECASE)
+        if stp_root_match:
+            spanning_tree["roots"].append({"vlans": stp_root_match.group(1).strip(), "role": stp_root_match.group(2).lower()})
+        stp_priority_match = re.match(r"^spanning-tree\s+vlan\s+(.+?)\s+priority\s+(\S+)", line, flags=re.IGNORECASE)
+        if stp_priority_match:
+            spanning_tree["priorities"].append({"vlans": stp_priority_match.group(1).strip(), "priority": stp_priority_match.group(2)})
+        if re.match(r"^spanning-tree\s+portfast\s+default$", line, flags=re.IGNORECASE):
+            spanning_tree["portfast_default"] = True
+        if re.match(r"^spanning-tree\s+bpduguard\s+default$", line, flags=re.IGNORECASE):
+            spanning_tree["bpduguard_default"] = True
 
         if current_interface:
             info = interfaces.setdefault(current_interface, {})
@@ -1148,6 +1162,10 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             trunk_match = re.match(r"^switchport\s+trunk\s+allowed\s+vlan\s+(.+)", line, flags=re.IGNORECASE)
             if trunk_match:
                 info["trunk_allowed_vlans"] = trunk_match.group(1).strip()
+            channel_match = re.match(r"^channel-group\s+(\S+)\s+mode\s+(\S+)", line, flags=re.IGNORECASE)
+            if channel_match:
+                info["channel_group"] = channel_match.group(1)
+                info["channel_mode"] = channel_match.group(2)
             nat_match = re.match(r"^ip\s+nat\s+(inside|outside)$", line, flags=re.IGNORECASE)
             if nat_match:
                 direction = nat_match.group(1).lower()
@@ -1188,6 +1206,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
         "interfaces": interfaces,
         "vlans": vlans,
         "routing": {"rip_networks": rip_networks, "ospf": ospf, "static_routes": static_routes},
+        "spanning_tree": spanning_tree,
         "acl_numbers": sorted(acl_numbers),
         "acl_applications": acl_applications,
         "nat": nat,
@@ -1329,6 +1348,29 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                 for acl in acl_applications:
                     if isinstance(acl, dict):
                         lines.append(f"- {acl.get('interface', '')} -> ACL {acl.get('acl', '')} {acl.get('direction', '')}")
+            spanning_tree = config.get("spanning_tree", {})
+            if isinstance(spanning_tree, dict) and (
+                spanning_tree.get("mode")
+                or spanning_tree.get("roots")
+                or spanning_tree.get("priorities")
+                or spanning_tree.get("portfast_default")
+                or spanning_tree.get("bpduguard_default")
+            ):
+                lines.append("")
+                lines.append(f"STP mode: {spanning_tree.get('mode', '')}".rstrip())
+                for root in spanning_tree.get("roots", []):
+                    if isinstance(root, dict):
+                        lines.append(f"- VLAN {root.get('vlans', '')} root {root.get('role', '')}")
+                for priority in spanning_tree.get("priorities", []):
+                    if isinstance(priority, dict):
+                        lines.append(f"- VLAN {priority.get('vlans', '')} priority {priority.get('priority', '')}")
+                defaults = []
+                if spanning_tree.get("portfast_default"):
+                    defaults.append("portfast default")
+                if spanning_tree.get("bpduguard_default"):
+                    defaults.append("bpduguard default")
+                if defaults:
+                    lines.append("STP defaults: " + ", ".join(defaults))
             routing = config.get("routing", {})
             if isinstance(routing, dict):
                 rip_networks = routing.get("rip_networks", [])

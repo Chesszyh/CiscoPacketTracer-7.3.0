@@ -45,6 +45,21 @@ class IosTemplateCliTest(unittest.TestCase):
                     {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
                     {"name": "Vlan10", "ip": "192.168.10.1", "mask": "255.255.255.0"},
                 ],
+                "spanning_tree": {
+                    "mode": "rapid-pvst",
+                    "root_primary": [10, 20],
+                    "vlan_priorities": [{"vlan": 30, "priority": 4096}],
+                    "portfast_default": True,
+                    "bpduguard_default": True,
+                },
+                "etherchannels": [
+                    {
+                        "group": 1,
+                        "mode": "active",
+                        "interfaces": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
+                        "port_channel": {"mode": "trunk", "allowed_vlans": [10, 20], "description": "UPLINK_BUNDLE"},
+                    }
+                ],
                 "rip": {"version": 2, "networks": ["10.0.0.0", "192.168.10.0"], "no_auto_summary": True},
                 "ospf": {
                     "process_id": 1,
@@ -73,6 +88,14 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("vlan 10", result.stdout)
         self.assertIn("no switchport", result.stdout)
         self.assertIn("switchport trunk allowed vlan 10,20", result.stdout)
+        self.assertIn("spanning-tree mode rapid-pvst", result.stdout)
+        self.assertIn("spanning-tree vlan 10,20 root primary", result.stdout)
+        self.assertIn("spanning-tree vlan 30 priority 4096", result.stdout)
+        self.assertIn("spanning-tree portfast default", result.stdout)
+        self.assertIn("spanning-tree bpduguard default", result.stdout)
+        self.assertIn("channel-group 1 mode active", result.stdout)
+        self.assertIn("interface Port-channel1", result.stdout)
+        self.assertIn("description UPLINK_BUNDLE", result.stdout)
         self.assertIn("router rip", result.stdout)
         self.assertIn("router ospf 1", result.stdout)
         self.assertIn("router-id 10.255.0.1", result.stdout)
@@ -129,6 +152,8 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("interfaces[].acl_in", fields)
         self.assertIn("interfaces[].mode=routed", fields)
         self.assertIn("ip_routing", fields)
+        self.assertIn("spanning_tree", fields)
+        self.assertIn("etherchannels", fields)
         self.assertIn("rip.networks", fields)
         self.assertIn("ospf.networks", fields)
         self.assertIn("ospf.passive_interfaces", fields)

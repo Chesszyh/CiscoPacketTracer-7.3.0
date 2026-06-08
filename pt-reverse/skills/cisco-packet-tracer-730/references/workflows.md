@@ -89,6 +89,17 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
+Example IOS template rendering for switching features:
+
+```bash
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json --topology-json
+```
+
+The switching IOS template supports STP/Rapid PVST root and priority commands,
+portfast/bpduguard defaults, EtherChannel member `channel-group` commands, and
+Port-channel trunk/access/routed interface configuration.
+
 Example device preview:
 
 ```bash
