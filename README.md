@@ -45,9 +45,12 @@ Use the offline tools first:
 
 ```bash
 pt-reverse/bin/pt730-template lan-star --pcs 4 --servers 1 --network 192.168.10.0/24
+pt-reverse/bin/pt730-template dual-stack-lan --pcs 2 --servers 1 --ipv4-network 192.168.60.0/24 --ipv6-prefix 2001:db8:60::/64
 pt-reverse/bin/pt730-template wireless-lan --aps 2 --laptops 4 --servers 1 --ssid PT730-LAB --network 192.168.80.0/24
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --native-vlan 10
 pt-reverse/bin/pt730-template vlan-router-on-stick --vlans 3 --hosts-per-vlan 2 --servers-per-vlan 1 --client-addressing dhcp
+pt-reverse/bin/pt730-template switching-lab --vlans 3 --hosts-per-vlan 2 --access-switches 2
+pt-reverse/bin/pt730-template server-services --clients 3 --services all --domain services.local
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
@@ -69,6 +72,7 @@ pt-reverse/bin/pt730-render html pt-reverse/course-design/college-network-topolo
 pt-reverse/bin/pt730-render markdown pt-reverse/course-design/college-network-topology-pt73-safe.json
 pt-reverse/bin/pt730-render bundle pt-reverse/course-design/college-network-topology-pt73-safe.json --output-dir college-network-render --basename college-network --formats svg,drawio,html,markdown,summary
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
+pt-reverse/bin/pt730-lab plan pt-reverse/course-design/college-network-topology-pt73-safe.json --output-dir college-network-lab --basename college-network --preset report
 ```
 
 Run the MCP stdio wrapper for agent tool calls:
@@ -86,12 +90,14 @@ JavaScript safety checks are exposed offline through MCP, along with
 `pt730_schema` for retrieving template, IP-plan, compose, config-plan, pipeline,
 and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
-Built-in template MCP tools expose LAN-star, wireless-LAN, router-on-a-stick
-VLAN, edge-security, router-ring, WAN-ring, campus, and redundant-campus
-plus enterprise-edge template options including DNS, SSID, 802.1Q, NAT/ACL,
-DMZ, HSRP/STP, DHCP relay, branch WAN, ISP/Internet, RIP/OSPF/static WAN and
-campus L3 routing, layout, no-layout, compact, router DHCP pools, DHCP client
-hosts, and naming controls from the underlying `pt730-template` CLI.
+Built-in template MCP tools expose LAN-star, dual-stack-LAN, wireless-LAN,
+router-on-a-stick VLAN, switching-lab, server-services, edge-security,
+router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template
+options including DNS, IPv6 metadata, SSID, 802.1Q, STP, EtherChannel,
+Server-PT services, NAT/ACL, DMZ, HSRP/STP, DHCP relay, branch WAN,
+ISP/Internet, RIP/OSPF/static WAN and campus L3 routing, layout, no-layout,
+compact, router DHCP pools, DHCP client hosts, and naming controls from the
+underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls
@@ -108,6 +114,8 @@ Read `pt-reverse/SAFETY.md` before running live Packet Tracer operations.
 
 For a detailed Chinese workflow manual, read
 [`pt-reverse/使用手册.md`](pt-reverse/使用手册.md).
+For the current completion summary and known remaining boundaries, read
+[`pt-reverse/项目收尾总结.md`](pt-reverse/项目收尾总结.md).
 
 ## Legal Note
 
