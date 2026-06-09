@@ -458,9 +458,9 @@ For cleaner large diagrams, add `--theme light|dark|paper`, `--title <title>`,
 `--group-by auto|network|vlan|site|category` to SVG/draw.io/HTML renders;
 Mermaid supports `--no-link-labels`.
 Plans may also include top-level `annotations` entries with `text`, optional
-`title`, `kind`, `target`, `x`/`y`, `width`, and `height`; SVG/draw.io/HTML
-render them as callouts, while Markdown and summary JSON include an annotation
-table for report review.
+`title`, `kind`, `target`, `x`/`y`, `width`, and `height`; Mermaid,
+SVG/draw.io, and HTML render them as callouts, while Markdown and summary JSON
+include an annotation table for report review.
 Use `--preset report` on SVG/draw.io/HTML, `diagram-audit`, `bundle`, or
 `pt730-lab plan` when a report-ready default is preferred over hand-picking each
 visual option.

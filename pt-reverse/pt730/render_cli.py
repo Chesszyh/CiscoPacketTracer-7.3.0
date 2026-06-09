@@ -927,9 +927,31 @@ def mermaid(plan: dict[str, Any], *, direction: str, link_labels: bool = True) -
             lines.append(f'  {node_id(a)} ---|"{label(link_label)}"| {node_id(b)}')
         else:
             lines.append(f"  {node_id(a)} --- {node_id(b)}")
+        seen_ids.add(node_id(a))
+        seen_ids.add(node_id(b))
+
+    annotation_classes: list[str] = []
+    for index, annotation in enumerate(annotation_items(plan)):
+        base_id = node_id(f"annotation_{annotation['id']}")
+        annotation_id = base_id
+        suffix = 2
+        while annotation_id in seen_ids:
+            annotation_id = f"{base_id}_{suffix}"
+            suffix += 1
+        seen_ids.add(annotation_id)
+        detail = "\\n".join(part for part in (annotation.get("title"), annotation.get("text")) if part)
+        lines.append(f'  {annotation_id}["{label(detail or annotation["id"])}"]')
+        class_name = f"annotation_{index + 1}"
+        lines.append(f"  class {annotation_id} {class_name}")
+        target = annotation.get("target")
+        if target:
+            lines.append(f"  {node_id(str(target))} -.-> {annotation_id}")
+        fill, stroke = annotation_colors(annotation, render_palette("light"))
+        annotation_classes.append(f"  classDef {class_name} fill:{fill},stroke:{stroke},color:#0f172a,stroke-width:1px;")
 
     if len(lines) == 1:
         lines.append("  empty[\"empty topology\"]")
+    lines.extend(annotation_classes)
     return "\n".join(lines) + "\n"
 
 

@@ -306,8 +306,8 @@ components, oversized canvases, and dense label/grouping advice. Include
 representative live/manual validation steps for pings, IOS show commands, and
 Server-PT services. Template specs use snake_case `template_options`; both
 paths can set render `formats`, `theme`, title, legend, labels, and `group_by`.
-Topology plans can also include top-level `annotations` callouts; SVG/draw.io
-and HTML render them visually, while Markdown/summary outputs keep them as
+Topology plans can also include top-level `annotations` callouts; Mermaid,
+SVG/draw.io, and HTML render them visually, while Markdown/summary outputs keep them as
 reportable metadata.
 Use `--preset report` or `render.preset: report` for report-ready paper theme,
 auto grouping, legend, hidden link labels, and default `diagram-audit`,

@@ -177,6 +177,7 @@ class RenderCliTest(unittest.TestCase):
             json.dump(plan, f)
             path = f.name
         try:
+            mermaid_result = self.run_render("mermaid", path)
             svg_result = self.run_render("svg", path)
             drawio_result = self.run_render("drawio", path)
             markdown_result = self.run_render("markdown", path)
@@ -184,6 +185,11 @@ class RenderCliTest(unittest.TestCase):
             audit_result = self.run_render("diagram-audit", path)
         finally:
             Path(path).unlink(missing_ok=True)
+        self.assertEqual(mermaid_result.returncode, 0, mermaid_result.stderr)
+        self.assertIn("annotation_callout_core", mermaid_result.stdout)
+        self.assertIn("Core Gateway", mermaid_result.stdout)
+        self.assertIn("R1 -.-> annotation_callout_core", mermaid_result.stdout)
+        self.assertIn("classDef annotation_1 fill:#dbeafe,stroke:#2563eb", mermaid_result.stdout)
         self.assertEqual(svg_result.returncode, 0, svg_result.stderr)
         self.assertIn('class="annotation annotation-info"', svg_result.stdout)
         self.assertIn('id="callout-core"', svg_result.stdout)

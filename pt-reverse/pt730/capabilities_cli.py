@@ -98,7 +98,7 @@ def manifest() -> dict[str, Any]:
             "MCP pt730_schema exposes template/ip_plan/compose/config_plan/pipeline/lab/ios_template input schemas",
             "MCP pt730_template_lan_star/pt730_template_dual_stack_lan/pt730_template_wireless_lan/pt730_template_vlan_router_on_stick/pt730_template_switching_lab/pt730_template_server_services/pt730_template_edge_security/pt730_template_router_ring/pt730_template_wan_ring/pt730_template_campus/pt730_template_redundant_campus/pt730_template_enterprise_edge expose full template CLI options including layout_style/no_layout/compact",
             "MCP pt730_ip_plan_campus/pt730_compose_campus/pt730_pipeline_campus expose compact and layout_style workflow controls",
-            "MCP pt730_render exposes visual theme/title/legend/link label/model label/group_by controls and topology annotations for SVG, draw.io, HTML, and Mermaid where supported",
+            "MCP pt730_render exposes visual theme/title/legend/link label/model label/group_by controls and topology annotations for Mermaid, SVG, draw.io, and HTML",
             "MCP pt730_render and pt730_render_bundle expose preset=report for paper theme, auto grouping, legend, hidden link labels, diagram-audit, and verification-plan bundle defaults",
             "MCP pt730_render_bundle creates multi-format SVG/draw.io/HTML/Markdown/summary/course-audit/diagram-audit/verification bundles with a manifest in one offline call",
             "MCP pt730_verification_plan creates JSON or Markdown live/manual validation checklists from topology JSON without contacting Packet Tracer",
