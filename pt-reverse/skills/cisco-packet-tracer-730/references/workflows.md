@@ -143,6 +143,8 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-s
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json --topology-json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json --topology-json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-ipv6-routing.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-ipv6-routing.json --topology-json
 ```
 
 The switching IOS template supports STP/Rapid PVST root and priority commands,
@@ -153,6 +155,9 @@ The FHRP/services template supports DHCP relay `ip helper-address`, HSRP
 communities for dual-core campus labs.
 The BGP edge template supports `router bgp`, neighbor remote-AS/description,
 network statements, and a static default route toward the ISP.
+The IPv6 routing template supports global `ipv6 unicast-routing`, interface
+`ipv6 address`, OSPFv3 interface activation, RIPng interface activation,
+`ipv6 router ospf`, `ipv6 router rip`, and IPv6 static routes.
 
 Example device preview:
 

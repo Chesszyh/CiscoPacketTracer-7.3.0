@@ -189,6 +189,45 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("snmp-server community campusRO RO 10", result.stdout)
         self.assertIn("snmp-server location Core Room", result.stdout)
 
+    def test_render_ipv6_routing_features(self) -> None:
+        result = self.run_template(
+            {
+                "device": "R6",
+                "hostname": "R6",
+                "ipv6_unicast_routing": True,
+                "interfaces": [
+                    {
+                        "name": "GigabitEthernet0/0",
+                        "ipv6": "2001:db8:10::1/64",
+                        "ospfv3": {"process_id": 10, "area": 0},
+                        "ripng": "CAMPUS6",
+                    },
+                    {
+                        "name": "GigabitEthernet0/1",
+                        "ipv6_address": "2001:db8:20::1",
+                        "ipv6_prefix": 64,
+                        "ipv6_enable": True,
+                    },
+                ],
+                "ospfv3": {"process_id": 10, "router_id": "10.255.0.6", "passive_interfaces": ["GigabitEthernet0/1"]},
+                "ripng": {"name": "CAMPUS6", "redistribute": ["connected"]},
+                "ipv6_static_routes": [{"prefix": "2001:db8:ffff::/64", "interface": "GigabitEthernet0/0", "next_hop": "2001:db8:10::fe"}],
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ipv6 unicast-routing", result.stdout)
+        self.assertIn("ipv6 address 2001:db8:10::1/64", result.stdout)
+        self.assertIn("ipv6 address 2001:db8:20::1/64", result.stdout)
+        self.assertIn("ipv6 enable", result.stdout)
+        self.assertIn("ipv6 ospf 10 area 0", result.stdout)
+        self.assertIn("ipv6 rip CAMPUS6 enable", result.stdout)
+        self.assertIn("ipv6 router ospf 10", result.stdout)
+        self.assertIn("router-id 10.255.0.6", result.stdout)
+        self.assertIn("passive-interface GigabitEthernet0/1", result.stdout)
+        self.assertIn("ipv6 router rip CAMPUS6", result.stdout)
+        self.assertIn("redistribute connected", result.stdout)
+        self.assertIn("ipv6 route 2001:db8:ffff::/64 GigabitEthernet0/0 2001:db8:10::fe", result.stdout)
+
     def test_render_as_topology_ios_config_json(self) -> None:
         result = self.run_template({"device": "R1", "hostname": "R1"}, "--topology-json")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -235,6 +274,10 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("interfaces[].acl_in", fields)
         self.assertIn("interfaces[].mode=routed", fields)
         self.assertIn("ip_routing", fields)
+        self.assertIn("ipv6_unicast_routing", fields)
+        self.assertIn("interfaces[].ipv6", fields)
+        self.assertIn("interfaces[].ospfv3", fields)
+        self.assertIn("interfaces[].ripng", fields)
         self.assertIn("spanning_tree", fields)
         self.assertIn("etherchannels", fields)
         self.assertIn("interfaces[].helper_addresses", fields)
@@ -244,7 +287,10 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("eigrp.passive_interfaces", fields)
         self.assertIn("ospf.networks", fields)
         self.assertIn("ospf.passive_interfaces", fields)
+        self.assertIn("ospfv3.process_id", fields)
+        self.assertIn("ripng.name", fields)
         self.assertIn("static_routes", fields)
+        self.assertIn("ipv6_static_routes", fields)
         self.assertIn("dhcp.pools", fields)
         self.assertIn("ntp.servers", fields)
         self.assertIn("logging.hosts", fields)

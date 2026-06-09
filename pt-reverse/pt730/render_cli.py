@@ -536,16 +536,24 @@ def _ios_commands(config: dict[str, Any]) -> list[str]:
 def _ios_show_commands(commands: list[str]) -> list[str]:
     lowered = "\n".join(commands).lower()
     show = ["show ip interface brief", "show running-config | section hostname"]
+    if "ipv6 unicast-routing" in lowered or re.search(r"(?m)^\s*ipv6\s+(address|enable)\b", lowered):
+        show.append("show ipv6 interface brief")
     if "router ospf" in lowered:
         show.extend(["show ip ospf neighbor", "show ip route ospf", "show ip protocols"])
+    if "ipv6 router ospf" in lowered or re.search(r"(?m)^\s*ipv6\s+ospf\s+\S+\s+area\s+", lowered):
+        show.extend(["show ipv6 ospf neighbor", "show ipv6 route ospf"])
     if "router eigrp" in lowered:
         show.extend(["show ip eigrp neighbors", "show ip route eigrp", "show ip protocols"])
     if "router bgp" in lowered:
         show.extend(["show ip bgp summary", "show ip route bgp", "show ip protocols"])
     if "router rip" in lowered:
         show.extend(["show ip route rip", "show ip protocols"])
+    if "ipv6 router rip" in lowered or re.search(r"(?m)^\s*ipv6\s+rip\s+\S+\s+enable", lowered):
+        show.append("show ipv6 route rip")
     if re.search(r"(?m)^\s*ip route\s+", lowered):
         show.append("show ip route static")
+    if re.search(r"(?m)^\s*ipv6 route\s+", lowered):
+        show.append("show ipv6 route static")
     if "standby " in lowered:
         show.append("show standby brief")
     if "spanning-tree" in lowered:

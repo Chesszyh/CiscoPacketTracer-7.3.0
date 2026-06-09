@@ -72,6 +72,46 @@ def render_switchport_commands(spec: dict[str, Any]) -> list[str]:
     return commands
 
 
+def ipv6_address_value(value: Any, prefix: Any = None) -> str:
+    if isinstance(value, dict):
+        address = str(require(value.get("address", value.get("ip", value.get("ipv6"))), "interface ipv6 address is required"))
+        entry_prefix = value.get("prefix", value.get("prefix_length", value.get("ipv6_prefix", prefix)))
+        if value.get("eui64", value.get("eui_64")):
+            return f"{address} eui-64"
+        if "/" not in address and entry_prefix not in (None, ""):
+            return f"{address}/{entry_prefix}"
+        return address
+    address = str(value)
+    if "/" not in address and prefix not in (None, "") and address.lower() != "autoconfig":
+        return f"{address}/{prefix}"
+    return address
+
+
+def render_ipv6_interface_commands(spec: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    if spec.get("ipv6_enable"):
+        commands.append(" ipv6 enable")
+    ipv6_values = spec.get("ipv6_addresses", spec.get("ipv6_address", spec.get("ipv6")))
+    prefix = spec.get("ipv6_prefix", spec.get("prefix", spec.get("prefix_length")))
+    for address in as_value_list(ipv6_values):
+        commands.append(f" ipv6 address {ipv6_address_value(address, prefix)}")
+    ospfv3 = spec.get("ospfv3", spec.get("ospf6"))
+    if isinstance(ospfv3, dict):
+        process_id = require(ospfv3.get("process_id", ospfv3.get("process", ospfv3.get("pid"))), "interface ospfv3 process_id is required")
+        area = ospfv3.get("area", 0)
+        commands.append(f" ipv6 ospf {process_id} area {area}")
+    ripng = spec.get("ripng")
+    if ripng:
+        if isinstance(ripng, dict):
+            process_name = ripng.get("process", ripng.get("process_name", ripng.get("name", "RIPNG")))
+        elif ripng is True:
+            process_name = "RIPNG"
+        else:
+            process_name = ripng
+        commands.append(f" ipv6 rip {process_name} enable")
+    return commands
+
+
 def render_standby_commands(value: Any) -> list[str]:
     commands: list[str] = []
     for entry in as_object_list(value):
@@ -231,14 +271,73 @@ def render_snmp_commands(value: Any) -> list[str]:
     return commands
 
 
+def render_ospfv3_commands(value: Any) -> list[str]:
+    commands: list[str] = []
+    if not isinstance(value, dict):
+        return commands
+    process_id = require(value.get("process_id", value.get("process", value.get("pid"))), "ospfv3 process_id is required")
+    commands.append(f"ipv6 router ospf {process_id}")
+    if value.get("router_id"):
+        commands.append(f" router-id {value['router_id']}")
+    for interface_name in as_list(value.get("passive_interfaces")):
+        commands.append(f" passive-interface {interface_name}")
+    for protocol in as_value_list(value.get("redistribute")):
+        commands.append(f" redistribute {protocol}")
+    commands.append("exit")
+    return commands
+
+
+def render_ripng_commands(value: Any) -> list[str]:
+    commands: list[str] = []
+    if value in (None, "", [], False):
+        return commands
+    if isinstance(value, dict):
+        process_name = value.get("process", value.get("process_name", value.get("name", "RIPNG")))
+        redistribute = value.get("redistribute")
+    elif value is True:
+        process_name = "RIPNG"
+        redistribute = None
+    else:
+        process_name = value
+        redistribute = None
+    commands.append(f"ipv6 router rip {process_name}")
+    for protocol in as_value_list(redistribute):
+        commands.append(f" redistribute {protocol}")
+    commands.append("exit")
+    return commands
+
+
+def render_ipv6_static_routes(value: Any) -> list[str]:
+    commands: list[str] = []
+    for route in as_list(value):
+        if not isinstance(route, dict):
+            raise ValueError("ipv6 static route entries must be objects")
+        prefix = route.get("prefix", route.get("destination"))
+        prefix = require(prefix, "ipv6 static route prefix/destination is required")
+        if "/" not in str(prefix) and route.get("prefix_length", route.get("prefix_len")) not in (None, ""):
+            prefix = f"{prefix}/{route.get('prefix_length', route.get('prefix_len'))}"
+        interface_name = route.get("interface")
+        next_hop = route.get("next_hop", route.get("gateway"))
+        if interface_name and next_hop:
+            target = f"{interface_name} {next_hop}"
+        else:
+            target = require(next_hop or interface_name, "ipv6 static route next_hop/gateway/interface is required")
+        line = f"ipv6 route {prefix} {target}"
+        if route.get("distance", route.get("administrative_distance")) not in (None, ""):
+            line += f" {route.get('distance', route.get('administrative_distance'))}"
+        commands.append(line)
+    return commands
+
+
 def schema_doc() -> dict[str, Any]:
     example = {
         "device": "R1",
         "hostname": "R1",
         "ip_routing": True,
+        "ipv6_unicast_routing": True,
         "vlans": [{"id": 10, "name": "SERVER"}],
         "interfaces": [
-            {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "acl_in": 10, "nat": "inside"},
+            {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "ipv6": "2001:db8:10::1/64", "ospfv3": {"process_id": 10, "area": 0}, "ripng": "CAMPUS6", "acl_in": 10, "nat": "inside"},
             {"name": "GigabitEthernet0/1", "mode": "trunk", "allowed_vlans": [10, 20]},
             {"name": "GigabitEthernet0/2", "mode": "routed", "ip": "10.10.12.1", "mask": "255.255.255.252"},
             {"name": "Vlan10", "ip": "192.168.10.2", "mask": "255.255.255.0", "helper_addresses": ["172.16.1.10"], "hsrp": {"group": 10, "ip": "192.168.10.1", "priority": 110, "preempt": True}},
@@ -267,6 +366,8 @@ def schema_doc() -> dict[str, Any]:
             "passive_interfaces": ["Vlan10"],
             "networks": [{"network": "10.0.0.0", "wildcard": "0.0.0.255", "area": 0}],
         },
+        "ospfv3": {"process_id": 10, "router_id": "10.255.0.1", "passive_interfaces": ["Vlan10"]},
+        "ripng": {"name": "CAMPUS6", "redistribute": ["connected"]},
         "bgp": {
             "asn": 65001,
             "router_id": "10.255.255.1",
@@ -275,6 +376,7 @@ def schema_doc() -> dict[str, Any]:
             "redistribute": ["connected"],
         },
         "static_routes": [{"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "10.0.0.254"}],
+        "ipv6_static_routes": [{"prefix": "2001:db8:ffff::/64", "next_hop": "2001:db8:10::fe"}],
         "dhcp": {
             "excluded_addresses": [{"start": "192.168.10.1", "end": "192.168.10.20"}],
             "pools": [{"name": "VLAN10", "network": "192.168.10.0", "mask": "255.255.255.0", "default_router": "192.168.10.1", "dns_server": ["172.16.1.10"]}],
@@ -297,12 +399,17 @@ def schema_doc() -> dict[str, Any]:
             "device": "Target Packet Tracer IOS device name.",
             "hostname": "Optional IOS hostname command.",
             "ip_routing": "True adds global ip routing for multilayer switches/routers.",
+            "ipv6_unicast_routing": "True adds global ipv6 unicast-routing.",
             "vlans": "Array of {id, name?}.",
             "interfaces": "Array of routed, access, or trunk interface declarations.",
             "interfaces[].mode=access": "Adds switchport mode access and switchport access vlan.",
             "interfaces[].mode=trunk": "Adds switchport mode trunk and switchport trunk allowed vlan.",
             "interfaces[].mode=routed": "Adds no switchport before interface IP configuration.",
             "interfaces[].ip": "Adds ip address; mask is required.",
+            "interfaces[].ipv6": "Adds ipv6 address; accepts 2001:db8::1/64 or address plus ipv6_prefix.",
+            "interfaces[].ipv6_enable": "Adds ipv6 enable.",
+            "interfaces[].ospfv3": "Adds interface ipv6 ospf <process_id> area <area>.",
+            "interfaces[].ripng": "Adds interface ipv6 rip <process/name> enable.",
             "interfaces[].helper_addresses": "Adds one or more ip helper-address DHCP relay commands.",
             "interfaces[].hsrp": "Object or array for standby/HSRP commands; supports group, ip, priority, preempt, timers, track.",
             "interfaces[].acl_in": "Adds ip access-group <value> in.",
@@ -317,12 +424,15 @@ def schema_doc() -> dict[str, Any]:
             "eigrp.passive_interfaces": "Optional passive-interface commands for EIGRP.",
             "ospf.networks": "OSPF network statements; each entry is {network, wildcard, area}.",
             "ospf.passive_interfaces": "Optional passive-interface commands for OSPF.",
+            "ospfv3.process_id": "IPv6 OSPFv3 process; pair with interfaces[].ospfv3 for area activation.",
+            "ripng.name": "IPv6 RIPng process name; pair with interfaces[].ripng to enable interfaces.",
             "bgp.asn": "BGP autonomous system number.",
             "bgp.router_id": "Optional bgp router-id command.",
             "bgp.neighbors": "Array of {ip|address, remote_as, description?, update_source?, next_hop_self?, soft_reconfiguration_inbound?}.",
             "bgp.networks": "BGP network statements; entries may be strings or {network, mask?}.",
             "bgp.redistribute": "Optional list of protocols for redistribute <protocol> under router bgp.",
             "static_routes": "Array of {destination, mask, next_hop|interface}.",
+            "ipv6_static_routes": "Array of {prefix|destination, next_hop|gateway|interface}.",
             "dhcp.excluded_addresses": "IOS DHCP excluded-address entries; string or {start,end}.",
             "dhcp.pools": "IOS DHCP pools with name, network, mask, default_router/gateway, dns_server/dns, domain_name/domain, lease.",
             "ntp.servers": "NTP server list; entries may be strings or {address, prefer, key, source, version}.",
@@ -345,6 +455,8 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
         commands.append(f"hostname {hostname}")
     if spec.get("ip_routing"):
         commands.append("ip routing")
+    if spec.get("ipv6_unicast_routing"):
+        commands.append("ipv6 unicast-routing")
     if spec.get("no_ip_domain_lookup"):
         commands.append("no ip domain-lookup")
 
@@ -384,6 +496,7 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
         if interface.get("description"):
             commands.append(f" description {interface['description']}")
         commands.extend(render_switchport_commands(interface))
+        commands.extend(render_ipv6_interface_commands(interface))
         commands.extend(render_l3_interface_feature_commands(interface))
         acl_in = interface.get("acl_in", interface.get("access_group_in"))
         acl_out = interface.get("acl_out", interface.get("access_group_out"))
@@ -478,6 +591,9 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
             )
         commands.append("exit")
 
+    commands.extend(render_ospfv3_commands(spec.get("ospfv3", spec.get("ospf6"))))
+    commands.extend(render_ripng_commands(spec.get("ripng")))
+
     bgp = spec.get("bgp")
     if isinstance(bgp, dict):
         asn = bgp.get("asn", bgp.get("as", bgp.get("local_as")))
@@ -520,6 +636,7 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
             f"{require(route.get('mask'), 'static route mask is required')} "
             f"{require(route.get('next_hop', route.get('interface')), 'static route next_hop/interface is required')}"
         )
+    commands.extend(render_ipv6_static_routes(spec.get("ipv6_static_routes")))
 
     for acl in as_list(spec.get("acls")):
         if not isinstance(acl, dict):

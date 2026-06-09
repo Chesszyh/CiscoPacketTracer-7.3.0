@@ -1,0 +1,43 @@
+{
+  "device": "R6",
+  "hostname": "R6",
+  "ipv6_unicast_routing": true,
+  "interfaces": [
+    {
+      "name": "GigabitEthernet0/0",
+      "description": "DUAL_STACK_LAN",
+      "ip": "192.168.60.1",
+      "mask": "255.255.255.0",
+      "ipv6": "2001:db8:60::1/64",
+      "ospfv3": {
+        "process_id": 10,
+        "area": 0
+      },
+      "ripng": "CAMPUS6"
+    },
+    {
+      "name": "GigabitEthernet0/1",
+      "description": "UPSTREAM_IPV6",
+      "ipv6_address": "2001:db8:61::1",
+      "ipv6_prefix": 64,
+      "ipv6_enable": true
+    }
+  ],
+  "ospfv3": {
+    "process_id": 10,
+    "router_id": "10.255.0.6",
+    "passive_interfaces": ["GigabitEthernet0/1"]
+  },
+  "ripng": {
+    "name": "CAMPUS6",
+    "redistribute": ["connected"]
+  },
+  "ipv6_static_routes": [
+    {
+      "prefix": "2001:db8:ffff::/64",
+      "interface": "GigabitEthernet0/1",
+      "next_hop": "2001:db8:61::fe"
+    }
+  ],
+  "save": false
+}

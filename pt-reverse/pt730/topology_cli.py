@@ -244,7 +244,7 @@ def _physical_interface_base(name: str) -> str:
 
 
 def _interface_needs_no_shutdown(commands: list[str]) -> bool:
-    return any(command.lower().startswith(("ip address ", "switchport ")) for command in commands)
+    return any(command.lower().startswith(("ip address ", "ipv6 address ", "ipv6 enable", "ipv6 ospf ", "ipv6 rip ", "switchport ")) for command in commands)
 
 
 def _has_command(commands: list[str], command: str) -> bool:
@@ -1138,9 +1138,13 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     interfaces: dict[str, dict[str, Any]] = {}
     vlans: dict[str, dict[str, str]] = {}
     static_routes: list[dict[str, str]] = []
+    ipv6_static_routes: list[dict[str, str]] = []
+    ipv6_unicast_routing = False
     rip_networks: list[str] = []
     eigrp: dict[str, Any] = {"asn": "", "passive_interfaces": [], "networks": []}
     ospf: dict[str, Any] = {"process_id": "", "router_id": "", "passive_interfaces": [], "networks": []}
+    ospfv3: dict[str, Any] = {"process_id": "", "router_id": "", "passive_interfaces": [], "redistribute": []}
+    ripng: dict[str, Any] = {"process_name": "", "redistribute": []}
     bgp: dict[str, Any] = {"asn": "", "router_id": "", "log_neighbor_changes": False, "neighbors": {}, "networks": [], "redistribute": []}
     spanning_tree: dict[str, Any] = {"mode": "", "roots": [], "priorities": [], "portfast_default": False, "bpduguard_default": False}
     dhcp: dict[str, Any] = {"excluded_addresses": [], "pools": {}}
@@ -1165,6 +1169,13 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_router = None
             current_dhcp_pool = None
             continue
+        if re.match(r"^ipv6\s+unicast-routing$", line, flags=re.IGNORECASE):
+            ipv6_unicast_routing = True
+            current_interface = None
+            current_vlan = None
+            current_router = None
+            current_dhcp_pool = None
+            continue
         interface_match = re.match(r"^interface\s+(.+)$", line, flags=re.IGNORECASE)
         if interface_match:
             current_interface = interface_match.group(1).strip()
@@ -1180,6 +1191,18 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_router = None
             current_dhcp_pool = None
             vlans.setdefault(current_vlan, {})
+            continue
+        ipv6_router_match = re.match(r"^ipv6\s+router\s+(ospf|rip)\s+(\S+)", line, flags=re.IGNORECASE)
+        if ipv6_router_match:
+            protocol = ipv6_router_match.group(1).lower()
+            current_router = "ospfv3" if protocol == "ospf" else "ripng"
+            if current_router == "ospfv3":
+                ospfv3["process_id"] = ipv6_router_match.group(2)
+            else:
+                ripng["process_name"] = ipv6_router_match.group(2)
+            current_interface = None
+            current_vlan = None
+            current_dhcp_pool = None
             continue
         router_match = re.match(r"^router\s+(\S+)(?:\s+(\S+))?", line, flags=re.IGNORECASE)
         if router_match:
@@ -1209,6 +1232,28 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_router = None
             current_dhcp_pool = None
             static_routes.append({"destination": route_match.group(1), "mask": route_match.group(2), "next_hop": route_match.group(3)})
+            continue
+        ipv6_route_match = re.match(r"^ipv6\s+route\s+(.+)$", line, flags=re.IGNORECASE)
+        if ipv6_route_match:
+            current_interface = None
+            current_vlan = None
+            current_router = None
+            current_dhcp_pool = None
+            parts = ipv6_route_match.group(1).split()
+            if len(parts) < 2:
+                continue
+            entry = {"prefix": parts[0]}
+            first_target = parts[1]
+            if len(parts) >= 3 and first_target.startswith(PHYSICAL_INTERFACE_PREFIXES + VIRTUAL_INTERFACE_PREFIXES):
+                entry["interface"] = first_target
+                entry["next_hop"] = parts[2]
+                if len(parts) >= 4:
+                    entry["distance"] = parts[3]
+            else:
+                entry["next_hop"] = first_target
+                if len(parts) >= 3:
+                    entry["distance"] = parts[2]
+            ipv6_static_routes.append(entry)
             continue
         excluded_match = re.match(r"^ip\s+dhcp\s+excluded-address\s+(\S+)(?:\s+(\S+))?", line, flags=re.IGNORECASE)
         if excluded_match:
@@ -1300,6 +1345,17 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             if ip_match:
                 info["ip"] = ip_match.group(1)
                 info["mask"] = ip_match.group(2)
+            ipv6_match = re.match(r"^ipv6\s+address\s+(.+)$", line, flags=re.IGNORECASE)
+            if ipv6_match:
+                info.setdefault("ipv6_addresses", []).append(ipv6_match.group(1).strip())
+            if re.match(r"^ipv6\s+enable$", line, flags=re.IGNORECASE):
+                info["ipv6_enable"] = True
+            ospfv3_match = re.match(r"^ipv6\s+ospf\s+(\S+)\s+area\s+(\S+)", line, flags=re.IGNORECASE)
+            if ospfv3_match:
+                info.setdefault("ospfv3", []).append({"process_id": ospfv3_match.group(1), "area": ospfv3_match.group(2)})
+            ripng_match = re.match(r"^ipv6\s+rip\s+(\S+)\s+enable$", line, flags=re.IGNORECASE)
+            if ripng_match:
+                info.setdefault("ripng", []).append({"process_name": ripng_match.group(1)})
             mode_match = re.match(r"^switchport\s+mode\s+(\S+)", line, flags=re.IGNORECASE)
             if mode_match:
                 info["switchport_mode"] = mode_match.group(1)
@@ -1418,6 +1474,20 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             redistribute_match = re.match(r"^redistribute\s+(.+)", line, flags=re.IGNORECASE)
             if redistribute_match:
                 bgp["redistribute"].append(redistribute_match.group(1).strip())
+        elif current_router == "ospfv3":
+            router_id_match = re.match(r"^router-id\s+(\S+)", line, flags=re.IGNORECASE)
+            if router_id_match:
+                ospfv3["router_id"] = router_id_match.group(1)
+            passive_match = re.match(r"^passive-interface\s+(.+)", line, flags=re.IGNORECASE)
+            if passive_match:
+                ospfv3["passive_interfaces"].append(passive_match.group(1).strip())
+            redistribute_match = re.match(r"^redistribute\s+(.+)", line, flags=re.IGNORECASE)
+            if redistribute_match:
+                ospfv3["redistribute"].append(redistribute_match.group(1).strip())
+        elif current_router == "ripng":
+            redistribute_match = re.match(r"^redistribute\s+(.+)", line, flags=re.IGNORECASE)
+            if redistribute_match:
+                ripng["redistribute"].append(redistribute_match.group(1).strip())
         elif current_dhcp_pool:
             pool = dhcp["pools"].setdefault(current_dhcp_pool, {})
             network_match = re.match(r"^network\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
@@ -1440,7 +1510,17 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     return {
         "interfaces": interfaces,
         "vlans": vlans,
-        "routing": {"rip_networks": rip_networks, "eigrp": eigrp, "ospf": ospf, "bgp": {**bgp, "neighbors": list(bgp["neighbors"].values())}, "static_routes": static_routes},
+        "routing": {
+            "rip_networks": rip_networks,
+            "eigrp": eigrp,
+            "ospf": ospf,
+            "bgp": {**bgp, "neighbors": list(bgp["neighbors"].values())},
+            "static_routes": static_routes,
+            "ipv6_unicast_routing": ipv6_unicast_routing,
+            "ospfv3": ospfv3,
+            "ripng": ripng,
+            "ipv6_static_routes": ipv6_static_routes,
+        },
         "spanning_tree": spanning_tree,
         "dhcp": dhcp,
         "ntp": ntp,
@@ -1578,10 +1658,18 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                 lines.append("Interfaces:")
                 for name, details in sorted(interfaces.items()):
                     if isinstance(details, dict):
-                        ip = f" {details.get('ip', '')}/{details.get('mask', '')}".rstrip("/")
+                        addresses = []
+                        if details.get("ip") or details.get("mask"):
+                            addresses.append(f"{details.get('ip', '')}/{details.get('mask', '')}".rstrip("/"))
+                        addresses.extend(str(item) for item in details.get("ipv6_addresses", []))
+                        ip = f" {', '.join(addresses)}" if addresses else ""
                         extra = []
                         if details.get("helper_addresses"):
                             extra.append("helpers " + ", ".join(str(item) for item in details.get("helper_addresses", [])))
+                        if details.get("ospfv3"):
+                            extra.append("OSPFv3")
+                        if details.get("ripng"):
+                            extra.append("RIPng")
                         hsrp = details.get("hsrp", {})
                         if isinstance(hsrp, dict) and hsrp:
                             groups = []
@@ -1670,6 +1758,9 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                 ospf = routing.get("ospf", {})
                 bgp = routing.get("bgp", {})
                 static_routes = routing.get("static_routes", [])
+                ospfv3 = routing.get("ospfv3", {})
+                ripng = routing.get("ripng", {})
+                ipv6_static_routes = routing.get("ipv6_static_routes", [])
                 if rip_networks:
                     lines.append("")
                     lines.append("RIP networks: " + ", ".join(str(item) for item in rip_networks))
@@ -1700,6 +1791,18 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                         for network in networks:
                             if isinstance(network, dict):
                                 lines.append(f"- {network.get('network', '')} {network.get('wildcard', '')} area {network.get('area', '')}")
+                if isinstance(ospfv3, dict) and (ospfv3.get("process_id") or ospfv3.get("router_id") or ospfv3.get("passive_interfaces")):
+                    lines.append("")
+                    lines.append(f"OSPFv3 process {ospfv3.get('process_id', '')} router-id {ospfv3.get('router_id', '')}".rstrip())
+                    passive = ospfv3.get("passive_interfaces", [])
+                    if passive:
+                        lines.append("OSPFv3 passive interfaces: " + ", ".join(str(item) for item in passive))
+                if isinstance(ripng, dict) and (ripng.get("process_name") or ripng.get("redistribute")):
+                    lines.append("")
+                    lines.append(f"RIPng process {ripng.get('process_name', '')}".rstrip())
+                    redistribute = ripng.get("redistribute", [])
+                    if redistribute:
+                        lines.append("RIPng redistribute: " + ", ".join(str(item) for item in redistribute))
                 if isinstance(bgp, dict) and (bgp.get("neighbors") or bgp.get("networks") or bgp.get("asn")):
                     lines.append("")
                     lines.append(f"BGP AS {bgp.get('asn', '')}".rstrip())
@@ -1729,6 +1832,15 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                     for route in static_routes:
                         if isinstance(route, dict):
                             lines.append(f"- {route.get('destination', '')} {route.get('mask', '')} via {route.get('next_hop', '')}")
+                if ipv6_static_routes:
+                    lines.append("")
+                    lines.append("IPv6 static routes:")
+                    for route in ipv6_static_routes:
+                        if isinstance(route, dict):
+                            target = route.get("next_hop", route.get("interface", ""))
+                            if route.get("interface") and route.get("next_hop"):
+                                target = f"{route.get('interface')} {route.get('next_hop')}"
+                            lines.append(f"- {route.get('prefix', '')} via {target}")
             lines.append("")
     server_services = summary.get("server_services", [])
     if isinstance(server_services, list) and server_services:

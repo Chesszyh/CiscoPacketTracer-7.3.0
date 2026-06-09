@@ -592,6 +592,47 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("show ip route bgp", commands)
         self.assertIn("show ip protocols", commands)
 
+    def test_verification_plan_includes_ipv6_routing_show_commands(self) -> None:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "devices": [{"name": "R6", "category": "router", "model": "2911"}],
+                    "ios_configs": [
+                        {
+                            "device": "R6",
+                            "commands": [
+                                "ipv6 unicast-routing",
+                                "interface GigabitEthernet0/0",
+                                "ipv6 address 2001:db8:10::1/64",
+                                "ipv6 ospf 10 area 0",
+                                "ipv6 rip CAMPUS6 enable",
+                                "ipv6 router ospf 10",
+                                "router-id 10.255.0.6",
+                                "ipv6 router rip CAMPUS6",
+                                "redistribute connected",
+                                "ipv6 route 2001:db8:ffff::/64 2001:db8:10::fe",
+                            ],
+                        }
+                    ],
+                },
+                f,
+            )
+            path = f.name
+        try:
+            result = self.run_render("verification-plan", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        ios_checks = [check for check in data["checks"] if check.get("category") == "ios"]
+        self.assertTrue(ios_checks)
+        commands = ios_checks[0]["mcp"]["arguments"]["commands"]
+        self.assertIn("show ipv6 interface brief", commands)
+        self.assertIn("show ipv6 ospf neighbor", commands)
+        self.assertIn("show ipv6 route ospf", commands)
+        self.assertIn("show ipv6 route rip", commands)
+        self.assertIn("show ipv6 route static", commands)
+
     def test_bundle_report_preset_adds_report_defaults_and_diagram_audit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "bundle"

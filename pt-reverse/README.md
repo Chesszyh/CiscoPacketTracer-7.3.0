@@ -576,7 +576,9 @@ Promoting to `safe` requires `--save-reopen`.
 first supported template surface covers VLANs, access/trunk interfaces, routed
 interfaces, STP, EtherChannel/Port-channel, interface ACL binding with
 `acl_in`/`acl_out`, DHCP relay, HSRP/standby, IOS DHCP pools, NTP client,
-Syslog, SNMP, RIPv2, EIGRP, OSPF, BGP, static routes, standard/extended ACL lines, and NAT
+Syslog, SNMP, RIPv2, EIGRP, OSPF, BGP, static routes, IPv6 interface
+addresses, IPv6 unicast routing, OSPFv3, RIPng, IPv6 static routes,
+standard/extended ACL lines, and NAT
 overload.
 
 ```bash
@@ -585,6 +587,7 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-ipv6-routing.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 ```
 
@@ -601,7 +604,8 @@ IOS prompts, terminal output tails, and visible server-service states.  Add
 `--summary` for a compact agent/report-friendly view, including parsed IOS
 configuration hints for interfaces, VLANs, STP, EtherChannel membership, DHCP
 relay, HSRP groups, IOS DHCP pools, NTP, Syslog, SNMP, RIP networks, OSPF
-networks, static routes, ACL numbers, interface ACL applications, and NAT.  You
+networks, BGP, interface IPv6 addresses, OSPFv3, RIPng, IPv6 static routes,
+static routes, ACL numbers, interface ACL applications, and NAT.  You
 can also summarize a saved query result offline:
 
 ```bash
