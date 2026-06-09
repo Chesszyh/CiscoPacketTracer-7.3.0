@@ -115,6 +115,9 @@ and HTML. Agents can also pass MCP `annotations` or CLI `--annotation` /
 `--annotations` render-only callouts without rewriting the source topology JSON.
 Use `pt730-render schema` or MCP `pt730_schema` with `target=render` to inspect
 render formats, visual options, and annotation fields.
+Lab bundle tools also accept spec `render.annotations`, CLI
+`--annotation`/`--annotations`, and MCP `annotations` so report callouts travel
+with generated `topology.json` and render artifacts.
 Use `pt730_render_bundle` when an agent should create SVG, draw.io, HTML,
 Markdown, summary, optional course-audit output, and a manifest in one offline
 call.

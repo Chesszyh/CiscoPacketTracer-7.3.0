@@ -51,10 +51,12 @@ class LabCliTest(unittest.TestCase):
         self.assertIn("--basename", data["plan"]["optional"])
         self.assertIn("--title", data["plan"]["optional"])
         self.assertIn("--legend", data["plan"]["optional"])
+        self.assertIn("--annotation", data["plan"]["optional"])
         self.assertEqual(data["template"]["render_options"]["formats"], ["svg", "drawio", "html", "markdown", "summary"])
         self.assertIn("preset", data["template"]["render_options"])
         self.assertIn("title", data["template"]["render_options"])
         self.assertIn("legend", data["template"]["render_options"])
+        self.assertIn("annotations", data["template"]["render_options"])
 
     def test_template_generates_agent_ready_lab_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -82,6 +84,15 @@ class LabCliTest(unittest.TestCase):
                         "group_by": "auto",
                         "title": "Enterprise Demo",
                         "legend": True,
+                        "annotations": [
+                            {
+                                "id": "edge-note",
+                                "kind": "info",
+                                "target": "R-ENT-EDGE",
+                                "title": "Edge",
+                                "text": "NAT and routing validation point.",
+                            }
+                        ],
                     },
                     "export_configs": True,
                 },
@@ -116,6 +127,9 @@ class LabCliTest(unittest.TestCase):
             topology = json.loads((out_dir / "topology.json").read_text(encoding="utf-8"))
             self.assertEqual(topology["metadata"]["lab_bundle"]["name"], "enterprise-demo")
             self.assertEqual(topology["metadata"]["lab_bundle"]["template"], "enterprise-edge")
+            self.assertEqual(topology["annotations"][0]["id"], "edge-note")
+            summary = json.loads((out_dir / "render" / "enterprise-demo.summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["counts"]["annotations"], 1)
             self.assertIn("Enterprise Demo", (out_dir / "render" / "enterprise-demo.svg").read_text(encoding="utf-8"))
             self.assertIn("Legend", (out_dir / "render" / "enterprise-demo.html").read_text(encoding="utf-8"))
             self.assertIn("router ospf 1", (out_dir / "configs" / "R-ENT-EDGE.cfg").read_text(encoding="utf-8"))
@@ -188,6 +202,8 @@ class LabCliTest(unittest.TestCase):
                 "--title",
                 "Serial Lab",
                 "--legend",
+                "--annotation",
+                '{"id":"serial-note","target":"R_AUTO1","title":"WAN","text":"Serial routing check"}',
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads(result.stdout)
@@ -206,6 +222,9 @@ class LabCliTest(unittest.TestCase):
             topology = json.loads((out_dir / "topology.json").read_text(encoding="utf-8"))
             self.assertEqual(topology["metadata"]["lab_bundle"]["name"], "serial-lab")
             self.assertEqual(topology["metadata"]["lab_bundle"]["plan"], "pt-reverse/examples/two-router-serial-configured.json")
+            self.assertEqual(topology["annotations"][0]["id"], "serial-note")
+            summary = json.loads((out_dir / "render" / "serial.summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["counts"]["annotations"], 1)
 
     def test_plan_report_preset_sets_report_render_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

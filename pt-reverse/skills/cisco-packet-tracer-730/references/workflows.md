@@ -310,6 +310,9 @@ Topology plans can also include top-level `annotations` callouts; Mermaid,
 SVG/draw.io, and HTML render them visually, while Markdown/summary outputs keep
 them as reportable metadata. For render-only labels, use CLI `--annotation` /
 `--annotations` or MCP `annotations` so the source topology JSON stays unchanged.
+For complete lab bundles, put callouts in `render.annotations` or pass
+`pt730-lab ... --annotation`; MCP `pt730_lab_template` and `pt730_lab_plan`
+also accept `annotations`.
 Use `pt730-render schema` or MCP `pt730_schema target=render` when the agent
 needs the exact render/annotation fields before creating a report bundle.
 Use `--preset report` or `render.preset: report` for report-ready paper theme,

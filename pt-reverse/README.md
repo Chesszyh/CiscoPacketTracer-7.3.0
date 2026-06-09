@@ -407,9 +407,10 @@ should start from one compact JSON spec and write a complete deliverable bundle:
 `topology.json`, `safety.json`, `render/<basename>.*`, `configs/*.cfg`, and
 `manifest.json`. The spec selects any built-in template, passes snake_case
 `template_options`, and can control render `formats`, `theme`, title, legend,
-labels, and `group_by` in the same file. Use `pt730-lab plan <plan.json> --output-dir
+labels, `group_by`, and report callout `annotations` in the same file. Use `pt730-lab plan <plan.json> --output-dir
 <out-dir>` for the same bundle workflow after an agent has already generated or
-composed a custom topology JSON. Use `pt730-lab report <out-dir>/manifest.json
+composed a custom topology JSON; `pt730-lab plan` also accepts `--annotation`
+and `--annotations` to add lab-bundle callouts. Use `pt730-lab report <out-dir>/manifest.json
 --output <out-dir>/deliverable.md` to generate a Markdown coursework index with
 artifact paths, safety status, render outputs, config files, and suggested
 recording checks. Add `--preset report` or set `render.preset` to `report` when

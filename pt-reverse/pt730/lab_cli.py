@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from config_plan_cli import export_config_files
-from render_cli import BUNDLE_DEFAULT_FORMATS, RENDER_GROUP_BY, RENDER_PRESETS, RENDER_THEMES, RenderOptions, default_bundle_formats, parse_bundle_formats, preset_render_defaults, render_bundle
+from render_cli import BUNDLE_DEFAULT_FORMATS, RENDER_GROUP_BY, RENDER_PRESETS, RENDER_THEMES, RenderOptions, default_bundle_formats, parse_annotations_payload, parse_bundle_formats, preset_render_defaults, render_bundle
 from safety_cli import check_plan, summarize
 from template_cli import (
     campus,
@@ -238,7 +238,7 @@ TEMPLATES: dict[str, TemplateDefinition] = {
 }
 
 TOP_LEVEL_KEYS = {"name", "template", "template_options", "render", "strict_safety", "export_configs", "config_source", "compact"}
-RENDER_KEYS = {"basename", "formats", "direction", "theme", "link_labels", "model_labels", "group_by", "title", "legend", "preset"}
+RENDER_KEYS = {"basename", "formats", "direction", "theme", "link_labels", "model_labels", "group_by", "title", "legend", "preset", "annotations"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -514,6 +514,43 @@ def _parse_formats(value: Any) -> list[str]:
     raise ValueError("render.formats must be a comma-separated string or an array of strings")
 
 
+def _annotations_value(value: Any, *, source: str) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [copy.deepcopy(item) for item in parse_annotations_payload(value, source=source)]
+    if isinstance(value, dict):
+        return [copy.deepcopy(value)]
+    if isinstance(value, list) and all(isinstance(item, dict) for item in value):
+        return [copy.deepcopy(item) for item in value]
+    raise ValueError(f"{source} must be a JSON object, an array of objects, or a JSON string")
+
+
+def _cli_annotations(args: argparse.Namespace) -> list[dict[str, Any]]:
+    annotations: list[dict[str, Any]] = []
+    for index, payload in enumerate(getattr(args, "annotation", []) or []):
+        annotations.extend(_annotations_value(payload, source=f"--annotation #{index + 1}"))
+    path = getattr(args, "annotations", None)
+    if path:
+        try:
+            annotations.extend(_annotations_value(path.read_text(encoding="utf-8"), source=f"--annotations {path}"))
+        except OSError as exc:
+            raise ValueError(f"--annotations {path}: {exc}") from exc
+    return annotations
+
+
+def _merge_annotations(plan: dict[str, Any], annotations: list[dict[str, Any]]) -> None:
+    if not annotations:
+        return
+    existing = plan.get("annotations", [])
+    if isinstance(existing, dict):
+        plan["annotations"] = [existing, *annotations]
+    elif isinstance(existing, list):
+        plan["annotations"] = [*existing, *annotations]
+    else:
+        plan["annotations"] = list(annotations)
+
+
 def _render_settings_from_values(
     *,
     basename: str,
@@ -526,6 +563,7 @@ def _render_settings_from_values(
     group_by: str | None,
     title: str,
     legend: bool | None,
+    annotations: Any = None,
 ) -> dict[str, Any]:
     safe_basename = _safe_basename(basename)
     if preset not in RENDER_PRESETS:
@@ -544,6 +582,7 @@ def _render_settings_from_values(
         "basename": safe_basename,
         "formats": _parse_formats(formats if formats is not None else default_bundle_formats(preset)),
         "direction": direction,
+        "annotations": _annotations_value(annotations, source="render.annotations"),
         "options": RenderOptions(
             theme=resolved_theme,
             link_labels=defaults["link_labels"] if link_labels is None else link_labels,
@@ -574,6 +613,7 @@ def _render_settings(spec: dict[str, Any], *, lab_name: str, template_name: str)
         group_by=_string_value(render, "group_by", default="") or None,
         title=_string_value(render, "title", default=""),
         legend=_optional_bool_value(render, "legend"),
+        annotations=render.get("annotations"),
     )
 
 
@@ -614,13 +654,14 @@ def schema() -> dict[str, Any]:
                 "group_by": list(RENDER_GROUP_BY),
                 "title": "visible diagram title for SVG/draw.io/HTML",
                 "legend": False,
+                "annotations": "topology callouts to include in topology.json and render outputs",
             },
             "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
         },
         "plan": {
             "description": "Generate the same offline lab bundle from an existing topology plan JSON.",
             "required": ["plan", "--output-dir"],
-            "optional": ["--name", "--basename", "--formats", "--direction", "--preset", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--title", "--legend", "--strict-safety", "--no-configs", "--config-source", "--compact"],
+            "optional": ["--name", "--basename", "--formats", "--direction", "--preset", "--theme", "--no-link-labels", "--no-model-labels", "--group-by", "--title", "--legend", "--annotation", "--annotations", "--strict-safety", "--no-configs", "--config-source", "--compact"],
             "outputs": ["topology.json", "safety.json", "render/<basename>.*", "configs/*.cfg", "manifest.json"],
         },
         "report": {
@@ -679,6 +720,7 @@ def _write_lab_bundle(
     metadata = plan.setdefault("metadata", {})
     if isinstance(metadata, dict):
         metadata["lab_bundle"] = metadata_bundle
+    _merge_annotations(plan, render.get("annotations", []))
 
     topology_out = output_dir / "topology.json"
     write_json(topology_out, plan, compact=compact)
@@ -735,7 +777,7 @@ def _write_lab_bundle(
     return manifest, code
 
 
-def lab_template(spec_path: Path, *, output_dir: Path, strict_safety: bool, compact: bool) -> tuple[dict[str, Any], int]:
+def lab_template(spec_path: Path, *, output_dir: Path, strict_safety: bool, compact: bool, annotations: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], int]:
     spec = load_json(spec_path)
     unknown = set(spec) - TOP_LEVEL_KEYS
     if unknown:
@@ -748,6 +790,8 @@ def lab_template(spec_path: Path, *, output_dir: Path, strict_safety: bool, comp
     export_configs = _bool_value(spec, "export_configs", default=True)
     config_source = _string_value(spec, "config_source")
     render = _render_settings(spec, lab_name=lab_name, template_name=template_name)
+    if annotations:
+        render["annotations"] = [*render.get("annotations", []), *annotations]
 
     plan = TEMPLATES[template_name].function(**kwargs)
     return _write_lab_bundle(
@@ -784,6 +828,7 @@ def lab_plan(
     group_by: str | None,
     title: str,
     legend: bool | None,
+    annotations: list[dict[str, Any]] | None,
     strict_safety: bool,
     export_configs: bool,
     config_source: str,
@@ -802,6 +847,7 @@ def lab_plan(
         group_by=group_by,
         title=title,
         legend=legend,
+        annotations=annotations,
     )
     return _write_lab_bundle(
         plan,
@@ -832,6 +878,11 @@ def emit_json(value: Any, *, compact: bool) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=None if compact else 2, separators=(",", ":") if compact else None))
 
 
+def add_annotation_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--annotation", action="append", default=[], help="append an annotation JSON object or array to the lab topology")
+    parser.add_argument("--annotations", type=Path, help="append annotations from a JSON object/array file to the lab topology")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pt730-lab", description=__doc__)
     parser.add_argument("--compact", action="store_true", help="emit compact JSON to stdout and output files")
@@ -843,6 +894,7 @@ def main(argv: list[str] | None = None) -> int:
     template_p.add_argument("spec", type=Path)
     template_p.add_argument("--output-dir", type=Path, required=True)
     template_p.add_argument("--strict-safety", action="store_true", help="treat plan safety warnings as failures")
+    add_annotation_options(template_p)
 
     plan_p = sub.add_parser("plan", help="generate a complete offline lab bundle from an existing topology plan")
     plan_p.add_argument("plan", type=Path)
@@ -861,6 +913,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--strict-safety", action="store_true", help="treat plan safety warnings as failures")
     plan_p.add_argument("--no-configs", action="store_false", dest="export_configs", default=True, help="skip per-device .cfg export")
     plan_p.add_argument("--config-source", default="", help="only export ios_configs matching this source")
+    add_annotation_options(plan_p)
 
     report_p = sub.add_parser("report", help="generate a Markdown deliverable index from a lab bundle manifest")
     report_p.add_argument("manifest", type=Path)
@@ -873,7 +926,7 @@ def main(argv: list[str] | None = None) -> int:
             emit_json(schema(), compact=args.compact)
             return 0
         if args.cmd == "template":
-            manifest, code = lab_template(args.spec, output_dir=args.output_dir, strict_safety=args.strict_safety, compact=args.compact)
+            manifest, code = lab_template(args.spec, output_dir=args.output_dir, strict_safety=args.strict_safety, compact=args.compact, annotations=_cli_annotations(args))
             emit_json(manifest, compact=args.compact)
             return code
         if args.cmd == "plan":
@@ -891,6 +944,7 @@ def main(argv: list[str] | None = None) -> int:
                 group_by=args.group_by,
                 title=args.title,
                 legend=args.legend,
+                annotations=_cli_annotations(args),
                 strict_safety=args.strict_safety,
                 export_configs=args.export_configs,
                 config_source=args.config_source,

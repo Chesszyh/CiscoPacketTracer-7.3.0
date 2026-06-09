@@ -122,12 +122,14 @@ class McpCliTest(unittest.TestCase):
         lab = next(tool for tool in tools if tool["name"] == "pt730_lab_template")
         self.assertIn("spec", lab["inputSchema"]["required"])
         self.assertIn("output_dir", lab["inputSchema"]["required"])
+        self.assertIn("annotations", lab["inputSchema"]["properties"])
         lab_plan = next(tool for tool in tools if tool["name"] == "pt730_lab_plan")
         self.assertIn("plan", lab_plan["inputSchema"]["required"])
         self.assertIn("formats", lab_plan["inputSchema"]["properties"])
         self.assertIn("preset", lab_plan["inputSchema"]["properties"])
         self.assertIn("title", lab_plan["inputSchema"]["properties"])
         self.assertIn("legend", lab_plan["inputSchema"]["properties"])
+        self.assertIn("annotations", lab_plan["inputSchema"]["properties"])
         self.assertIn("diagram-audit", lab_plan["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
         self.assertIn("verification-json", lab_plan["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
         lab_report = next(tool for tool in tools if tool["name"] == "pt730_lab_report")
@@ -732,6 +734,12 @@ class McpCliTest(unittest.TestCase):
                                 "group_by": "category",
                                 "title": "MCP Serial",
                                 "legend": True,
+                                "annotations": {
+                                    "id": "mcp-lab-note",
+                                    "target": "R_AUTO1",
+                                    "title": "MCP Lab",
+                                    "text": "Report callout.",
+                                },
                                 "compact": True,
                             },
                         },
@@ -744,6 +752,7 @@ class McpCliTest(unittest.TestCase):
             self.assertIn("pt730-lab", command[0])
             self.assertIn("plan", command)
             self.assertIn("--group-by", command)
+            self.assertIn("--annotation", command)
             self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
             manifest = json.loads(result["structuredContent"]["stdout"])
             self.assertEqual(manifest["kind"], "pt730-lab-plan-bundle")
@@ -756,6 +765,8 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "render" / "mcp-serial.svg").exists())
             self.assertTrue((out_dir / "render" / "mcp-serial.diagram-audit.json").exists())
             self.assertTrue((out_dir / "configs" / "R_AUTO1.cfg").exists())
+            summary = json.loads((out_dir / "render" / "mcp-serial.summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["counts"]["annotations"], 1)
 
     def test_tools_call_lab_plan_report_preset_generates_report_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
