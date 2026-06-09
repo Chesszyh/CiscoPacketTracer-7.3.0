@@ -96,8 +96,12 @@ lifecycle tools, and simulation/PDU tools support `dry_run=true` previews that
 return the underlying CLI command without contacting Packet Tracer. Catalog and
 JavaScript safety checks are exposed offline through MCP, along with
 `pt730_schema` for retrieving template, IP-plan, compose, config-plan, pipeline,
-and IOS-template input schemas. Model registry reads are exposed through MCP;
+lab, render, plan-editor, and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
+Plan-editor MCP tools expose `pt730_plan_new`, `pt730_plan_add_device`,
+`pt730_plan_add_link`, `pt730_plan_add_annotation`, and
+`pt730_plan_add_pc_config`, so agents can construct custom topology JSON through
+CLI/MCP calls before running layout, render, safety, or lab bundle commands.
 Built-in template MCP tools expose LAN-star, dual-stack-LAN, wireless-LAN,
 router-on-a-stick VLAN, switching-lab, server-services, edge-security,
 router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template

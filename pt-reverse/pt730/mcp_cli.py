@@ -215,7 +215,7 @@ def tool_capabilities(root: Path, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_schema(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    target = enum_arg(args, "target", {"template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template", "lab", "render"})
+    target = enum_arg(args, "target", {"template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template", "lab", "render", "plan"})
     cli_by_target = {
         "template": "pt730-template",
         "ip_plan": "pt730-ip-plan",
@@ -225,16 +225,17 @@ def tool_schema(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         "ios_template": "pt730-ios-template",
         "lab": "pt730-lab",
         "render": "pt730-render",
+        "plan": "pt730-plan",
     }
     compact = bool_arg(args, "compact", default=False)
     command = [str(bin_path(root, cli_by_target[target]))]
-    if target == "render":
+    if target in {"render", "plan"}:
         command.append("schema")
         if compact:
             command.append("--compact")
     elif compact and target != "ios_template":
         command.append("--compact")
-    if target != "render":
+    if target not in {"render", "plan"}:
         command.append("schema")
     result = run_cli(root, command)
     if compact and target == "ios_template" and result["exitCode"] == 0:
@@ -243,6 +244,82 @@ def tool_schema(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
     return result
+
+
+def _append_output_and_compact(command: list[str], args: dict[str, Any]) -> None:
+    output = str_arg(args, "output", required=False)
+    if output:
+        command.extend(["--output", output])
+    if bool_arg(args, "compact", default=False):
+        command.append("--compact")
+
+
+def tool_plan_new(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "new"]
+    name = str_arg(args, "name", required=False)
+    if name:
+        command.extend(["--name", name])
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_device(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-device", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    for key, flag in (("model", "--model"), ("category", "--category"), ("site", "--site"), ("role", "--role"), ("note", "--note")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    for key, flag in (("x", "--x"), ("y", "--y"), ("vlan", "--vlan")):
+        value = optional_int_arg(args, key)
+        if value is not None:
+            command.extend([flag, str(value)])
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_link(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-link", str_arg(args, "plan"), "--a", str_arg(args, "a"), "--b", str_arg(args, "b")]
+    for key, flag in (("pa", "--pa"), ("pb", "--pb"), ("cable", "--cable"), ("note", "--note")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    vlan = optional_int_arg(args, "vlan")
+    if vlan is not None:
+        command.extend(["--vlan", str(vlan)])
+    if bool_arg(args, "allow_missing", default=False):
+        command.append("--allow-missing")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_annotation(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-annotation", str_arg(args, "plan")]
+    for key, flag in (("id", "--id"), ("kind", "--kind"), ("target", "--target"), ("title", "--title"), ("text", "--text"), ("color", "--color")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    for key, flag in (("x", "--x"), ("y", "--y"), ("width", "--width"), ("height", "--height")):
+        value = optional_int_arg(args, key)
+        if value is not None:
+            command.extend([flag, str(value)])
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_pc_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-pc-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    for key, flag in (("port", "--port"), ("ip", "--ip"), ("mask", "--mask"), ("gateway", "--gateway"), ("dns", "--dns")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    if bool_arg(args, "dhcp", default=False):
+        command.append("--dhcp")
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
 
 
 def tool_render(root: Path, args: dict[str, Any]) -> dict[str, Any]:
@@ -1667,7 +1744,12 @@ def tools() -> list[dict[str, Any]]:
     annotations = {"oneOf": [annotation_object, {"type": "array", "items": annotation_object}, string]}
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
-        tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, render, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "render", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
+        tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, render, plan editor, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "render", "plan", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
+        tool("pt730_plan_new", "Create an empty topology JSON plan.", schema({"name": string, "output": string, "compact": boolean}), tool_plan_new),
+        tool("pt730_plan_add_device", "Append or update one device in a topology JSON plan.", schema({"plan": string, "name": string, "model": string, "category": string, "x": integer, "y": integer, "site": string, "role": string, "vlan": integer, "note": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_device),
+        tool("pt730_plan_add_link", "Append one link between topology plan devices.", schema({"plan": string, "a": string, "b": string, "pa": string, "pb": string, "cable": string, "vlan": integer, "note": string, "allow_missing": boolean, "output": string, "compact": boolean}, ["plan", "a", "b"]), tool_plan_add_link),
+        tool("pt730_plan_add_annotation", "Append one report/diagram callout annotation to a topology JSON plan.", schema({"plan": string, "id": string, "kind": string, "target": string, "title": string, "text": string, "x": integer, "y": integer, "width": integer, "height": integer, "color": string, "output": string, "compact": boolean}, ["plan"]), tool_plan_add_annotation),
+        tool("pt730_plan_add_pc_config", "Append or update one PC/server IPv4 config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "dhcp": boolean, "ip": string, "mask": string, "gateway": string, "dns": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_pc_config),
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, diagram-audit, verification-json, or verification-md.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_verification_plan", "Generate an offline JSON or Markdown live/manual validation checklist for a topology plan.", schema({"plan": string, "format": {"type": "string", "enum": ["json", "markdown"]}, "output": string, "compact": boolean, "max_hosts": integer, "max_service_targets": integer, "strict_safety": boolean, "allow_risky": boolean}, ["plan"]), tool_verification_plan),

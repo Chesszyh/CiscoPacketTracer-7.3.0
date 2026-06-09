@@ -91,9 +91,13 @@ app/bridge/launch/recover lifecycle tools, and simulation/PDU tools support
 `dry_run=true` previews that return the underlying CLI command without touching
 Packet Tracer. Catalog and JavaScript safety checks are exposed offline through
 MCP, along with `pt730_schema` for retrieving template, IP-plan, compose,
-config-plan, pipeline, lab, and IOS-template input schemas. Model registry reads are
+config-plan, pipeline, lab, render, plan-editor, and IOS-template input schemas. Model registry reads are
 exposed through MCP; model metadata writes require `allow_write=true` unless run
 as `dry_run=true`.
+Plan-editor MCP tools expose `pt730_plan_new`, `pt730_plan_add_device`,
+`pt730_plan_add_link`, `pt730_plan_add_annotation`, and
+`pt730_plan_add_pc_config`, allowing agents to construct custom topology JSON
+without hand-editing files before layout/render/safety/lab bundling.
 Built-in template MCP tools expose LAN-star, dual-stack-LAN, wireless-LAN,
 router-on-a-stick VLAN, switching-lab, server-services, edge-security,
 router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template
@@ -105,9 +109,10 @@ BGP enterprise edge peering, layout, no-layout, compact, router DHCP pools, DHCP
 controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
-Render MCP tools expose visual preset, theme, title, legend, label, and visual grouping
-controls through `pt730_render` for SVG, draw.io, HTML, and Mermaid where
-supported, plus JSON summary, course audit, and diagram-quality audit outputs.
+Render MCP tools expose visual preset, theme, title, legend, label, visual
+grouping, and annotation controls through `pt730_render` for Mermaid, SVG,
+draw.io, and HTML, plus JSON summary, course audit, and diagram-quality audit
+outputs.
 Use `preset=report` for paper theme, automatic grouping, a visible legend,
 hidden link labels, and report bundle defaults that include `diagram-audit`,
 `verification-json`, and `verification-md`.

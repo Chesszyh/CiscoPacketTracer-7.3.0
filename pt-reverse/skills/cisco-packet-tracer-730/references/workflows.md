@@ -24,7 +24,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 ```
 
-The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/email/NTP/Syslog/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. `pt730_schema` exposes template/IP-plan/compose/config/pipeline/lab/IOS-template schemas; catalog and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
+The MCP wrapper exposes offline tools plus guarded live tools. Live tools require `allow_live=true`; `pt730_live_apply` with `dry_run=true` stays offline and is safe for preflight checks. Live wrappers also support safe command previews with `dry_run=true`: eval, smoke, IOS commands, PC static/DHCP, terminal checks, IOS ping, Server-PT inspect/service/DNS/FTP/email/NTP/Syslog/DHCP config, PC FTP client sessions, app/bridge/launch/recover lifecycle actions, and simulation/PDU actions. `pt730_schema` exposes template/IP-plan/compose/config/pipeline/lab/render/plan/IOS-template schemas; catalog and JavaScript safety checks are exposed as offline MCP tools. Model registry reads are exposed as MCP tools; `pt730_models_record` requires `allow_write=true` unless `dry_run=true`.
 
 Example schema query:
 
@@ -306,6 +306,9 @@ components, oversized canvases, and dense label/grouping advice. Include
 representative live/manual validation steps for pings, IOS show commands, and
 Server-PT services. Template specs use snake_case `template_options`; both
 paths can set render `formats`, `theme`, title, legend, labels, and `group_by`.
+When a template is not suitable, use `pt730-plan new` plus `add-device`,
+`add-link`, `add-annotation`, and `add-pc-config` or the matching MCP
+`pt730_plan_*` tools to build custom topology JSON before layout/render/safety.
 Topology plans can also include top-level `annotations` callouts; Mermaid,
 SVG/draw.io, and HTML render them visually, while Markdown/summary outputs keep
 them as reportable metadata. For render-only labels, use CLI `--annotation` /
