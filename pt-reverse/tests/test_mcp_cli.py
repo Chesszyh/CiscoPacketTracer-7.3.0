@@ -50,14 +50,23 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_plan_add_link", names)
         self.assertIn("pt730_plan_remove_link", names)
         self.assertIn("pt730_plan_add_ap_config", names)
+        self.assertIn("pt730_plan_remove_ap_config", names)
         self.assertIn("pt730_plan_add_annotation", names)
+        self.assertIn("pt730_plan_remove_annotation", names)
         self.assertIn("pt730_plan_add_pc_config", names)
+        self.assertIn("pt730_plan_remove_pc_config", names)
         self.assertIn("pt730_plan_add_ipv6_config", names)
+        self.assertIn("pt730_plan_remove_ipv6_config", names)
         self.assertIn("pt730_plan_add_vlan_config", names)
+        self.assertIn("pt730_plan_remove_vlan_config", names)
         self.assertIn("pt730_plan_add_dhcp_pool", names)
+        self.assertIn("pt730_plan_remove_dhcp_pool", names)
         self.assertIn("pt730_plan_add_server_config", names)
+        self.assertIn("pt730_plan_remove_server_config", names)
         self.assertIn("pt730_plan_add_ios_config", names)
+        self.assertIn("pt730_plan_remove_ios_config", names)
         self.assertIn("pt730_plan_add_security_policy", names)
+        self.assertIn("pt730_plan_remove_security_policy", names)
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_render_bundle", names)
         self.assertIn("pt730_verification_plan", names)
@@ -204,13 +213,21 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("all", plan_remove_link["inputSchema"]["properties"])
         plan_add_ap = next(tool for tool in tools if tool["name"] == "pt730_plan_add_ap_config")
         self.assertIn("ssid", plan_add_ap["inputSchema"]["required"])
+        plan_remove_ap = next(tool for tool in tools if tool["name"] == "pt730_plan_remove_ap_config")
+        self.assertIn("name", plan_remove_ap["inputSchema"]["required"])
+        plan_remove_annotation = next(tool for tool in tools if tool["name"] == "pt730_plan_remove_annotation")
+        self.assertIn("all", plan_remove_annotation["inputSchema"]["properties"])
         plan_add_vlan = next(tool for tool in tools if tool["name"] == "pt730_plan_add_vlan_config")
         self.assertIn("id", plan_add_vlan["inputSchema"]["required"])
+        plan_remove_vlan = next(tool for tool in tools if tool["name"] == "pt730_plan_remove_vlan_config")
+        self.assertIn("id", plan_remove_vlan["inputSchema"]["required"])
         plan_add_server = next(tool for tool in tools if tool["name"] == "pt730_plan_add_server_config")
         self.assertIn("dns_json", plan_add_server["inputSchema"]["properties"])
         plan_add_ios = next(tool for tool in tools if tool["name"] == "pt730_plan_add_ios_config")
         self.assertIn("commands", plan_add_ios["inputSchema"]["properties"])
         self.assertIn("device", plan_add_ios["inputSchema"]["required"])
+        plan_remove_security = next(tool for tool in tools if tool["name"] == "pt730_plan_remove_security_policy")
+        self.assertIn("device", plan_remove_security["inputSchema"]["required"])
 
     def test_schema_tool_returns_workflow_schemas(self) -> None:
         responses = self.run_mcp(
@@ -401,9 +418,26 @@ class McpCliTest(unittest.TestCase):
                     {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "pt730_plan_add_module", "arguments": {"plan": str(path), "device": "R1", "slot": "0/0", "model": "HWIC-2T", "output": str(path)}}},
                     {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "pt730_plan_add_link", "arguments": {"plan": str(path), "a": "R1", "b": "PC1", "pa": "GigabitEthernet0/0", "pb": "FastEthernet0", "output": str(path)}}},
                     {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "pt730_plan_add_pc_config", "arguments": {"plan": str(path), "name": "PC1", "ip": "192.168.10.10", "mask": "255.255.255.0", "output": str(path)}}},
-                    {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "pt730_plan_remove_link", "arguments": {"plan": str(path), "a": "R1", "b": "PC1", "pa": "GigabitEthernet0/0", "pb": "FastEthernet0", "output": str(path)}}},
-                    {"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "pt730_plan_remove_module", "arguments": {"plan": str(path), "device": "R1", "slot": "0/0", "output": str(path)}}},
-                    {"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {"name": "pt730_plan_remove_device", "arguments": {"plan": str(path), "name": "PC1", "cascade": True, "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "pt730_plan_add_ipv6_config", "arguments": {"plan": str(path), "name": "PC1", "ipv6": "2001:db8:10::10", "prefix": "64", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "pt730_plan_add_vlan_config", "arguments": {"plan": str(path), "id": 10, "name": "USERS", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {"name": "pt730_plan_add_dhcp_pool", "arguments": {"plan": str(path), "name": "VLAN10", "device": "R1", "network": "192.168.10.0", "mask": "255.255.255.0", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 11, "method": "tools/call", "params": {"name": "pt730_plan_add_server_config", "arguments": {"plan": str(path), "name": "PC1", "http": True, "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 12, "method": "tools/call", "params": {"name": "pt730_plan_add_ios_config", "arguments": {"plan": str(path), "device": "R1", "commands": ["enable", "end"], "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 13, "method": "tools/call", "params": {"name": "pt730_plan_add_security_policy", "arguments": {"plan": str(path), "device": "R1", "type": "inside_acl", "interface": "GigabitEthernet0/0", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 14, "method": "tools/call", "params": {"name": "pt730_plan_add_ap_config", "arguments": {"plan": str(path), "name": "AP1", "ssid": "CLASSROOM", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 15, "method": "tools/call", "params": {"name": "pt730_plan_add_annotation", "arguments": {"plan": str(path), "id": "client-note", "target": "PC1", "title": "Client", "text": "temporary", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 16, "method": "tools/call", "params": {"name": "pt730_plan_remove_ap_config", "arguments": {"plan": str(path), "name": "AP1", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 17, "method": "tools/call", "params": {"name": "pt730_plan_remove_annotation", "arguments": {"plan": str(path), "id": "client-note", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 18, "method": "tools/call", "params": {"name": "pt730_plan_remove_pc_config", "arguments": {"plan": str(path), "name": "PC1", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 19, "method": "tools/call", "params": {"name": "pt730_plan_remove_ipv6_config", "arguments": {"plan": str(path), "name": "PC1", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 20, "method": "tools/call", "params": {"name": "pt730_plan_remove_vlan_config", "arguments": {"plan": str(path), "id": 10, "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 21, "method": "tools/call", "params": {"name": "pt730_plan_remove_dhcp_pool", "arguments": {"plan": str(path), "name": "VLAN10", "device": "R1", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 22, "method": "tools/call", "params": {"name": "pt730_plan_remove_server_config", "arguments": {"plan": str(path), "name": "PC1", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 23, "method": "tools/call", "params": {"name": "pt730_plan_remove_ios_config", "arguments": {"plan": str(path), "device": "R1", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 24, "method": "tools/call", "params": {"name": "pt730_plan_remove_security_policy", "arguments": {"plan": str(path), "device": "R1", "type": "inside_acl", "interface": "GigabitEthernet0/0", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 25, "method": "tools/call", "params": {"name": "pt730_plan_remove_link", "arguments": {"plan": str(path), "a": "R1", "b": "PC1", "pa": "GigabitEthernet0/0", "pb": "FastEthernet0", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 26, "method": "tools/call", "params": {"name": "pt730_plan_remove_module", "arguments": {"plan": str(path), "device": "R1", "slot": "0/0", "output": str(path)}}},
+                    {"jsonrpc": "2.0", "id": 27, "method": "tools/call", "params": {"name": "pt730_plan_remove_device", "arguments": {"plan": str(path), "name": "PC1", "cascade": True, "output": str(path)}}},
                 ]
             )
             for response in responses:
@@ -413,7 +447,8 @@ class McpCliTest(unittest.TestCase):
             self.assertEqual([device["name"] for device in data["devices"]], ["R1"])
             self.assertEqual(data["links"], [])
             self.assertEqual(data["modules"], [])
-            self.assertEqual(data["pc_configs"], [])
+            for key in ("ap_configs", "annotations", "pc_configs", "ipv6_configs", "vlan_configs", "dhcp_pools", "server_configs", "ios_configs", "security_policies"):
+                self.assertEqual(data[key], [], key)
 
     def test_plan_wireless_tools_build_ap_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

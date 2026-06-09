@@ -308,11 +308,11 @@ Server-PT services. Template specs use snake_case `template_options`; both
 paths can set render `formats`, `theme`, title, legend, labels, and `group_by`.
 When a template is not suitable, use `pt730-plan new` plus `set-metadata`,
 `add-device`/`remove-device`, `add-module`/`remove-module`,
-`add-link`/`remove-link`, `add-ap-config`, `add-annotation`, `add-pc-config`,
-`add-ipv6-config`, `add-vlan-config`, `add-dhcp-pool`, `add-server-config`,
-`add-ios-config`, and `add-security-policy` or the matching MCP `pt730_plan_*`
-tools to build and revise custom topology JSON, serial modules, wireless
-metadata, and config metadata before layout/render/safety/config export.
+`add-link`/`remove-link`, and add/remove helpers for AP configs, annotations,
+IPv4/IPv6 host configs, VLANs, DHCP pools, Server-PT services, IOS configs, and
+security policies or the matching MCP `pt730_plan_*` tools to build and revise
+custom topology JSON, serial modules, wireless metadata, and config metadata
+before layout/render/safety/config export.
 Use `add-module --device R1 --slot 0/0 --model HWIC-2T` for PT 7.3.0 serial
 WAN modules, and `add-ap-config --name AP1 --ssid CLASSROOM` for report/render
 wireless AP metadata. Use `remove-device --cascade` only when intentionally

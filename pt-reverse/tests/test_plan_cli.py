@@ -41,14 +41,27 @@ class PlanCliTest(unittest.TestCase):
         self.assertIn("remove-module", data["commands"])
         self.assertIn("add-link", data["commands"])
         self.assertIn("remove-link", data["commands"])
-        self.assertIn("add-ap-config", data["commands"])
-        self.assertIn("add-pc-config", data["commands"])
-        self.assertIn("add-ipv6-config", data["commands"])
-        self.assertIn("add-vlan-config", data["commands"])
-        self.assertIn("add-dhcp-pool", data["commands"])
-        self.assertIn("add-server-config", data["commands"])
-        self.assertIn("add-ios-config", data["commands"])
-        self.assertIn("add-security-policy", data["commands"])
+        for command in (
+            "add-ap-config",
+            "remove-ap-config",
+            "add-annotation",
+            "remove-annotation",
+            "add-pc-config",
+            "remove-pc-config",
+            "add-ipv6-config",
+            "remove-ipv6-config",
+            "add-vlan-config",
+            "remove-vlan-config",
+            "add-dhcp-pool",
+            "remove-dhcp-pool",
+            "add-server-config",
+            "remove-server-config",
+            "add-ios-config",
+            "remove-ios-config",
+            "add-security-policy",
+            "remove-security-policy",
+        ):
+            self.assertIn(command, data["commands"])
 
     def test_plan_editor_builds_renderable_topology(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -226,9 +239,12 @@ class PlanCliTest(unittest.TestCase):
                 ("add-device", str(path), "--name", "SW1", "--category", "switch", "--model", "2960-24TT", "--output", str(path)),
                 ("add-device", str(path), "--name", "SRV1", "--category", "server", "--model", "Server-PT", "--output", str(path)),
                 ("add-device", str(path), "--name", "PC1", "--category", "pc", "--model", "PC-PT", "--output", str(path)),
+                ("add-device", str(path), "--name", "AP1", "--category", "accesspoint", "--model", "AccessPoint-PT", "--output", str(path)),
                 ("add-link", str(path), "--a", "R1", "--pa", "GigabitEthernet0/0", "--b", "SW1", "--pb", "FastEthernet0/1", "--output", str(path)),
                 ("add-link", str(path), "--a", "SW1", "--pa", "FastEthernet0/2", "--b", "PC1", "--pb", "FastEthernet0", "--vlan", "10", "--output", str(path)),
                 ("add-link", str(path), "--a", "SW1", "--pa", "FastEthernet0/3", "--b", "SRV1", "--pb", "FastEthernet0", "--vlan", "10", "--output", str(path)),
+                ("add-ap-config", str(path), "--name", "AP1", "--ssid", "CLASSROOM", "--channel", "6", "--output", str(path)),
+                ("add-annotation", str(path), "--id", "service-note", "--target", "SRV1", "--title", "Services", "--text", "HTTP/DNS/FTP enabled.", "--output", str(path)),
                 ("add-pc-config", str(path), "--name", "PC1", "--ip", "192.168.10.20", "--mask", "255.255.255.0", "--gateway", "192.168.10.1", "--dns", "192.168.10.10", "--output", str(path)),
                 ("add-pc-config", str(path), "--name", "SRV1", "--ip", "192.168.10.10", "--mask", "255.255.255.0", "--gateway", "192.168.10.1", "--dns", "192.168.10.10", "--output", str(path)),
                 ("add-ipv6-config", str(path), "--name", "PC1", "--ipv6", "2001:db8:10::20", "--prefix", "64", "--gateway", "2001:db8:10::1", "--dns", "2001:db8:10::10", "--output", str(path)),
@@ -262,6 +278,8 @@ class PlanCliTest(unittest.TestCase):
                 result = self.run_plan(*step)
                 self.assertEqual(result.returncode, 0, result.stderr)
             data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["ap_configs"][0]["ssid"], "CLASSROOM")
+            self.assertEqual(data["annotations"][0]["id"], "service-note")
             self.assertEqual(data["ipv6_configs"][0]["ipv6"], "2001:db8:10::20")
             self.assertEqual(data["vlan_configs"][0]["id"], 10)
             self.assertEqual(data["dhcp_pools"][0]["name"], "VLAN10")
@@ -290,12 +308,33 @@ class PlanCliTest(unittest.TestCase):
             )
             self.assertEqual(render.returncode, 0, render.stderr)
             summary = json.loads(render.stdout)
+            self.assertEqual(summary["counts"]["ap_configs"], 1)
+            self.assertEqual(summary["counts"]["annotations"], 1)
             self.assertEqual(summary["counts"]["ipv6_configs"], 1)
             self.assertEqual(summary["counts"]["vlan_configs"], 1)
             self.assertEqual(summary["counts"]["dhcp_pools"], 1)
             self.assertEqual(summary["counts"]["server_configs"], 1)
             self.assertEqual(summary["counts"]["ios_configs"], 1)
             self.assertEqual(summary["counts"]["security_policies"], 1)
+
+            remove_steps = [
+                ("remove-ap-config", str(path), "--name", "AP1", "--output", str(path)),
+                ("remove-annotation", str(path), "--id", "service-note", "--output", str(path)),
+                ("remove-pc-config", str(path), "--name", "PC1", "--output", str(path)),
+                ("remove-pc-config", str(path), "--name", "SRV1", "--output", str(path)),
+                ("remove-ipv6-config", str(path), "--name", "PC1", "--output", str(path)),
+                ("remove-vlan-config", str(path), "--id", "10", "--output", str(path)),
+                ("remove-dhcp-pool", str(path), "--device", "R1", "--name", "VLAN10", "--output", str(path)),
+                ("remove-server-config", str(path), "--name", "SRV1", "--output", str(path)),
+                ("remove-ios-config", str(path), "--device", "R1", "--output", str(path)),
+                ("remove-security-policy", str(path), "--device", "R1", "--type", "inside_acl", "--interface", "GigabitEthernet0/0", "--output", str(path)),
+            ]
+            for step in remove_steps:
+                result = self.run_plan(*step)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            for key in ("ap_configs", "annotations", "pc_configs", "ipv6_configs", "vlan_configs", "dhcp_pools", "server_configs", "ios_configs", "security_policies"):
+                self.assertEqual(data[key], [], key)
 
     def test_add_link_rejects_missing_endpoint_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

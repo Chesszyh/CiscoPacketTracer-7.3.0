@@ -381,6 +381,12 @@ def tool_plan_add_ap_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_plan_remove_ap_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-ap-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
 def tool_plan_add_annotation(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-plan")), "add-annotation", str_arg(args, "plan")]
     for key, flag in (("id", "--id"), ("kind", "--kind"), ("target", "--target"), ("title", "--title"), ("text", "--text"), ("color", "--color")):
@@ -391,6 +397,18 @@ def tool_plan_add_annotation(root: Path, args: dict[str, Any]) -> dict[str, Any]
         value = optional_int_arg(args, key)
         if value is not None:
             command.extend([flag, str(value)])
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_remove_annotation(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-annotation", str_arg(args, "plan")]
+    for key, flag in (("id", "--id"), ("kind", "--kind"), ("target", "--target"), ("title", "--title"), ("text", "--text")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    if bool_arg(args, "all", default=False):
+        command.append("--all")
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -409,6 +427,17 @@ def tool_plan_add_pc_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_plan_remove_pc_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-pc-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    port = str_arg(args, "port", required=False)
+    if port:
+        command.extend(["--port", port])
+    if bool_arg(args, "all", default=False):
+        command.append("--all")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
 def tool_plan_add_ipv6_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-plan")), "add-ipv6-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
     for key, flag in (("port", "--port"), ("ipv6", "--ipv6"), ("prefix", "--prefix"), ("gateway", "--gateway"), ("dns", "--dns"), ("note", "--note")):
@@ -417,6 +446,17 @@ def tool_plan_add_ipv6_config(root: Path, args: dict[str, Any]) -> dict[str, Any
             command.extend([flag, value])
     if bool_arg(args, "replace", default=False):
         command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_remove_ipv6_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-ipv6-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    port = str_arg(args, "port", required=False)
+    if port:
+        command.extend(["--port", port])
+    if bool_arg(args, "all", default=False):
+        command.append("--all")
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -433,6 +473,12 @@ def tool_plan_add_vlan_config(root: Path, args: dict[str, Any]) -> dict[str, Any
     return run_cli(root, command)
 
 
+def tool_plan_remove_vlan_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-vlan-config", str_arg(args, "plan"), "--id", str(int_arg(args, "id", default=0))]
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
 def tool_plan_add_dhcp_pool(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-plan")), "add-dhcp-pool", str_arg(args, "plan"), "--name", str_arg(args, "name")]
     for key, flag in (("device", "--device"), ("network", "--network"), ("mask", "--mask"), ("start", "--start"), ("end", "--end"), ("gateway", "--gateway"), ("dns", "--dns")):
@@ -444,6 +490,17 @@ def tool_plan_add_dhcp_pool(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         command.extend(["--vlan", str(vlan)])
     if bool_arg(args, "replace", default=False):
         command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_remove_dhcp_pool(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-dhcp-pool", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    device = str_arg(args, "device", required=False)
+    if device:
+        command.extend(["--device", device])
+    if bool_arg(args, "all", default=False):
+        command.append("--all")
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -465,6 +522,12 @@ def tool_plan_add_server_config(root: Path, args: dict[str, Any]) -> dict[str, A
             command.extend([flag, value])
     if bool_arg(args, "replace", default=False):
         command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_remove_server_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-server-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -492,6 +555,17 @@ def tool_plan_add_ios_config(root: Path, args: dict[str, Any]) -> dict[str, Any]
     return run_cli(root, command)
 
 
+def tool_plan_remove_ios_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-ios-config", str_arg(args, "plan"), "--device", str_arg(args, "device")]
+    source = str_arg(args, "source", required=False)
+    if source:
+        command.extend(["--source", source])
+    if bool_arg(args, "all", default=False):
+        command.append("--all")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
 def tool_plan_add_security_policy(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-plan")), "add-security-policy", str_arg(args, "plan"), "--device", str_arg(args, "device"), "--type", str_arg(args, "type")]
     for key, flag in (("interface", "--interface"), ("acl", "--acl"), ("direction", "--direction"), ("summary", "--summary")):
@@ -500,6 +574,18 @@ def tool_plan_add_security_policy(root: Path, args: dict[str, Any]) -> dict[str,
             command.extend([flag, value])
     if bool_arg(args, "replace", default=False):
         command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_remove_security_policy(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-security-policy", str_arg(args, "plan"), "--device", str_arg(args, "device")]
+    for key, flag in (("type", "--type"), ("interface", "--interface")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    if bool_arg(args, "all", default=False):
+        command.append("--all")
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -1939,14 +2025,23 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_plan_add_link", "Append one link between topology plan devices.", schema({"plan": string, "a": string, "b": string, "pa": string, "pb": string, "cable": string, "vlan": integer, "note": string, "allow_missing": boolean, "output": string, "compact": boolean}, ["plan", "a", "b"]), tool_plan_add_link),
         tool("pt730_plan_remove_link", "Remove one topology link between plan devices.", schema({"plan": string, "a": string, "b": string, "pa": string, "pb": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "a", "b"]), tool_plan_remove_link),
         tool("pt730_plan_add_ap_config", "Append or update one wireless AP metadata record in a topology JSON plan.", schema({"plan": string, "name": string, "ssid": string, "mode": string, "channel": string, "auth": string, "password": string, "note": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name", "ssid"]), tool_plan_add_ap_config),
+        tool("pt730_plan_remove_ap_config", "Remove one wireless AP metadata record from a topology JSON plan.", schema({"plan": string, "name": string, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_remove_ap_config),
         tool("pt730_plan_add_annotation", "Append one report/diagram callout annotation to a topology JSON plan.", schema({"plan": string, "id": string, "kind": string, "target": string, "title": string, "text": string, "x": integer, "y": integer, "width": integer, "height": integer, "color": string, "output": string, "compact": boolean}, ["plan"]), tool_plan_add_annotation),
+        tool("pt730_plan_remove_annotation", "Remove one or more report/diagram callout annotations from a topology JSON plan.", schema({"plan": string, "id": string, "kind": string, "target": string, "title": string, "text": string, "all": boolean, "output": string, "compact": boolean}, ["plan"]), tool_plan_remove_annotation),
         tool("pt730_plan_add_pc_config", "Append or update one PC/server IPv4 config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "dhcp": boolean, "ip": string, "mask": string, "gateway": string, "dns": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_pc_config),
+        tool("pt730_plan_remove_pc_config", "Remove one PC/server IPv4 config record from a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_remove_pc_config),
         tool("pt730_plan_add_ipv6_config", "Append or update one PC/server IPv6 config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "ipv6": string, "prefix": string, "gateway": string, "dns": string, "note": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_ipv6_config),
+        tool("pt730_plan_remove_ipv6_config", "Remove one PC/server IPv6 config record from a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_remove_ipv6_config),
         tool("pt730_plan_add_vlan_config", "Append or update one VLAN metadata record in a topology JSON plan.", schema({"plan": string, "id": integer, "name": string, "network": string, "gateway": string, "description": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "id"]), tool_plan_add_vlan_config),
+        tool("pt730_plan_remove_vlan_config", "Remove one VLAN metadata record from a topology JSON plan.", schema({"plan": string, "id": integer, "output": string, "compact": boolean}, ["plan", "id"]), tool_plan_remove_vlan_config),
         tool("pt730_plan_add_dhcp_pool", "Append or update one router DHCP pool metadata record in a topology JSON plan.", schema({"plan": string, "name": string, "device": string, "vlan": integer, "network": string, "mask": string, "start": string, "end": string, "gateway": string, "dns": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_dhcp_pool),
+        tool("pt730_plan_remove_dhcp_pool", "Remove one router DHCP pool metadata record from a topology JSON plan.", schema({"plan": string, "name": string, "device": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_remove_dhcp_pool),
         tool("pt730_plan_add_server_config", "Append or update one Server-PT service config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "http": boolean, "tftp": boolean, "service": string_array, "ftp_json": json_object_or_string, "dns_json": json_object_or_string, "email_json": json_object_or_string, "ntp_json": json_object_or_string, "syslog_json": json_object_or_string, "dhcp_json": json_object_or_string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_server_config),
+        tool("pt730_plan_remove_server_config", "Remove one Server-PT service config record from a topology JSON plan.", schema({"plan": string, "name": string, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_remove_server_config),
         tool("pt730_plan_add_ios_config", "Append or update one IOS command config record in a topology JSON plan.", schema({"plan": string, "device": string, "source": string, "init_dialog": boolean, "save": boolean, "commands": string_array, "commands_file": string, "commands_json": string_array_or_string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "device"]), tool_plan_add_ios_config),
+        tool("pt730_plan_remove_ios_config", "Remove one IOS command config record from a topology JSON plan.", schema({"plan": string, "device": string, "source": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "device"]), tool_plan_remove_ios_config),
         tool("pt730_plan_add_security_policy", "Append or update one security policy metadata record in a topology JSON plan.", schema({"plan": string, "device": string, "type": string, "interface": string, "acl": string, "direction": string, "summary": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "device", "type"]), tool_plan_add_security_policy),
+        tool("pt730_plan_remove_security_policy", "Remove one or more security policy metadata records from a topology JSON plan.", schema({"plan": string, "device": string, "type": string, "interface": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "device"]), tool_plan_remove_security_policy),
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, diagram-audit, verification-json, or verification-md.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_verification_plan", "Generate an offline JSON or Markdown live/manual validation checklist for a topology plan.", schema({"plan": string, "format": {"type": "string", "enum": ["json", "markdown"]}, "output": string, "compact": boolean, "max_hosts": integer, "max_service_targets": integer, "strict_safety": boolean, "allow_risky": boolean}, ["plan"]), tool_verification_plan),

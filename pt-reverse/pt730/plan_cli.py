@@ -95,6 +95,17 @@ def _remove_matching(items: list[Any], predicate: Any) -> int:
     return original - len(items)
 
 
+def _remove_unique_or_all(items: list[Any], predicate: Any, *, label: str, all_matches: bool) -> int:
+    matches = [item for item in items if isinstance(item, dict) and predicate(item)]
+    if not matches:
+        raise ValueError(f"{label} not found")
+    if len(matches) > 1 and not all_matches:
+        raise ValueError(f"{label} selector matched {len(matches)} records; use --all or add a narrower selector")
+    remove_ids = {id(item) for item in matches} if all_matches else {id(matches[0])}
+    items[:] = [item for item in items if id(item) not in remove_ids]
+    return len(remove_ids)
+
+
 def _link_matches(link: dict[str, Any], args: argparse.Namespace) -> bool:
     a = str(link.get("a", link.get("from", "")))
     b = str(link.get("b", link.get("to", "")))
@@ -118,7 +129,7 @@ def _link_matches(link: dict[str, Any], args: argparse.Namespace) -> bool:
 def schema() -> dict[str, Any]:
     return {
         "kind": "pt730-plan-schema",
-        "commands": ["schema", "new", "set-metadata", "add-device", "remove-device", "add-module", "remove-module", "add-link", "remove-link", "add-ap-config", "add-annotation", "add-pc-config", "add-ipv6-config", "add-vlan-config", "add-dhcp-pool", "add-server-config", "add-ios-config", "add-security-policy"],
+        "commands": ["schema", "new", "set-metadata", "add-device", "remove-device", "add-module", "remove-module", "add-link", "remove-link", "add-ap-config", "remove-ap-config", "add-annotation", "remove-annotation", "add-pc-config", "remove-pc-config", "add-ipv6-config", "remove-ipv6-config", "add-vlan-config", "remove-vlan-config", "add-dhcp-pool", "remove-dhcp-pool", "add-server-config", "remove-server-config", "add-ios-config", "remove-ios-config", "add-security-policy", "remove-security-policy"],
         "workflow": [
             "pt730-plan new --name LAB --output lab.json",
             "pt730-plan add-device lab.json --name R1 --category router --model 2911 --output lab.json",
@@ -138,14 +149,23 @@ def schema() -> dict[str, Any]:
         "link_fields": ["a", "pa", "b", "pb", "cable", "vlan", "note"],
         "remove_link_fields": ["a", "pa", "b", "pb", "all"],
         "ap_config_fields": ["name", "ssid", "mode", "channel", "auth", "password", "note"],
+        "remove_ap_config_fields": ["name"],
         "annotation_fields": ["id", "kind", "target", "title", "text", "x", "y", "width", "height", "color"],
+        "remove_annotation_fields": ["id", "kind", "target", "title", "text", "all"],
         "pc_config_fields": ["name", "port", "dhcp", "ip", "mask", "gateway", "dns"],
+        "remove_pc_config_fields": ["name", "port", "all"],
         "ipv6_config_fields": ["name", "port", "ipv6", "prefix", "gateway", "dns", "note"],
+        "remove_ipv6_config_fields": ["name", "port", "all"],
         "vlan_config_fields": ["id", "name", "network", "gateway", "description"],
+        "remove_vlan_config_fields": ["id"],
         "dhcp_pool_fields": ["device", "name", "vlan", "network", "mask", "start", "end", "gateway", "dns"],
+        "remove_dhcp_pool_fields": ["name", "device", "all"],
         "server_config_fields": ["name", "port", "http", "tftp", "ftp_json", "dns_json", "email_json", "ntp_json", "syslog_json", "dhcp_json", "service"],
+        "remove_server_config_fields": ["name"],
         "ios_config_fields": ["device", "source", "init_dialog", "save", "command", "commands_file", "commands_json"],
+        "remove_ios_config_fields": ["device", "source", "all"],
         "security_policy_fields": ["device", "type", "interface", "acl", "direction", "summary"],
+        "remove_security_policy_fields": ["device", "type", "interface", "all"],
     }
 
 
@@ -315,6 +335,13 @@ def add_ap_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, A
     return plan
 
 
+def remove_ap_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    removed = _remove_matching(_ensure_list(plan, "ap_configs"), lambda item: _first_present(item, ("name", "device", "ap")) == args.name)
+    if not removed:
+        raise ValueError(f"ap_config for {args.name!r} not found")
+    return plan
+
+
 def add_annotation(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     if not args.text and not args.title:
         raise ValueError("add-annotation requires --text or --title")
@@ -328,6 +355,18 @@ def add_annotation(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, 
         if value is not None:
             item[key] = value
     _ensure_list(plan, "annotations").append(item)
+    return plan
+
+
+def remove_annotation(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    selectors = [key for key in ("id", "kind", "target", "title", "text") if _str_value(getattr(args, key))]
+    if not selectors:
+        raise ValueError("remove-annotation requires at least one selector: --id, --kind, --target, --title, or --text")
+
+    def matches(item: dict[str, Any]) -> bool:
+        return all(str(item.get(key, "")) == _str_value(getattr(args, key)) for key in selectors)
+
+    _remove_unique_or_all(_ensure_list(plan, "annotations"), matches, label="annotation", all_matches=args.all)
     return plan
 
 
@@ -351,6 +390,14 @@ def add_pc_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, A
     return plan
 
 
+def remove_pc_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    def matches(item: dict[str, Any]) -> bool:
+        return _first_present(item, ("name", "device", "pc", "server")) == args.name and str(item.get("port", "FastEthernet0")) == args.port
+
+    _remove_unique_or_all(_ensure_list(plan, "pc_configs"), matches, label=f"pc_config for {args.name!r} {args.port!r}", all_matches=args.all)
+    return plan
+
+
 def add_ipv6_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     configs = _ensure_list(plan, "ipv6_configs")
     key = (args.name, args.port)
@@ -369,6 +416,14 @@ def add_ipv6_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str,
     return plan
 
 
+def remove_ipv6_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    def matches(item: dict[str, Any]) -> bool:
+        return _first_present(item, ("name", "device", "pc", "server")) == args.name and str(item.get("port", "FastEthernet0")) == args.port
+
+    _remove_unique_or_all(_ensure_list(plan, "ipv6_configs"), matches, label=f"ipv6_config for {args.name!r} {args.port!r}", all_matches=args.all)
+    return plan
+
+
 def add_vlan_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     configs = _ensure_list(plan, "vlan_configs")
     existing_index = next((index for index, item in enumerate(configs) if isinstance(item, dict) and int(item.get("id", item.get("vlan", item.get("vlan_id", -1)))) == args.id), None)
@@ -383,6 +438,13 @@ def add_vlan_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str,
         configs.append(config)
     else:
         configs[existing_index] = {**configs[existing_index], **config}
+    return plan
+
+
+def remove_vlan_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    removed = _remove_matching(_ensure_list(plan, "vlan_configs"), lambda item: int(item.get("id", item.get("vlan", item.get("vlan_id", -1)))) == args.id)
+    if not removed:
+        raise ValueError(f"vlan_config for VLAN {args.id} not found")
     return plan
 
 
@@ -406,6 +468,17 @@ def add_dhcp_pool(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, A
         pools.append(pool)
     else:
         pools[existing_index] = {**pools[existing_index], **pool}
+    return plan
+
+
+def remove_dhcp_pool(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    def matches(item: dict[str, Any]) -> bool:
+        if _first_present(item, ("name", "pool")) != args.name:
+            return False
+        return not args.device or _first_present(item, ("device", "router")) == args.device
+
+    label = f"dhcp_pool {args.name!r}" + (f" on {args.device!r}" if args.device else "")
+    _remove_unique_or_all(_ensure_list(plan, "dhcp_pools"), matches, label=label, all_matches=args.all)
     return plan
 
 
@@ -437,6 +510,13 @@ def add_server_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[st
     return plan
 
 
+def remove_server_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    removed = _remove_matching(_ensure_list(plan, "server_configs"), lambda item: _first_present(item, ("name", "device", "server")) == args.name)
+    if not removed:
+        raise ValueError(f"server_config for {args.name!r} not found")
+    return plan
+
+
 def add_ios_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     configs = _ensure_list(plan, "ios_configs")
     source = args.source or "pt730-plan"
@@ -461,6 +541,16 @@ def add_ios_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, 
     return plan
 
 
+def remove_ios_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    source = args.source or "pt730-plan"
+
+    def matches(item: dict[str, Any]) -> bool:
+        return _first_present(item, ("device", "name", "router", "switch")) == args.device and str(item.get("source", "pt730-plan")) == source
+
+    _remove_unique_or_all(_ensure_list(plan, "ios_configs"), matches, label=f"ios_config for {args.device!r} source {source!r}", all_matches=args.all)
+    return plan
+
+
 def add_security_policy(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     policies = _ensure_list(plan, "security_policies")
     key = (args.device, args.type, args.interface)
@@ -476,6 +566,25 @@ def add_security_policy(plan: dict[str, Any], args: argparse.Namespace) -> dict[
         policies.append(policy)
     else:
         policies[existing_index] = {**policies[existing_index], **policy}
+    return plan
+
+
+def remove_security_policy(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    def matches(item: dict[str, Any]) -> bool:
+        if _first_present(item, ("device", "router", "name")) != args.device:
+            return False
+        if args.type and str(item.get("type", item.get("kind", ""))) != args.type:
+            return False
+        if args.interface and str(item.get("interface", item.get("port", ""))) != args.interface:
+            return False
+        return True
+
+    label = f"security_policy for {args.device!r}"
+    if args.type:
+        label += f" {args.type!r}"
+    if args.interface:
+        label += f" {args.interface!r}"
+    _remove_unique_or_all(_ensure_list(plan, "security_policies"), matches, label=label, all_matches=args.all)
     return plan
 
 
@@ -578,6 +687,11 @@ def main(argv: list[str] | None = None) -> int:
     ap_p.add_argument("--replace", action="store_true", help="replace/update an existing AP config with the same name")
     add_common_io(ap_p)
 
+    remove_ap_p = sub.add_parser("remove-ap-config", help="remove one wireless AP metadata record")
+    add_plan_arg(remove_ap_p)
+    remove_ap_p.add_argument("--name", required=True)
+    add_common_io(remove_ap_p)
+
     annotation_p = sub.add_parser("add-annotation", help="append one report/diagram callout")
     add_plan_arg(annotation_p)
     annotation_p.add_argument("--id", default="")
@@ -592,6 +706,16 @@ def main(argv: list[str] | None = None) -> int:
     annotation_p.add_argument("--color", default="")
     add_common_io(annotation_p)
 
+    remove_annotation_p = sub.add_parser("remove-annotation", help="remove one or more report/diagram callouts")
+    add_plan_arg(remove_annotation_p)
+    remove_annotation_p.add_argument("--id", default="")
+    remove_annotation_p.add_argument("--kind", default="")
+    remove_annotation_p.add_argument("--target", default="")
+    remove_annotation_p.add_argument("--title", default="")
+    remove_annotation_p.add_argument("--text", default="")
+    remove_annotation_p.add_argument("--all", action="store_true", help="remove all matching annotations instead of requiring a unique match")
+    add_common_io(remove_annotation_p)
+
     pc_p = sub.add_parser("add-pc-config", help="append or update one PC/server IPv4 config record")
     add_plan_arg(pc_p)
     pc_p.add_argument("--name", required=True)
@@ -603,6 +727,13 @@ def main(argv: list[str] | None = None) -> int:
     pc_p.add_argument("--dns", default="")
     pc_p.add_argument("--replace", action="store_true", help="replace/update an existing config for the same name and port")
     add_common_io(pc_p)
+
+    remove_pc_p = sub.add_parser("remove-pc-config", help="remove one PC/server IPv4 config record")
+    add_plan_arg(remove_pc_p)
+    remove_pc_p.add_argument("--name", required=True)
+    remove_pc_p.add_argument("--port", default="FastEthernet0")
+    remove_pc_p.add_argument("--all", action="store_true", help="remove all matching PC configs instead of requiring a unique match")
+    add_common_io(remove_pc_p)
 
     ipv6_p = sub.add_parser("add-ipv6-config", help="append or update one PC/server IPv6 config record")
     add_plan_arg(ipv6_p)
@@ -616,6 +747,13 @@ def main(argv: list[str] | None = None) -> int:
     ipv6_p.add_argument("--replace", action="store_true", help="replace/update an existing IPv6 config for the same name and port")
     add_common_io(ipv6_p)
 
+    remove_ipv6_p = sub.add_parser("remove-ipv6-config", help="remove one PC/server IPv6 config record")
+    add_plan_arg(remove_ipv6_p)
+    remove_ipv6_p.add_argument("--name", required=True)
+    remove_ipv6_p.add_argument("--port", default="FastEthernet0")
+    remove_ipv6_p.add_argument("--all", action="store_true", help="remove all matching IPv6 configs instead of requiring a unique match")
+    add_common_io(remove_ipv6_p)
+
     vlan_p = sub.add_parser("add-vlan-config", help="append or update one VLAN metadata record")
     add_plan_arg(vlan_p)
     vlan_p.add_argument("--id", type=int, required=True)
@@ -625,6 +763,11 @@ def main(argv: list[str] | None = None) -> int:
     vlan_p.add_argument("--description", default="")
     vlan_p.add_argument("--replace", action="store_true", help="replace/update an existing VLAN record with the same id")
     add_common_io(vlan_p)
+
+    remove_vlan_p = sub.add_parser("remove-vlan-config", help="remove one VLAN metadata record")
+    add_plan_arg(remove_vlan_p)
+    remove_vlan_p.add_argument("--id", type=int, required=True)
+    add_common_io(remove_vlan_p)
 
     dhcp_p = sub.add_parser("add-dhcp-pool", help="append or update one router DHCP pool metadata record")
     add_plan_arg(dhcp_p)
@@ -639,6 +782,13 @@ def main(argv: list[str] | None = None) -> int:
     dhcp_p.add_argument("--dns", default="")
     dhcp_p.add_argument("--replace", action="store_true", help="replace/update an existing DHCP pool with the same device and name")
     add_common_io(dhcp_p)
+
+    remove_dhcp_p = sub.add_parser("remove-dhcp-pool", help="remove one router DHCP pool metadata record")
+    add_plan_arg(remove_dhcp_p)
+    remove_dhcp_p.add_argument("--name", required=True)
+    remove_dhcp_p.add_argument("--device", default="")
+    remove_dhcp_p.add_argument("--all", action="store_true", help="remove all matching DHCP pools instead of requiring a unique match")
+    add_common_io(remove_dhcp_p)
 
     server_p = sub.add_parser("add-server-config", help="append or update one Server-PT service config record")
     add_plan_arg(server_p)
@@ -656,6 +806,11 @@ def main(argv: list[str] | None = None) -> int:
     server_p.add_argument("--replace", action="store_true", help="replace/update an existing Server-PT config with the same name")
     add_common_io(server_p)
 
+    remove_server_p = sub.add_parser("remove-server-config", help="remove one Server-PT service config record")
+    add_plan_arg(remove_server_p)
+    remove_server_p.add_argument("--name", required=True)
+    add_common_io(remove_server_p)
+
     ios_p = sub.add_parser("add-ios-config", help="append or update one IOS command config record")
     add_plan_arg(ios_p)
     ios_p.add_argument("--device", required=True)
@@ -668,6 +823,13 @@ def main(argv: list[str] | None = None) -> int:
     ios_p.add_argument("--replace", action="store_true", help="replace/update an existing IOS config with the same device and source")
     add_common_io(ios_p)
 
+    remove_ios_p = sub.add_parser("remove-ios-config", help="remove one IOS command config record")
+    add_plan_arg(remove_ios_p)
+    remove_ios_p.add_argument("--device", required=True)
+    remove_ios_p.add_argument("--source", default="pt730-plan")
+    remove_ios_p.add_argument("--all", action="store_true", help="remove all matching IOS configs instead of requiring a unique match")
+    add_common_io(remove_ios_p)
+
     security_p = sub.add_parser("add-security-policy", help="append or update one security policy metadata record")
     add_plan_arg(security_p)
     security_p.add_argument("--device", required=True)
@@ -678,6 +840,14 @@ def main(argv: list[str] | None = None) -> int:
     security_p.add_argument("--summary", default="")
     security_p.add_argument("--replace", action="store_true", help="replace/update an existing security policy with the same device/type/interface")
     add_common_io(security_p)
+
+    remove_security_p = sub.add_parser("remove-security-policy", help="remove one or more security policy metadata records")
+    add_plan_arg(remove_security_p)
+    remove_security_p.add_argument("--device", required=True)
+    remove_security_p.add_argument("--type", default="")
+    remove_security_p.add_argument("--interface", default="")
+    remove_security_p.add_argument("--all", action="store_true", help="remove all matching security policies instead of requiring a unique match")
+    add_common_io(remove_security_p)
 
     args = parser.parse_args(argv)
     try:
@@ -705,22 +875,40 @@ def main(argv: list[str] | None = None) -> int:
             _emit(remove_link(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-ap-config":
             _emit(add_ap_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-ap-config":
+            _emit(remove_ap_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-annotation":
             _emit(add_annotation(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-annotation":
+            _emit(remove_annotation(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-pc-config":
             _emit(add_pc_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-pc-config":
+            _emit(remove_pc_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-ipv6-config":
             _emit(add_ipv6_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-ipv6-config":
+            _emit(remove_ipv6_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-vlan-config":
             _emit(add_vlan_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-vlan-config":
+            _emit(remove_vlan_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-dhcp-pool":
             _emit(add_dhcp_pool(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-dhcp-pool":
+            _emit(remove_dhcp_pool(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-server-config":
             _emit(add_server_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-server-config":
+            _emit(remove_server_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-ios-config":
             _emit(add_ios_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-ios-config":
+            _emit(remove_ios_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-security-policy":
             _emit(add_security_policy(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-security-policy":
+            _emit(remove_security_policy(plan, args), args.output, compact=args.compact)
         else:
             raise ValueError(f"unknown command: {args.cmd}")
         return 0
