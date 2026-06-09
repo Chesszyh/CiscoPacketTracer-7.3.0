@@ -149,6 +149,61 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("fillOpacity=18", result.stdout)
         self.assertIn("dashed=1", result.stdout)
 
+    def test_render_outputs_topology_annotations(self) -> None:
+        plan = {
+            "devices": [
+                {"name": "R1", "category": "router", "model": "2911", "x": 100, "y": 100},
+                {"name": "SW1", "category": "switch", "model": "2960-24TT", "x": 280, "y": 100},
+            ],
+            "links": [{"a": "R1", "pa": "GigabitEthernet0/0", "b": "SW1", "pb": "GigabitEthernet0/1", "cable": "straight"}],
+            "annotations": [
+                {
+                    "id": "callout-core",
+                    "kind": "info",
+                    "target": "R1",
+                    "title": "Core Gateway",
+                    "text": "Default gateway and routing validation point.",
+                },
+                {
+                    "id": "note-report",
+                    "kind": "warning",
+                    "x": 24,
+                    "y": 260,
+                    "text": "Manual IPv6 host configuration remains report metadata.",
+                },
+            ],
+        }
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(plan, f)
+            path = f.name
+        try:
+            svg_result = self.run_render("svg", path)
+            drawio_result = self.run_render("drawio", path)
+            markdown_result = self.run_render("markdown", path)
+            summary_result = self.run_render("summary", path)
+            audit_result = self.run_render("diagram-audit", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(svg_result.returncode, 0, svg_result.stderr)
+        self.assertIn('class="annotation annotation-info"', svg_result.stdout)
+        self.assertIn('id="callout-core"', svg_result.stdout)
+        self.assertIn("Core Gateway", svg_result.stdout)
+        self.assertIn('class="annotation-leader"', svg_result.stdout)
+        self.assertEqual(drawio_result.returncode, 0, drawio_result.stderr)
+        self.assertIn('id="annotation-1"', drawio_result.stdout)
+        self.assertIn("Core Gateway", drawio_result.stdout)
+        self.assertIn('id="annotation-leader-1"', drawio_result.stdout)
+        self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
+        self.assertIn("## Diagram Annotations", markdown_result.stdout)
+        self.assertIn("| callout-core | info | R1 | Core Gateway |", markdown_result.stdout)
+        self.assertEqual(summary_result.returncode, 0, summary_result.stderr)
+        summary = json.loads(summary_result.stdout)
+        self.assertEqual(summary["counts"]["annotations"], 2)
+        self.assertEqual(summary["annotations"][1]["kind"], "warning")
+        self.assertEqual(audit_result.returncode, 0, audit_result.stderr)
+        audit = json.loads(audit_result.stdout)
+        self.assertEqual(audit["checks"]["counts"]["annotations"], 2)
+
     def test_wireless_ap_rendering_and_summary_metadata(self) -> None:
         plan = {
             "devices": [

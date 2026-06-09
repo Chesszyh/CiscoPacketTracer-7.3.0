@@ -11,6 +11,7 @@ import math
 import re
 import shlex
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -1124,6 +1125,76 @@ def shifted_group_boxes(boxes: list[dict[str, Any]], *, dy: float) -> list[dict[
     return [{**box, "y": box["y"] + dy} for box in boxes]
 
 
+def annotation_items(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = plan.get("annotations", [])
+    if isinstance(raw, dict):
+        raw = [raw]
+    items: list[dict[str, Any]] = []
+    for index, item in enumerate(raw if isinstance(raw, list) else []):
+        if not isinstance(item, dict):
+            continue
+        text = pick(item, ("text", "note", "description", "message", "label"))
+        title = pick(item, ("title", "heading", "name"))
+        if not text and not title:
+            continue
+        width = max(120.0, as_float(item.get("width")) or 240.0)
+        line_width = max(16, int(width / 7.5))
+        wrapped: list[str] = []
+        for paragraph in (text or "").splitlines() or [""]:
+            wrapped.extend(textwrap.wrap(paragraph, width=line_width) or [""])
+        height = max(48.0, as_float(item.get("height")) or max(54.0, 30.0 + (18.0 if title else 0.0) + len(wrapped) * 15.0))
+        kind = pick(item, ("kind", "type"), "note").strip().lower() or "note"
+        items.append(
+            {
+                "id": pick(item, ("id",), f"annotation-{index + 1}").strip() or f"annotation-{index + 1}",
+                "title": title,
+                "text": text,
+                "lines": wrapped,
+                "kind": kind,
+                "target": pick(item, ("target", "device", "for")).strip(),
+                "x": as_float(item.get("x")),
+                "y": as_float(item.get("y")),
+                "width": width,
+                "height": height,
+                "color": pick(item, ("color", "fill")),
+            }
+        )
+    return items
+
+
+def placed_annotations(plan: dict[str, Any], positions: dict[str, tuple[float, float]], *, title_height: float) -> list[dict[str, Any]]:
+    placed: list[dict[str, Any]] = []
+    for index, item in enumerate(annotation_items(plan)):
+        target = item.get("target")
+        target_pos = positions.get(str(target)) if target else None
+        x = item["x"]
+        y = item["y"]
+        if x is None or y is None:
+            if target_pos:
+                x = target_pos[0] + 84.0
+                y = target_pos[1] - item["height"] - 20.0
+            else:
+                x = 24.0
+                y = 24.0 + index * (item["height"] + 16.0)
+        y += title_height if item["y"] is not None else 0.0
+        placed.append({**item, "x": max(8.0, x), "y": max(8.0 + title_height, y), "target_x": target_pos[0] if target_pos else None, "target_y": target_pos[1] if target_pos else None})
+    return placed
+
+
+def annotation_colors(annotation: dict[str, Any], palette: dict[str, str]) -> tuple[str, str]:
+    if annotation.get("color"):
+        return str(annotation["color"]), palette["panel_border"]
+    kind = str(annotation.get("kind", "note")).lower()
+    colors = {
+        "info": ("#dbeafe", "#2563eb"),
+        "warning": ("#fed7aa", "#ea580c"),
+        "success": ("#dcfce7", "#16a34a"),
+        "critical": ("#fee2e2", "#dc2626"),
+        "note": ("#fef3c7", "#b45309"),
+    }
+    return colors.get(kind, colors["note"])
+
+
 def visible_title_height(options: RenderOptions) -> float:
     return 58.0 if options.title else 0.0
 
@@ -1267,6 +1338,7 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
     legend_extra_height = legend_height(plan, devices, options)
     positions = shifted_positions(positions, dy=title_height)
     group_boxes = shifted_group_boxes(group_boxes, dy=title_height)
+    annotations = placed_annotations(plan, positions, title_height=title_height)
     height += title_height + legend_extra_height
     if options.title or options.legend:
         width = max(width, 520.0)
@@ -1274,6 +1346,9 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
     for box in group_boxes:
         width = max(width, box["x"] + box["width"] + 12.0)
         height = max(height, box["y"] + box["height"] + 12.0)
+    for annotation in annotations:
+        width = max(width, annotation["x"] + annotation["width"] + 18.0)
+        height = max(height, annotation["y"] + annotation["height"] + 18.0)
     palette = render_palette(options.theme)
     title_text = options.title or "Packet Tracer topology"
     lines = [
@@ -1300,6 +1375,10 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
         f"    .legend-label {{ fill: {palette['muted']}; font-size: 12px; }}",
         "    .legend-marker { stroke-width: 1.8; }",
         "    .legend-link { stroke-width: 2.4; stroke-linecap: round; }",
+        "    .annotation-box { stroke-width: 1.4; fill-opacity: 0.94; }",
+        f"    .annotation-title {{ fill: {palette['text']}; font-size: 12px; font-weight: 800; }}",
+        f"    .annotation-text {{ fill: {palette['text']}; font-size: 11px; }}",
+        f"    .annotation-leader {{ stroke: {palette['muted']}; stroke-width: 1.3; stroke-dasharray: 5 4; }}",
         f"    .router ellipse {{ fill: {palette['router_fill']}; stroke: {palette['router_stroke']}; }} .router path {{ stroke: {palette['router_stroke']}; }}",
         f"    .switch rect {{ fill: {palette['switch_fill']}; stroke: {palette['switch_stroke']}; }} .switch path {{ stroke: {palette['switch_stroke']}; }}",
         f"    .server rect {{ fill: {palette['server_fill']}; stroke: {palette['server_stroke']}; }} .server path {{ stroke: {palette['server_stroke']}; }}",
@@ -1342,6 +1421,27 @@ def svg(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) -> st
         if name in positions:
             x, y = positions[name]
             lines.extend(svg_device_group(device, x, y, options=options))
+
+    for annotation in annotations:
+        fill, stroke = annotation_colors(annotation, palette)
+        if annotation.get("target_x") is not None and annotation.get("target_y") is not None:
+            lines.append(
+                f'  <line class="annotation-leader" x1="{annotation["target_x"]:.1f}" y1="{annotation["target_y"]:.1f}" '
+                f'x2="{annotation["x"]:.1f}" y2="{annotation["y"] + annotation["height"] / 2:.1f}" />'
+            )
+        lines.append(f'  <g class="annotation annotation-{svg_text(annotation["kind"])}" id="{svg_text(annotation["id"])}">')
+        lines.append(
+            f'    <rect class="annotation-box" x="{annotation["x"]:.1f}" y="{annotation["y"]:.1f}" '
+            f'width="{annotation["width"]:.1f}" height="{annotation["height"]:.1f}" rx="8" fill="{svg_text(fill)}" stroke="{svg_text(stroke)}" />'
+        )
+        text_y = annotation["y"] + 20.0
+        if annotation.get("title"):
+            lines.append(f'    <text class="annotation-title" x="{annotation["x"] + 12:.1f}" y="{text_y:.1f}">{svg_text(annotation["title"])}</text>')
+            text_y += 17.0
+        for line in annotation.get("lines", []):
+            lines.append(f'    <text class="annotation-text" x="{annotation["x"] + 12:.1f}" y="{text_y:.1f}">{svg_text(line)}</text>')
+            text_y += 15.0
+        lines.append("  </g>")
 
     if not devices:
         lines.append(f'  <text class="device-name" x="160" y="{110 + title_height:.1f}">empty topology</text>')
@@ -1423,6 +1523,7 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
     legend_extra_height = 92.0 if options.legend and legend_items(plan, devices) else 0.0
     positions = shifted_positions(positions, dy=title_height)
     group_boxes = shifted_group_boxes(group_boxes, dy=title_height)
+    annotations = placed_annotations(plan, positions, title_height=title_height)
     height += title_height + legend_extra_height
     if options.title or options.legend:
         width = max(width, 540.0)
@@ -1430,6 +1531,9 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
     for box in group_boxes:
         width = max(width, box["x"] + box["width"] + 12.0)
         height = max(height, box["y"] + box["height"] + 12.0)
+    for annotation in annotations:
+        width = max(width, annotation["x"] + annotation["width"] + 18.0)
+        height = max(height, annotation["y"] + annotation["height"] + 18.0)
     ids = {pick(device, ("name", "id"), f"device_{index}"): f"d{index + 2}" for index, device in enumerate(devices)}
     palette = render_palette(options.theme)
     lines = [
@@ -1489,6 +1593,25 @@ def drawio(plan: dict[str, Any], *, options: RenderOptions = RenderOptions()) ->
         lines.append('          <mxGeometry relative="1" as="geometry" />')
         lines.append("        </mxCell>")
         next_id += 1
+
+    for index, annotation in enumerate(annotations):
+        fill, stroke = annotation_colors(annotation, palette)
+        value = f"{annotation['title']}\n{annotation['text']}" if annotation.get("title") and annotation.get("text") else str(annotation.get("title") or annotation.get("text") or "")
+        style = (
+            "rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;"
+            f"fillColor={fill};strokeColor={stroke};fontColor={palette['text']};spacing=8;fontSize=11;"
+        )
+        lines.append(f'        <mxCell id="annotation-{index + 1}" value="{svg_text(value)}" style="{svg_text(style)}" vertex="1" parent="1">')
+        lines.append(f'          <mxGeometry x="{annotation["x"]:.1f}" y="{annotation["y"]:.1f}" width="{annotation["width"]:.1f}" height="{annotation["height"]:.1f}" as="geometry" />')
+        lines.append("        </mxCell>")
+        if annotation.get("target_x") is not None and annotation.get("target_y") is not None:
+            leader_style = f"endArrow=none;html=1;rounded=0;dashed=1;strokeColor={palette['muted']};"
+            lines.append(f'        <mxCell id="annotation-leader-{index + 1}" value="" style="{svg_text(leader_style)}" edge="1" parent="1">')
+            lines.append('          <mxGeometry relative="1" as="geometry">')
+            lines.append(f'            <mxPoint x="{annotation["target_x"]:.1f}" y="{annotation["target_y"]:.1f}" as="sourcePoint" />')
+            lines.append(f'            <mxPoint x="{annotation["x"]:.1f}" y="{annotation["y"] + annotation["height"] / 2:.1f}" as="targetPoint" />')
+            lines.append("          </mxGeometry>")
+            lines.append("        </mxCell>")
 
     legend_y = height - legend_extra_height + 18.0 if legend_extra_height else 0.0
     if options.legend and legend_extra_height:
@@ -1592,6 +1715,22 @@ def markdown(plan: dict[str, Any]) -> str:
     lines.extend(["## Links", ""])
     lines.extend(markdown_table(["A", "Port A", "B", "Port B", "Cable", "VLAN", "Note"], link_rows))
     lines.append("")
+
+    annotation_rows = []
+    for annotation in annotation_items(plan):
+        annotation_rows.append([
+            annotation["id"],
+            annotation["kind"],
+            annotation.get("target", ""),
+            annotation.get("title", ""),
+            annotation.get("text", ""),
+            "" if annotation.get("x") is None else annotation.get("x"),
+            "" if annotation.get("y") is None else annotation.get("y"),
+        ])
+    if annotation_rows:
+        lines.extend(["## Diagram Annotations", ""])
+        lines.extend(markdown_table(["ID", "Kind", "Target", "Title", "Text", "X", "Y"], annotation_rows))
+        lines.append("")
 
     pc_rows = []
     for config in plan.get("pc_configs", []):
@@ -1802,6 +1941,7 @@ def summary(plan: dict[str, Any]) -> str:
             "server_configs": len(plan.get("server_configs", [])),
             "security_policies": len(plan.get("security_policies", [])),
             "ios_configs": len(plan.get("ios_configs", [])),
+            "annotations": len(annotation_items(plan)),
         },
         "address_groups": [
             {
@@ -1854,6 +1994,20 @@ def summary(plan: dict[str, Any]) -> str:
             if isinstance(pool, dict)
         ],
         "noted_links": noted_links,
+        "annotations": [
+            {
+                "id": annotation["id"],
+                "kind": annotation["kind"],
+                "target": annotation.get("target", ""),
+                "title": annotation.get("title", ""),
+                "text": annotation.get("text", ""),
+                "x": annotation.get("x"),
+                "y": annotation.get("y"),
+                "width": annotation.get("width"),
+                "height": annotation.get("height"),
+            }
+            for annotation in annotation_items(plan)
+        ],
         "wireless": {
             "aps": len(plan.get("ap_configs", [])),
             "ssids": sorted({pick(config, ("ssid",)) for config in plan.get("ap_configs", []) if isinstance(config, dict) and pick(config, ("ssid",))}),
@@ -2149,6 +2303,7 @@ def diagram_audit(plan: dict[str, Any], *, options: RenderOptions = RenderOption
                 "rendered_devices": len(devices),
                 "implicit_devices": len(implicit_names),
                 "links": len(links),
+                "annotations": len(annotation_items(plan)),
             },
             "coordinates": {
                 "with_coordinates": len(explicit_positions),
