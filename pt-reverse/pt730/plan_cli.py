@@ -89,23 +89,54 @@ def _first_present(item: dict[str, Any], keys: tuple[str, ...]) -> str:
     return ""
 
 
+def _remove_matching(items: list[Any], predicate: Any) -> int:
+    original = len(items)
+    items[:] = [item for item in items if not (isinstance(item, dict) and predicate(item))]
+    return original - len(items)
+
+
+def _link_matches(link: dict[str, Any], args: argparse.Namespace) -> bool:
+    a = str(link.get("a", link.get("from", "")))
+    b = str(link.get("b", link.get("to", "")))
+    pa = str(link.get("pa", link.get("port_a", link.get("from_port", ""))))
+    pb = str(link.get("pb", link.get("port_b", link.get("to_port", ""))))
+    direct = a == args.a and b == args.b
+    reverse = a == args.b and b == args.a
+    if not (direct or reverse):
+        return False
+    if args.pa:
+        actual = pa if direct else pb
+        if actual != args.pa:
+            return False
+    if args.pb:
+        actual = pb if direct else pa
+        if actual != args.pb:
+            return False
+    return True
+
+
 def schema() -> dict[str, Any]:
     return {
         "kind": "pt730-plan-schema",
-        "commands": ["schema", "new", "add-device", "add-module", "add-link", "add-ap-config", "add-annotation", "add-pc-config", "add-ipv6-config", "add-vlan-config", "add-dhcp-pool", "add-server-config", "add-ios-config", "add-security-policy"],
+        "commands": ["schema", "new", "set-metadata", "add-device", "remove-device", "add-module", "remove-module", "add-link", "remove-link", "add-ap-config", "add-annotation", "add-pc-config", "add-ipv6-config", "add-vlan-config", "add-dhcp-pool", "add-server-config", "add-ios-config", "add-security-policy"],
         "workflow": [
             "pt730-plan new --name LAB --output lab.json",
             "pt730-plan add-device lab.json --name R1 --category router --model 2911 --output lab.json",
             "pt730-plan add-module lab.json --device R1 --slot 0/0 --model HWIC-2T --output lab.json",
             "pt730-plan add-device lab.json --name SW1 --category switch --model 2960-24TT --output lab.json",
             "pt730-plan add-link lab.json --a R1 --pa GigabitEthernet0/0 --b SW1 --pb FastEthernet0/1 --output lab.json",
+            "pt730-plan remove-link lab.json --a R1 --b SW1 --pa GigabitEthernet0/0 --pb FastEthernet0/1 --output lab.json",
             "pt730-plan add-ios-config lab.json --device R1 --command 'enable' --command 'configure terminal' --command 'end' --output lab.json",
             "pt730-layout lab.json --style lan --output lab-layout.json",
             "pt730-render svg lab-layout.json --preset report --output lab.svg",
         ],
+        "metadata_fields": ["key", "value", "json", "remove"],
         "device_fields": ["name", "model", "category", "x", "y", "site", "role", "vlan", "ssid", "note"],
+        "remove_device_fields": ["name", "cascade"],
         "module_fields": ["device", "slot", "model", "module_type", "note"],
+        "remove_module_fields": ["device", "slot"],
         "link_fields": ["a", "pa", "b", "pb", "cable", "vlan", "note"],
+        "remove_link_fields": ["a", "pa", "b", "pb", "all"],
         "ap_config_fields": ["name", "ssid", "mode", "channel", "auth", "password", "note"],
         "annotation_fields": ["id", "kind", "target", "title", "text", "x", "y", "width", "height", "color"],
         "pc_config_fields": ["name", "port", "dhcp", "ip", "mask", "gateway", "dns"],
@@ -123,6 +154,21 @@ def new_plan(*, name: str) -> dict[str, Any]:
     if name:
         metadata["name"] = name
     return {"metadata": metadata, "devices": [], "links": []}
+
+
+def set_metadata(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    metadata = plan.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        plan["metadata"] = metadata
+    if args.remove:
+        metadata.pop(args.key, None)
+        return plan
+    if args.json:
+        metadata[args.key] = _json_value(args.json, label="--json")
+    else:
+        metadata[args.key] = args.value
+    return plan
 
 
 def add_device(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
@@ -150,6 +196,48 @@ def add_device(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]
     return plan
 
 
+def remove_device(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    name = args.name
+    devices = _ensure_list(plan, "devices")
+    existing_index = next((index for index, item in enumerate(devices) if isinstance(item, dict) and str(item.get("name", item.get("id", ""))) == name), None)
+    if existing_index is None:
+        raise ValueError(f"device {name!r} not found")
+    references: list[str] = []
+    if any(isinstance(item, dict) and name in {str(item.get("a", item.get("from", ""))), str(item.get("b", item.get("to", "")))} for item in plan.get("links", [])):
+        references.append("links")
+    for collection, keys in (
+        ("modules", ("device", "device_name", "on")),
+        ("pc_configs", ("name", "device", "pc", "server")),
+        ("ipv6_configs", ("name", "device", "pc", "server")),
+        ("ap_configs", ("name", "device", "ap")),
+        ("server_configs", ("name", "device", "server")),
+        ("ios_configs", ("device", "name", "router", "switch")),
+        ("security_policies", ("device", "router", "name")),
+        ("dhcp_pools", ("device", "router")),
+        ("annotations", ("target",)),
+    ):
+        if any(isinstance(item, dict) and _first_present(item, keys) == name for item in plan.get(collection, [])):
+            references.append(collection)
+    if references and not args.cascade:
+        raise ValueError(f"device {name!r} still has references in {', '.join(sorted(set(references)))}; use --cascade to remove them")
+    del devices[existing_index]
+    if args.cascade:
+        _remove_matching(_ensure_list(plan, "links"), lambda item: name in {str(item.get("a", item.get("from", ""))), str(item.get("b", item.get("to", "")))})
+        for collection, keys in (
+            ("modules", ("device", "device_name", "on")),
+            ("pc_configs", ("name", "device", "pc", "server")),
+            ("ipv6_configs", ("name", "device", "pc", "server")),
+            ("ap_configs", ("name", "device", "ap")),
+            ("server_configs", ("name", "device", "server")),
+            ("ios_configs", ("device", "name", "router", "switch")),
+            ("security_policies", ("device", "router", "name")),
+            ("dhcp_pools", ("device", "router")),
+            ("annotations", ("target",)),
+        ):
+            _remove_matching(_ensure_list(plan, collection), lambda item, keys=keys: _first_present(item, keys) == name)
+    return plan
+
+
 def add_module(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     names = _device_names(plan)
     if args.device not in names and not args.allow_missing:
@@ -171,6 +259,16 @@ def add_module(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]
     return plan
 
 
+def remove_module(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    removed = _remove_matching(
+        _ensure_list(plan, "modules"),
+        lambda item: _first_present(item, ("device", "device_name", "on")) == args.device and str(item.get("slot", "")) == args.slot,
+    )
+    if not removed:
+        raise ValueError(f"module for {args.device!r} slot {args.slot!r} not found")
+    return plan
+
+
 def add_link(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     names = _device_names(plan)
     missing = [name for name in (args.a, args.b) if name not in names]
@@ -185,6 +283,18 @@ def add_link(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     if vlan is not None:
         link["vlan"] = vlan
     _ensure_list(plan, "links").append(link)
+    return plan
+
+
+def remove_link(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    links = _ensure_list(plan, "links")
+    matches = [item for item in links if isinstance(item, dict) and _link_matches(item, args)]
+    if not matches:
+        raise ValueError(f"link {args.a!r}<->{args.b!r} not found")
+    if len(matches) > 1 and not args.all:
+        raise ValueError(f"link selector matched {len(matches)} links; use --all or add --pa/--pb")
+    remove_ids = {id(item) for item in matches} if args.all else {id(matches[0])}
+    links[:] = [item for item in links if id(item) not in remove_ids]
     return plan
 
 
@@ -389,6 +499,14 @@ def main(argv: list[str] | None = None) -> int:
     new_p.add_argument("--name", default="", help="logical topology name stored in metadata")
     add_common_io(new_p)
 
+    metadata_p = sub.add_parser("set-metadata", help="set or remove one plan metadata field")
+    add_plan_arg(metadata_p)
+    metadata_p.add_argument("--key", required=True)
+    metadata_p.add_argument("--value", default="")
+    metadata_p.add_argument("--json", default="", help="JSON value or @file")
+    metadata_p.add_argument("--remove", action="store_true")
+    add_common_io(metadata_p)
+
     device_p = sub.add_parser("add-device", help="append or update one device")
     add_plan_arg(device_p)
     device_p.add_argument("--name", required=True)
@@ -404,6 +522,12 @@ def main(argv: list[str] | None = None) -> int:
     device_p.add_argument("--replace", action="store_true", help="replace/update an existing device with the same name")
     add_common_io(device_p)
 
+    remove_device_p = sub.add_parser("remove-device", help="remove one device, optionally cascading references")
+    add_plan_arg(remove_device_p)
+    remove_device_p.add_argument("--name", required=True)
+    remove_device_p.add_argument("--cascade", action="store_true", help="also remove links/modules/configs/annotations that reference this device")
+    add_common_io(remove_device_p)
+
     module_p = sub.add_parser("add-module", help="append or update one device module record")
     add_plan_arg(module_p)
     module_p.add_argument("--device", required=True)
@@ -414,6 +538,12 @@ def main(argv: list[str] | None = None) -> int:
     module_p.add_argument("--allow-missing", action="store_true", help="allow a module target device not yet present in the plan")
     module_p.add_argument("--replace", action="store_true", help="replace/update an existing module with the same device and slot")
     add_common_io(module_p)
+
+    remove_module_p = sub.add_parser("remove-module", help="remove one device module record")
+    add_plan_arg(remove_module_p)
+    remove_module_p.add_argument("--device", required=True)
+    remove_module_p.add_argument("--slot", required=True)
+    add_common_io(remove_module_p)
 
     link_p = sub.add_parser("add-link", help="append one topology link")
     add_plan_arg(link_p)
@@ -426,6 +556,15 @@ def main(argv: list[str] | None = None) -> int:
     link_p.add_argument("--note", default="")
     link_p.add_argument("--allow-missing", action="store_true", help="allow links to devices not yet present in the plan")
     add_common_io(link_p)
+
+    remove_link_p = sub.add_parser("remove-link", help="remove one topology link")
+    add_plan_arg(remove_link_p)
+    remove_link_p.add_argument("--a", required=True, help="first endpoint device")
+    remove_link_p.add_argument("--b", required=True, help="second endpoint device")
+    remove_link_p.add_argument("--pa", default="", help="optional first endpoint port selector")
+    remove_link_p.add_argument("--pb", default="", help="optional second endpoint port selector")
+    remove_link_p.add_argument("--all", action="store_true", help="remove all matching links instead of requiring a unique match")
+    add_common_io(remove_link_p)
 
     ap_p = sub.add_parser("add-ap-config", help="append or update one wireless AP metadata record")
     add_plan_arg(ap_p)
@@ -550,12 +689,20 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         plan = _load_plan(args.plan)
-        if args.cmd == "add-device":
+        if args.cmd == "set-metadata":
+            _emit(set_metadata(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-device":
             _emit(add_device(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-device":
+            _emit(remove_device(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-module":
             _emit(add_module(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-module":
+            _emit(remove_module(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-link":
             _emit(add_link(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "remove-link":
+            _emit(remove_link(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-ap-config":
             _emit(add_ap_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-annotation":

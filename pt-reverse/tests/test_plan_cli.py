@@ -34,9 +34,13 @@ class PlanCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertEqual(data["kind"], "pt730-plan-schema")
+        self.assertIn("set-metadata", data["commands"])
         self.assertIn("add-device", data["commands"])
+        self.assertIn("remove-device", data["commands"])
         self.assertIn("add-module", data["commands"])
+        self.assertIn("remove-module", data["commands"])
         self.assertIn("add-link", data["commands"])
+        self.assertIn("remove-link", data["commands"])
         self.assertIn("add-ap-config", data["commands"])
         self.assertIn("add-pc-config", data["commands"])
         self.assertIn("add-ipv6-config", data["commands"])
@@ -150,6 +154,54 @@ class PlanCliTest(unittest.TestCase):
             self.assertEqual(summary["counts"]["modules"], 2)
             self.assertEqual(summary["counts"]["ap_configs"], 1)
             self.assertEqual(summary["wireless"]["ssids"], ["CLASSROOM"])
+
+    def test_plan_editor_removes_items_and_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "editable.json"
+            steps = [
+                ("new", "--name", "Editable", "--output", str(path)),
+                ("set-metadata", str(path), "--key", "owner", "--value", "agent", "--output", str(path)),
+                ("set-metadata", str(path), "--key", "tags", "--json", '["draft","wan"]', "--output", str(path)),
+                ("add-device", str(path), "--name", "R1", "--category", "router", "--model", "2911", "--output", str(path)),
+                ("add-device", str(path), "--name", "SW1", "--category", "switch", "--model", "2960-24TT", "--output", str(path)),
+                ("add-device", str(path), "--name", "PC1", "--category", "pc", "--model", "PC-PT", "--output", str(path)),
+                ("add-module", str(path), "--device", "R1", "--slot", "0/0", "--model", "HWIC-2T", "--output", str(path)),
+                ("add-link", str(path), "--a", "R1", "--pa", "GigabitEthernet0/0", "--b", "SW1", "--pb", "FastEthernet0/1", "--output", str(path)),
+                ("add-link", str(path), "--a", "SW1", "--pa", "FastEthernet0/2", "--b", "PC1", "--pb", "FastEthernet0", "--output", str(path)),
+                ("add-pc-config", str(path), "--name", "PC1", "--ip", "192.168.10.10", "--mask", "255.255.255.0", "--gateway", "192.168.10.1", "--output", str(path)),
+                ("add-annotation", str(path), "--target", "PC1", "--title", "Client", "--text", "temporary client", "--output", str(path)),
+            ]
+            for step in steps:
+                result = self.run_plan(*step)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            result = self.run_plan("remove-device", str(path), "--name", "PC1", "--output", str(path))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("use --cascade", result.stderr)
+            self.assertIn("PC1", [device["name"] for device in json.loads(path.read_text(encoding="utf-8"))["devices"]])
+
+            result = self.run_plan("remove-link", str(path), "--a", "PC1", "--b", "SW1", "--pa", "WrongPort", "--output", str(path))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(len(json.loads(path.read_text(encoding="utf-8"))["links"]), 2)
+            result = self.run_plan("remove-link", str(path), "--a", "PC1", "--b", "SW1", "--pa", "FastEthernet0", "--output", str(path))
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            remove_steps = [
+                ("remove-link", str(path), "--a", "R1", "--b", "SW1", "--pa", "GigabitEthernet0/0", "--pb", "FastEthernet0/1", "--output", str(path)),
+                ("remove-module", str(path), "--device", "R1", "--slot", "0/0", "--output", str(path)),
+                ("remove-device", str(path), "--name", "PC1", "--cascade", "--output", str(path)),
+                ("set-metadata", str(path), "--key", "owner", "--remove", "--output", str(path)),
+            ]
+            for step in remove_steps:
+                result = self.run_plan(*step)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertNotIn("owner", data["metadata"])
+            self.assertEqual(data["metadata"]["tags"], ["draft", "wan"])
+            self.assertEqual([device["name"] for device in data["devices"]], ["R1", "SW1"])
+            self.assertEqual(data["modules"], [])
+            self.assertEqual(data["links"], [])
+            self.assertEqual(data["pc_configs"], [])
+            self.assertEqual(data["annotations"], [])
 
     def test_plan_editor_adds_config_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

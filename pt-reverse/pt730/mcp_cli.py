@@ -260,11 +260,9 @@ def _json_cli_value(args: dict[str, Any], name: str) -> str:
     value = args.get(name)
     if isinstance(value, str):
         return value
-    if isinstance(value, dict):
+    if isinstance(value, dict | list | bool | int | float):
         return json.dumps(value, ensure_ascii=False)
-    if isinstance(value, list) and all(isinstance(item, str) for item in value):
-        return json.dumps(value, ensure_ascii=False)
-    raise ToolError(f"{name} must be a JSON string, object, or array of strings")
+    raise ToolError(f"{name} must be a JSON string or JSON-compatible value")
 
 
 def tool_plan_new(root: Path, args: dict[str, Any]) -> dict[str, Any]:
@@ -272,6 +270,20 @@ def tool_plan_new(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     name = str_arg(args, "name", required=False)
     if name:
         command.extend(["--name", name])
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_set_metadata(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "set-metadata", str_arg(args, "plan"), "--key", str_arg(args, "key")]
+    if bool_arg(args, "remove", default=False):
+        command.append("--remove")
+    else:
+        json_value = _json_cli_value(args, "json")
+        if json_value:
+            command.extend(["--json", json_value])
+        else:
+            command.extend(["--value", str_arg(args, "value", required=False)])
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -288,6 +300,14 @@ def tool_plan_add_device(root: Path, args: dict[str, Any]) -> dict[str, Any]:
             command.extend([flag, str(value)])
     if bool_arg(args, "replace", default=False):
         command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_remove_device(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-device", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    if bool_arg(args, "cascade", default=False):
+        command.append("--cascade")
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -316,6 +336,12 @@ def tool_plan_add_module(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     return run_cli(root, command)
 
 
+def tool_plan_remove_module(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-module", str_arg(args, "plan"), "--device", str_arg(args, "device"), "--slot", str_arg(args, "slot")]
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
 def tool_plan_add_link(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-plan")), "add-link", str_arg(args, "plan"), "--a", str_arg(args, "a"), "--b", str_arg(args, "b")]
     for key, flag in (("pa", "--pa"), ("pb", "--pb"), ("cable", "--cable"), ("note", "--note")):
@@ -327,6 +353,18 @@ def tool_plan_add_link(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         command.extend(["--vlan", str(vlan)])
     if bool_arg(args, "allow_missing", default=False):
         command.append("--allow-missing")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_remove_link(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "remove-link", str_arg(args, "plan"), "--a", str_arg(args, "a"), "--b", str_arg(args, "b")]
+    for key, flag in (("pa", "--pa"), ("pb", "--pb")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    if bool_arg(args, "all", default=False):
+        command.append("--all")
     _append_output_and_compact(command, args)
     return run_cli(root, command)
 
@@ -1887,14 +1925,19 @@ def tools() -> list[dict[str, Any]]:
     annotation_object = {"type": "object", "additionalProperties": True}
     annotations = {"oneOf": [annotation_object, {"type": "array", "items": annotation_object}, string]}
     json_object_or_string = {"oneOf": [{"type": "object", "additionalProperties": True}, string]}
+    json_value_or_string = {"oneOf": [{"type": "object", "additionalProperties": True}, {"type": "array"}, {"type": "number"}, boolean, string]}
     string_array_or_string = {"oneOf": [string_array, string]}
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
         tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, render, plan editor, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "render", "plan", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
         tool("pt730_plan_new", "Create an empty topology JSON plan.", schema({"name": string, "output": string, "compact": boolean}), tool_plan_new),
+        tool("pt730_plan_set_metadata", "Set or remove one topology plan metadata field.", schema({"plan": string, "key": string, "value": string, "json": json_value_or_string, "remove": boolean, "output": string, "compact": boolean}, ["plan", "key"]), tool_plan_set_metadata),
         tool("pt730_plan_add_device", "Append or update one device in a topology JSON plan.", schema({"plan": string, "name": string, "model": string, "category": string, "x": integer, "y": integer, "site": string, "role": string, "vlan": integer, "ssid": string, "note": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_device),
+        tool("pt730_plan_remove_device", "Remove one device from a topology JSON plan, optionally cascading references.", schema({"plan": string, "name": string, "cascade": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_remove_device),
         tool("pt730_plan_add_module", "Append or update one device module record in a topology JSON plan.", schema({"plan": string, "device": string, "slot": string, "model": string, "module_type": string, "note": string, "allow_missing": boolean, "replace": boolean, "output": string, "compact": boolean}, ["plan", "device", "slot", "model"]), tool_plan_add_module),
+        tool("pt730_plan_remove_module", "Remove one device module record from a topology JSON plan.", schema({"plan": string, "device": string, "slot": string, "output": string, "compact": boolean}, ["plan", "device", "slot"]), tool_plan_remove_module),
         tool("pt730_plan_add_link", "Append one link between topology plan devices.", schema({"plan": string, "a": string, "b": string, "pa": string, "pb": string, "cable": string, "vlan": integer, "note": string, "allow_missing": boolean, "output": string, "compact": boolean}, ["plan", "a", "b"]), tool_plan_add_link),
+        tool("pt730_plan_remove_link", "Remove one topology link between plan devices.", schema({"plan": string, "a": string, "b": string, "pa": string, "pb": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "a", "b"]), tool_plan_remove_link),
         tool("pt730_plan_add_ap_config", "Append or update one wireless AP metadata record in a topology JSON plan.", schema({"plan": string, "name": string, "ssid": string, "mode": string, "channel": string, "auth": string, "password": string, "note": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name", "ssid"]), tool_plan_add_ap_config),
         tool("pt730_plan_add_annotation", "Append one report/diagram callout annotation to a topology JSON plan.", schema({"plan": string, "id": string, "kind": string, "target": string, "title": string, "text": string, "x": integer, "y": integer, "width": integer, "height": integer, "color": string, "output": string, "compact": boolean}, ["plan"]), tool_plan_add_annotation),
         tool("pt730_plan_add_pc_config", "Append or update one PC/server IPv4 config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "dhcp": boolean, "ip": string, "mask": string, "gateway": string, "dns": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_pc_config),
