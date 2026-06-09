@@ -465,6 +465,8 @@ For one-off report labels, pass repeated `--annotation '<json object|array>'`
 or `--annotations annotations.json`; these are merged only for that render and
 do not modify the source topology JSON. MCP `pt730_render` and
 `pt730_render_bundle` expose the same render-only `annotations` argument.
+Run `pt730-render schema` or MCP `pt730_schema` with `target=render` when an
+agent needs the exact render formats, options, and annotation fields.
 Use `--preset report` on SVG/draw.io/HTML, `diagram-audit`, `bundle`, or
 `pt730-lab plan` when a report-ready default is preferred over hand-picking each
 visual option.

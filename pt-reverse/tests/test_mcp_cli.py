@@ -202,11 +202,24 @@ class McpCliTest(unittest.TestCase):
                         },
                     },
                 },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_schema",
+                        "arguments": {
+                            "target": "render",
+                            "compact": True,
+                        },
+                    },
+                },
             ]
         )
         compose_result = responses[0]["result"]
         ios_result = responses[1]["result"]
         lab_result = responses[2]["result"]
+        render_result = responses[3]["result"]
         self.assertEqual(compose_result["isError"], False)
         self.assertIn('"commands": [', compose_result["structuredContent"]["stdout"])
         self.assertIn('"campus"', compose_result["structuredContent"]["stdout"])
@@ -217,6 +230,10 @@ class McpCliTest(unittest.TestCase):
         self.assertIn('"formats":["svg","drawio","html","markdown","summary"]', lab_result["structuredContent"]["stdout"])
         self.assertIn('"enterprise-edge"', lab_result["structuredContent"]["stdout"])
         self.assertNotIn("\n  ", lab_result["structuredContent"]["stdout"])
+        self.assertEqual(render_result["isError"], False)
+        self.assertIn('"kind":"pt730-render-schema"', render_result["structuredContent"]["stdout"])
+        self.assertIn('"render_time"', render_result["structuredContent"]["stdout"])
+        self.assertNotIn("\n  ", render_result["structuredContent"]["stdout"])
 
     def test_schema_tool_rejects_unknown_target(self) -> None:
         responses = self.run_mcp(

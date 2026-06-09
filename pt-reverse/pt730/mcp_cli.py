@@ -215,7 +215,7 @@ def tool_capabilities(root: Path, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_schema(root: Path, args: dict[str, Any]) -> dict[str, Any]:
-    target = enum_arg(args, "target", {"template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template", "lab"})
+    target = enum_arg(args, "target", {"template", "ip_plan", "compose", "config_plan", "pipeline", "ios_template", "lab", "render"})
     cli_by_target = {
         "template": "pt730-template",
         "ip_plan": "pt730-ip-plan",
@@ -224,12 +224,18 @@ def tool_schema(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         "pipeline": "pt730-pipeline",
         "ios_template": "pt730-ios-template",
         "lab": "pt730-lab",
+        "render": "pt730-render",
     }
     compact = bool_arg(args, "compact", default=False)
     command = [str(bin_path(root, cli_by_target[target]))]
-    if compact and target != "ios_template":
+    if target == "render":
+        command.append("schema")
+        if compact:
+            command.append("--compact")
+    elif compact and target != "ios_template":
         command.append("--compact")
-    command.append("schema")
+    if target != "render":
+        command.append("schema")
     result = run_cli(root, command)
     if compact and target == "ios_template" and result["exitCode"] == 0:
         try:
@@ -1657,7 +1663,7 @@ def tools() -> list[dict[str, Any]]:
     annotations = {"oneOf": [annotation_object, {"type": "array", "items": annotation_object}, string]}
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
-        tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
+        tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, render, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "render", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, diagram-audit, verification-json, or verification-md.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_verification_plan", "Generate an offline JSON or Markdown live/manual validation checklist for a topology plan.", schema({"plan": string, "format": {"type": "string", "enum": ["json", "markdown"]}, "output": string, "compact": boolean, "max_hosts": integer, "max_service_targets": integer, "strict_safety": boolean, "allow_risky": boolean}, ["plan"]), tool_verification_plan),

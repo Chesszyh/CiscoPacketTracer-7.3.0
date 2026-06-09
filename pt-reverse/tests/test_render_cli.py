@@ -41,6 +41,15 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("R_DEMO --- SW_DEMO", result.stdout)
         self.assertNotIn("GigabitEthernet0/0", result.stdout)
 
+    def test_schema_describes_render_annotations(self) -> None:
+        result = self.run_render("schema", "--compact")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["kind"], "pt730-render-schema")
+        self.assertIn("svg", data["formats"])
+        self.assertIn("render_time", data["annotation"]["cli"])
+        self.assertIn("annotations", data["annotation"]["mcp"])
+
     def test_mermaid_strict_rejects_guarded_dhcp_warning(self) -> None:
         result = self.run_render("--strict-safety", "mermaid", str(ROOT / "examples" / "server-dhcp-lan.json"))
         self.assertNotEqual(result.returncode, 0)

@@ -62,6 +62,58 @@ BUNDLE_EXTENSIONS = {
 }
 
 
+def render_schema() -> dict[str, Any]:
+    return {
+        "kind": "pt730-render-schema",
+        "formats": list(BUNDLE_RENDER_FORMATS),
+        "single_formats": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-plan"],
+        "bundle_formats": list(BUNDLE_RENDER_FORMATS),
+        "themes": list(RENDER_THEMES),
+        "presets": list(RENDER_PRESETS),
+        "group_by": list(RENDER_GROUP_BY),
+        "annotation": {
+            "description": "Plan-level or render-time callout metadata rendered in Mermaid/SVG/draw.io/HTML and summarized in Markdown/summary/diagram-audit.",
+            "fields": {
+                "id": "optional stable annotation id; defaults to annotation-N",
+                "text": "main annotation body; aliases: note, description, message, label",
+                "title": "optional heading; aliases: heading, name",
+                "kind": "optional note/info/warning/success/critical style; alias: type",
+                "target": "optional target device name; aliases: device, for",
+                "x": "optional fixed callout x coordinate",
+                "y": "optional fixed callout y coordinate",
+                "width": "optional callout width, minimum 120",
+                "height": "optional callout height, minimum 48",
+                "color": "optional custom fill color; alias: fill",
+            },
+            "cli": {
+                "plan_level": "add a top-level annotations array to the topology JSON",
+                "render_time": "pass repeated --annotation '<json object|array>' or --annotations annotations.json",
+            },
+            "mcp": "pt730_render and pt730_render_bundle accept annotations as an object, array of objects, or JSON string",
+            "examples": [
+                {
+                    "id": "core-note",
+                    "kind": "info",
+                    "target": "R1",
+                    "title": "Core Gateway",
+                    "text": "Default gateway and routing validation point.",
+                },
+                {
+                    "kind": "warning",
+                    "x": 24,
+                    "y": 260,
+                    "text": "Manual host configuration remains report metadata.",
+                },
+            ],
+        },
+        "examples": {
+            "svg_report": "pt-reverse/bin/pt730-render svg plan.json --preset report --title 'Campus Topology'",
+            "render_time_annotation": "pt-reverse/bin/pt730-render summary plan.json --annotation '{\"target\":\"R1\",\"title\":\"Core\",\"text\":\"Gateway check\"}'",
+            "bundle": "pt-reverse/bin/pt730-render bundle plan.json --output-dir out --preset report --formats svg,drawio,html,markdown,summary,diagram-audit",
+        },
+    }
+
+
 @dataclass(frozen=True)
 class RenderOptions:
     theme: str = "light"
@@ -2611,6 +2663,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-risky", action="store_true", help="allow known crash-risk or unverified plan items")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    schema_p = sub.add_parser("schema", help="print render formats, options, and annotation schema")
+    schema_p.add_argument("--compact", action="store_true", help="emit compact JSON")
+
     mermaid_p = sub.add_parser("mermaid", help="render a plan as Mermaid flowchart")
     mermaid_p.add_argument("plan", type=Path)
     mermaid_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"])
@@ -2677,6 +2732,17 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     try:
+        if args.cmd == "schema":
+            emit(
+                json.dumps(
+                    render_schema(),
+                    ensure_ascii=False,
+                    indent=None if args.compact else 2,
+                    separators=(",", ":") if args.compact else None,
+                ) + "\n",
+                None,
+            )
+            return 0
         if args.cmd == "mermaid":
             plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
