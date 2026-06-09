@@ -104,6 +104,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("group_by", render["inputSchema"]["properties"])
         self.assertIn("title", render["inputSchema"]["properties"])
         self.assertIn("legend", render["inputSchema"]["properties"])
+        self.assertIn("annotations", render["inputSchema"]["properties"])
         self.assertIn("diagram-audit", render["inputSchema"]["properties"]["format"]["enum"])
         self.assertIn("verification-json", render["inputSchema"]["properties"]["format"]["enum"])
         bundle = next(tool for tool in tools if tool["name"] == "pt730_render_bundle")
@@ -112,6 +113,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("preset", bundle["inputSchema"]["properties"])
         self.assertIn("title", bundle["inputSchema"]["properties"])
         self.assertIn("legend", bundle["inputSchema"]["properties"])
+        self.assertIn("annotations", bundle["inputSchema"]["properties"])
         self.assertIn("diagram-audit", bundle["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
         self.assertIn("verification-md", bundle["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
         verification = next(tool for tool in tools if tool["name"] == "pt730_verification_plan")
@@ -257,6 +259,38 @@ class McpCliTest(unittest.TestCase):
         self.assertIn('"devices": 3', result["content"][0]["text"])
         self.assertEqual(result["structuredContent"]["exitCode"], 0)
         self.assertIn("192.168.50.0/24", result["structuredContent"]["stdout"])
+
+    def test_tools_call_render_accepts_temporary_annotations(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "summary",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "annotations": [
+                                {
+                                    "id": "mcp-note",
+                                    "kind": "info",
+                                    "target": "R_DEMO",
+                                    "title": "MCP Note",
+                                    "text": "Render-only annotation.",
+                                }
+                            ],
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        data = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(data["counts"]["annotations"], 1)
+        self.assertEqual(data["annotations"][0]["id"], "mcp-note")
 
     def test_tools_call_render_diagram_audit_returns_json(self) -> None:
         responses = self.run_mcp(

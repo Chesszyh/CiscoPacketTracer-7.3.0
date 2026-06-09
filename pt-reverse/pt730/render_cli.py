@@ -2527,12 +2527,57 @@ def emit(text: str, output: Path | None) -> None:
     output.write_text(text, encoding="utf-8")
 
 
+def parse_annotations_payload(text: str, *, source: str) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{source} must be JSON object or JSON array of objects: {exc}") from exc
+    if isinstance(data, dict):
+        return [data]
+    if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+        return data
+    raise ValueError(f"{source} must be JSON object or JSON array of objects")
+
+
+def merge_cli_annotations(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    extra: list[dict[str, Any]] = []
+    for index, payload in enumerate(getattr(args, "annotation", []) or []):
+        extra.extend(parse_annotations_payload(payload, source=f"--annotation #{index + 1}"))
+    annotations_path = getattr(args, "annotations", None)
+    if annotations_path:
+        try:
+            text = annotations_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ValueError(f"--annotations {annotations_path}: {exc}") from exc
+        extra.extend(parse_annotations_payload(text, source=f"--annotations {annotations_path}"))
+    if not extra:
+        return plan
+    merged = dict(plan)
+    existing = plan.get("annotations", [])
+    if isinstance(existing, dict):
+        merged["annotations"] = [existing, *extra]
+    elif isinstance(existing, list):
+        merged["annotations"] = [*existing, *extra]
+    else:
+        merged["annotations"] = extra
+    return merged
+
+
+def load_plan_for_render(args: argparse.Namespace) -> dict[str, Any]:
+    return merge_cli_annotations(_load_plan(args.plan), args)
+
+
 def add_link_label_option(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=None, help="hide link port/cable/VLAN labels")
 
 
 def add_preset_option(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, auto grouping, legend, hidden link labels, and report bundle formats")
+
+
+def add_annotation_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--annotation", action="append", default=[], help="append a temporary annotation JSON object or array for this render")
+    parser.add_argument("--annotations", type=Path, help="append temporary annotations from a JSON object/array file for this render")
 
 
 def add_visual_options(parser: argparse.ArgumentParser) -> None:
@@ -2572,38 +2617,46 @@ def main(argv: list[str] | None = None) -> int:
     mermaid_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
     add_preset_option(mermaid_p)
     add_link_label_option(mermaid_p)
+    add_annotation_options(mermaid_p)
 
     svg_p = sub.add_parser("svg", help="render a plan as an offline SVG topology diagram")
     svg_p.add_argument("plan", type=Path)
     svg_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
     add_visual_options(svg_p)
+    add_annotation_options(svg_p)
 
     drawio_p = sub.add_parser("drawio", help="render a plan as an importable diagrams.net/draw.io mxfile")
     drawio_p.add_argument("plan", type=Path)
     drawio_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
     add_visual_options(drawio_p)
+    add_annotation_options(drawio_p)
 
     html_p = sub.add_parser("html", help="render a plan as a self-contained HTML review page")
     html_p.add_argument("plan", type=Path)
     html_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
     add_visual_options(html_p)
+    add_annotation_options(html_p)
 
     markdown_p = sub.add_parser("markdown", help="render a plan as Markdown tables")
     markdown_p.add_argument("plan", type=Path)
     markdown_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_annotation_options(markdown_p)
 
     summary_p = sub.add_parser("summary", help="render a plan as machine-readable JSON summary")
     summary_p.add_argument("plan", type=Path)
     summary_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_annotation_options(summary_p)
 
     audit_p = sub.add_parser("course-audit", help="audit the college-network course-design topology plan offline")
     audit_p.add_argument("plan", type=Path)
     audit_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
+    add_annotation_options(audit_p)
 
     diagram_audit_p = sub.add_parser("diagram-audit", help="audit offline diagram readability and render suitability")
     diagram_audit_p.add_argument("plan", type=Path)
     diagram_audit_p.add_argument("--output", type=Path, help="write output to a file instead of stdout")
     add_visual_options(diagram_audit_p)
+    add_annotation_options(diagram_audit_p)
 
     verify_p = sub.add_parser("verification-plan", help="generate offline live/manual validation steps for a topology plan")
     verify_p.add_argument("plan", type=Path)
@@ -2620,48 +2673,49 @@ def main(argv: list[str] | None = None) -> int:
     bundle_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit,verification-json,verification-md; defaults depend on --preset")
     bundle_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"], help="Mermaid direction when mermaid is included")
     add_visual_options(bundle_p)
+    add_annotation_options(bundle_p)
 
     args = parser.parse_args(argv)
     try:
         if args.cmd == "mermaid":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             link_labels = preset_render_defaults(args.preset)["link_labels"] if args.link_labels is None else args.link_labels
             emit(mermaid(plan, direction=args.direction, link_labels=link_labels), args.output)
             return 0
         if args.cmd == "svg":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(svg(plan, options=render_options(args, default_title=args.plan.stem)), args.output)
             return 0
         if args.cmd == "drawio":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(drawio(plan, options=render_options(args, default_title=args.plan.stem)), args.output)
             return 0
         if args.cmd == "html":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(html_report(plan, options=render_options(args, default_title=args.plan.stem)), args.output)
             return 0
         if args.cmd == "markdown":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(markdown(plan), args.output)
             return 0
         if args.cmd == "summary":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             emit(summary(plan), args.output)
             return 0
         if args.cmd == "course-audit":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             report, code = course_audit(plan)
             emit(json.dumps(report, ensure_ascii=False, indent=2) + "\n", args.output)
             return code
         if args.cmd == "diagram-audit":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             report, code = diagram_audit(plan, options=render_options(args, default_title=args.plan.stem))
             emit(json.dumps(report, ensure_ascii=False, indent=2) + "\n", args.output)
@@ -2686,7 +2740,7 @@ def main(argv: list[str] | None = None) -> int:
                 emit(text, args.output)
             return 0
         if args.cmd == "bundle":
-            plan = _load_plan(args.plan)
+            plan = load_plan_for_render(args)
             _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
             manifest, code = render_bundle(
                 plan,

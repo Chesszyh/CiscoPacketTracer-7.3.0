@@ -111,7 +111,8 @@ Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, visual grouping, and plan-level
 annotation callout controls through `pt730_render` for Mermaid, SVG, draw.io,
-and HTML.
+and HTML. Agents can also pass MCP `annotations` or CLI `--annotation` /
+`--annotations` render-only callouts without rewriting the source topology JSON.
 Use `pt730_render_bundle` when an agent should create SVG, draw.io, HTML,
 Markdown, summary, optional course-audit output, and a manifest in one offline
 call.

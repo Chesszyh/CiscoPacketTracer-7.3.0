@@ -461,6 +461,10 @@ Plans may also include top-level `annotations` entries with `text`, optional
 `title`, `kind`, `target`, `x`/`y`, `width`, and `height`; Mermaid,
 SVG/draw.io, and HTML render them as callouts, while Markdown and summary JSON
 include an annotation table for report review.
+For one-off report labels, pass repeated `--annotation '<json object|array>'`
+or `--annotations annotations.json`; these are merged only for that render and
+do not modify the source topology JSON. MCP `pt730_render` and
+`pt730_render_bundle` expose the same render-only `annotations` argument.
 Use `--preset report` on SVG/draw.io/HTML, `diagram-audit`, `bundle`, or
 `pt730-lab plan` when a report-ready default is preferred over hand-picking each
 visual option.

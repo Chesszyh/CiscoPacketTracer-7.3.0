@@ -210,6 +210,20 @@ class RenderCliTest(unittest.TestCase):
         audit = json.loads(audit_result.stdout)
         self.assertEqual(audit["checks"]["counts"]["annotations"], 2)
 
+    def test_render_can_append_temporary_cli_annotations(self) -> None:
+        annotation = {
+            "id": "cli-note",
+            "kind": "success",
+            "target": "R_DEMO",
+            "title": "CLI Note",
+            "text": "Temporary render-only annotation.",
+        }
+        result = self.run_render("summary", str(ROOT / "examples" / "simple-lan.json"), "--annotation", json.dumps(annotation))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["counts"]["annotations"], 1)
+        self.assertEqual(data["annotations"][0]["id"], "cli-note")
+
     def test_wireless_ap_rendering_and_summary_metadata(self) -> None:
         plan = {
             "devices": [
