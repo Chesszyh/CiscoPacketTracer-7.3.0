@@ -46,6 +46,12 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_plan_add_link", names)
         self.assertIn("pt730_plan_add_annotation", names)
         self.assertIn("pt730_plan_add_pc_config", names)
+        self.assertIn("pt730_plan_add_ipv6_config", names)
+        self.assertIn("pt730_plan_add_vlan_config", names)
+        self.assertIn("pt730_plan_add_dhcp_pool", names)
+        self.assertIn("pt730_plan_add_server_config", names)
+        self.assertIn("pt730_plan_add_ios_config", names)
+        self.assertIn("pt730_plan_add_security_policy", names)
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_render_bundle", names)
         self.assertIn("pt730_verification_plan", names)
@@ -177,6 +183,13 @@ class McpCliTest(unittest.TestCase):
         plan_add_link = next(tool for tool in tools if tool["name"] == "pt730_plan_add_link")
         self.assertIn("a", plan_add_link["inputSchema"]["required"])
         self.assertIn("b", plan_add_link["inputSchema"]["required"])
+        plan_add_vlan = next(tool for tool in tools if tool["name"] == "pt730_plan_add_vlan_config")
+        self.assertIn("id", plan_add_vlan["inputSchema"]["required"])
+        plan_add_server = next(tool for tool in tools if tool["name"] == "pt730_plan_add_server_config")
+        self.assertIn("dns_json", plan_add_server["inputSchema"]["properties"])
+        plan_add_ios = next(tool for tool in tools if tool["name"] == "pt730_plan_add_ios_config")
+        self.assertIn("commands", plan_add_ios["inputSchema"]["properties"])
+        self.assertIn("device", plan_add_ios["inputSchema"]["required"])
 
     def test_schema_tool_returns_workflow_schemas(self) -> None:
         responses = self.run_mcp(
@@ -344,6 +357,95 @@ class McpCliTest(unittest.TestCase):
             self.assertEqual([device["name"] for device in data["devices"]], ["R1", "SW1"])
             self.assertEqual(data["links"][0]["pa"], "GigabitEthernet0/0")
             self.assertEqual(data["annotations"][0]["title"], "Core")
+
+    def test_plan_config_tools_build_config_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "mcp-config-plan.json"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_new", "arguments": {"name": "MCP Config Plan", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_device", "arguments": {"plan": str(path), "name": "R1", "category": "router", "model": "2911", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_device", "arguments": {"plan": str(path), "name": "SRV1", "category": "server", "model": "Server-PT", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 4,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_ipv6_config", "arguments": {"plan": str(path), "name": "SRV1", "ipv6": "2001:db8:20::10", "prefix": "64", "gateway": "2001:db8:20::1", "dns": "2001:db8:20::10", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 5,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_vlan_config", "arguments": {"plan": str(path), "id": 20, "name": "SERVERS", "network": "192.168.20.0/24", "gateway": "192.168.20.1", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 6,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_dhcp_pool", "arguments": {"plan": str(path), "device": "R1", "name": "VLAN20", "vlan": 20, "network": "192.168.20.0", "mask": "255.255.255.0", "gateway": "192.168.20.1", "dns": "192.168.20.10", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 7,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_plan_add_server_config",
+                            "arguments": {
+                                "plan": str(path),
+                                "name": "SRV1",
+                                "http": True,
+                                "dns_json": {"enabled": True, "records": [{"name": "www.lab.local", "ip": "192.168.20.10"}]},
+                                "ftp_json": {"enabled": True, "accounts": [{"username": "lab", "password": "packet", "permissions": "RWDNL"}]},
+                                "output": str(path),
+                            },
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 8,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_plan_add_ios_config",
+                            "arguments": {
+                                "plan": str(path),
+                                "device": "R1",
+                                "commands": ["enable", "configure terminal", "interface GigabitEthernet0/0", "ip address 192.168.20.1 255.255.255.0", "no shutdown", "end"],
+                                "output": str(path),
+                            },
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 9,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_security_policy", "arguments": {"plan": str(path), "device": "R1", "type": "inside_acl", "interface": "GigabitEthernet0/0", "acl": "20", "direction": "in", "summary": "Permit servers.", "output": str(path)}},
+                    },
+                ]
+            )
+            for response in responses:
+                self.assertEqual(response["result"]["isError"], False, response["result"]["structuredContent"].get("stderr", ""))
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["ipv6_configs"][0]["gateway"], "2001:db8:20::1")
+            self.assertEqual(data["vlan_configs"][0]["name"], "SERVERS")
+            self.assertEqual(data["dhcp_pools"][0]["device"], "R1")
+            self.assertEqual(data["server_configs"][0]["ftp"]["accounts"][0]["username"], "lab")
+            self.assertIn("interface GigabitEthernet0/0", data["ios_configs"][0]["commands"])
+            self.assertEqual(data["security_policies"][0]["summary"], "Permit servers.")
 
     def test_tools_call_render_summary_returns_text_and_structured_content(self) -> None:
         responses = self.run_mcp(

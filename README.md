@@ -99,9 +99,12 @@ JavaScript safety checks are exposed offline through MCP, along with
 lab, render, plan-editor, and IOS-template input schemas. Model registry reads are exposed through MCP;
 model metadata writes require `allow_write=true` unless run as `dry_run=true`.
 Plan-editor MCP tools expose `pt730_plan_new`, `pt730_plan_add_device`,
-`pt730_plan_add_link`, `pt730_plan_add_annotation`, and
-`pt730_plan_add_pc_config`, so agents can construct custom topology JSON through
-CLI/MCP calls before running layout, render, safety, or lab bundle commands.
+`pt730_plan_add_link`, `pt730_plan_add_annotation`, `pt730_plan_add_pc_config`,
+`pt730_plan_add_ipv6_config`, `pt730_plan_add_vlan_config`,
+`pt730_plan_add_dhcp_pool`, `pt730_plan_add_server_config`,
+`pt730_plan_add_ios_config`, and `pt730_plan_add_security_policy`, so agents can
+construct custom topology JSON and config metadata through CLI/MCP calls before
+running layout, render, safety, config export, or lab bundle commands.
 Built-in template MCP tools expose LAN-star, dual-stack-LAN, wireless-LAN,
 router-on-a-stick VLAN, switching-lab, server-services, edge-security,
 router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template

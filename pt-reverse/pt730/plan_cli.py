@@ -28,6 +28,42 @@ def _optional_int(value: int | None) -> int | None:
     return value if value is not None else None
 
 
+def _json_value(raw: str | None, *, label: str) -> Any:
+    value = _str_value(raw)
+    if not value:
+        return None
+    if value.startswith("@"):
+        value = Path(value[1:]).read_text(encoding="utf-8")
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{label} must be valid JSON or @path: {exc}") from exc
+
+
+def _json_object(raw: str | None, *, label: str) -> dict[str, Any] | None:
+    value = _json_value(raw, label=label)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
+
+
+def _json_string_list(raw: str | None, *, label: str) -> list[str]:
+    value = _json_value(raw, label=label)
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"{label} must be a JSON array of strings")
+    return value
+
+
+def _file_lines(path: Path | None) -> list[str]:
+    if path is None:
+        return []
+    return [line.rstrip("\n") for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
 def _device_names(plan: dict[str, Any]) -> set[str]:
     names: set[str] = set()
     for item in plan.get("devices", []):
@@ -45,15 +81,24 @@ def _ensure_list(plan: dict[str, Any], key: str) -> list[Any]:
     return value
 
 
+def _first_present(item: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
 def schema() -> dict[str, Any]:
     return {
         "kind": "pt730-plan-schema",
-        "commands": ["schema", "new", "add-device", "add-link", "add-annotation", "add-pc-config"],
+        "commands": ["schema", "new", "add-device", "add-link", "add-annotation", "add-pc-config", "add-ipv6-config", "add-vlan-config", "add-dhcp-pool", "add-server-config", "add-ios-config", "add-security-policy"],
         "workflow": [
             "pt730-plan new --name LAB --output lab.json",
             "pt730-plan add-device lab.json --name R1 --category router --model 2911 --output lab.json",
             "pt730-plan add-device lab.json --name SW1 --category switch --model 2960-24TT --output lab.json",
             "pt730-plan add-link lab.json --a R1 --pa GigabitEthernet0/0 --b SW1 --pb FastEthernet0/1 --output lab.json",
+            "pt730-plan add-ios-config lab.json --device R1 --command 'enable' --command 'configure terminal' --command 'end' --output lab.json",
             "pt730-layout lab.json --style lan --output lab-layout.json",
             "pt730-render svg lab-layout.json --preset report --output lab.svg",
         ],
@@ -61,6 +106,12 @@ def schema() -> dict[str, Any]:
         "link_fields": ["a", "pa", "b", "pb", "cable", "vlan", "note"],
         "annotation_fields": ["id", "kind", "target", "title", "text", "x", "y", "width", "height", "color"],
         "pc_config_fields": ["name", "port", "dhcp", "ip", "mask", "gateway", "dns"],
+        "ipv6_config_fields": ["name", "port", "ipv6", "prefix", "gateway", "dns", "note"],
+        "vlan_config_fields": ["id", "name", "network", "gateway", "description"],
+        "dhcp_pool_fields": ["device", "name", "vlan", "network", "mask", "start", "end", "gateway", "dns"],
+        "server_config_fields": ["name", "port", "http", "tftp", "ftp_json", "dns_json", "email_json", "ntp_json", "syslog_json", "dhcp_json", "service"],
+        "ios_config_fields": ["device", "source", "init_dialog", "save", "command", "commands_file", "commands_json"],
+        "security_policy_fields": ["device", "type", "interface", "acl", "direction", "summary"],
     }
 
 
@@ -149,6 +200,134 @@ def add_pc_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, A
     return plan
 
 
+def add_ipv6_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    configs = _ensure_list(plan, "ipv6_configs")
+    key = (args.name, args.port)
+    existing_index = next((index for index, item in enumerate(configs) if isinstance(item, dict) and (str(item.get("name", "")), str(item.get("port", "FastEthernet0"))) == key), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"ipv6_config for {args.name!r} {args.port!r} already exists; use --replace to update it")
+    config: dict[str, Any] = {"name": args.name, "port": args.port}
+    for key_name in ("ipv6", "prefix", "gateway", "dns", "note"):
+        value = _str_value(getattr(args, key_name))
+        if value:
+            config[key_name] = value
+    if existing_index is None:
+        configs.append(config)
+    else:
+        configs[existing_index] = {**configs[existing_index], **config}
+    return plan
+
+
+def add_vlan_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    configs = _ensure_list(plan, "vlan_configs")
+    existing_index = next((index for index, item in enumerate(configs) if isinstance(item, dict) and int(item.get("id", item.get("vlan", item.get("vlan_id", -1)))) == args.id), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"vlan_config for VLAN {args.id} already exists; use --replace to update it")
+    config: dict[str, Any] = {"id": args.id}
+    for key_name in ("name", "network", "gateway", "description"):
+        value = _str_value(getattr(args, key_name))
+        if value:
+            config[key_name] = value
+    if existing_index is None:
+        configs.append(config)
+    else:
+        configs[existing_index] = {**configs[existing_index], **config}
+    return plan
+
+
+def add_dhcp_pool(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    pools = _ensure_list(plan, "dhcp_pools")
+    key = (args.device, args.name)
+    existing_index = next((index for index, item in enumerate(pools) if isinstance(item, dict) and (str(item.get("device", item.get("router", ""))), str(item.get("name", item.get("pool", "")))) == key), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"dhcp_pool for {args.device!r} {args.name!r} already exists; use --replace to update it")
+    pool: dict[str, Any] = {"name": args.name}
+    if args.device:
+        pool["device"] = args.device
+    vlan = _optional_int(args.vlan)
+    if vlan is not None:
+        pool["vlan"] = vlan
+    for key_name in ("network", "mask", "start", "end", "gateway", "dns"):
+        value = _str_value(getattr(args, key_name))
+        if value:
+            pool[key_name] = value
+    if existing_index is None:
+        pools.append(pool)
+    else:
+        pools[existing_index] = {**pools[existing_index], **pool}
+    return plan
+
+
+def add_server_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    configs = _ensure_list(plan, "server_configs")
+    existing_index = next((index for index, item in enumerate(configs) if isinstance(item, dict) and _first_present(item, ("name", "device", "server")) == args.name), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"server_config for {args.name!r} already exists; use --replace to update it")
+    config: dict[str, Any] = {"name": args.name}
+    if args.port:
+        config["port"] = args.port
+    for service in args.service:
+        normalized = service.strip().lower()
+        if normalized not in {"http", "tftp", "ftp", "dns", "email", "ntp", "syslog", "dhcp"}:
+            raise ValueError(f"unsupported server service: {service}")
+        config[normalized] = True if normalized in {"http", "tftp"} else {"enabled": True}
+    if args.http:
+        config["http"] = True
+    if args.tftp:
+        config["tftp"] = True
+    for key_name in ("ftp", "dns", "email", "ntp", "syslog", "dhcp"):
+        value = _json_object(getattr(args, f"{key_name}_json"), label=f"--{key_name}-json")
+        if value is not None:
+            config[key_name] = value
+    if existing_index is None:
+        configs.append(config)
+    else:
+        configs[existing_index] = {**configs[existing_index], **config}
+    return plan
+
+
+def add_ios_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    configs = _ensure_list(plan, "ios_configs")
+    source = args.source or "pt730-plan"
+    key = (args.device, source)
+    existing_index = next((index for index, item in enumerate(configs) if isinstance(item, dict) and (_first_present(item, ("device", "name", "router", "switch")), str(item.get("source", "pt730-plan"))) == key), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"ios_config for {args.device!r} source {source!r} already exists; use --replace to update it")
+    commands = list(args.command)
+    commands.extend(_file_lines(args.commands_file))
+    commands.extend(_json_string_list(args.commands_json, label="--commands-json"))
+    if not commands:
+        raise ValueError("add-ios-config requires --command, --commands-file, or --commands-json")
+    config: dict[str, Any] = {"device": args.device, "source": source, "commands": commands}
+    if args.init_dialog:
+        config["init_dialog"] = True
+    if args.save:
+        config["save"] = True
+    if existing_index is None:
+        configs.append(config)
+    else:
+        configs[existing_index] = {**configs[existing_index], **config}
+    return plan
+
+
+def add_security_policy(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    policies = _ensure_list(plan, "security_policies")
+    key = (args.device, args.type, args.interface)
+    existing_index = next((index for index, item in enumerate(policies) if isinstance(item, dict) and (_first_present(item, ("device", "router", "name")), str(item.get("type", item.get("kind", ""))), str(item.get("interface", item.get("port", "")))) == key), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"security_policy for {args.device!r} {args.type!r} {args.interface!r} already exists; use --replace to update it")
+    policy: dict[str, Any] = {"device": args.device, "type": args.type}
+    for key_name in ("interface", "acl", "direction", "summary"):
+        value = _str_value(getattr(args, key_name))
+        if value:
+            policy[key_name] = value
+    if existing_index is None:
+        policies.append(policy)
+    else:
+        policies[existing_index] = {**policies[existing_index], **policy}
+    return plan
+
+
 def add_common_io(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--output", type=Path, help="write JSON to a file instead of stdout")
     parser.add_argument("--compact", action="store_true", help="emit compact JSON")
@@ -221,6 +400,81 @@ def main(argv: list[str] | None = None) -> int:
     pc_p.add_argument("--replace", action="store_true", help="replace/update an existing config for the same name and port")
     add_common_io(pc_p)
 
+    ipv6_p = sub.add_parser("add-ipv6-config", help="append or update one PC/server IPv6 config record")
+    add_plan_arg(ipv6_p)
+    ipv6_p.add_argument("--name", required=True)
+    ipv6_p.add_argument("--port", default="FastEthernet0")
+    ipv6_p.add_argument("--ipv6", default="")
+    ipv6_p.add_argument("--prefix", default="")
+    ipv6_p.add_argument("--gateway", default="")
+    ipv6_p.add_argument("--dns", default="")
+    ipv6_p.add_argument("--note", default="")
+    ipv6_p.add_argument("--replace", action="store_true", help="replace/update an existing IPv6 config for the same name and port")
+    add_common_io(ipv6_p)
+
+    vlan_p = sub.add_parser("add-vlan-config", help="append or update one VLAN metadata record")
+    add_plan_arg(vlan_p)
+    vlan_p.add_argument("--id", type=int, required=True)
+    vlan_p.add_argument("--name", default="")
+    vlan_p.add_argument("--network", default="")
+    vlan_p.add_argument("--gateway", default="")
+    vlan_p.add_argument("--description", default="")
+    vlan_p.add_argument("--replace", action="store_true", help="replace/update an existing VLAN record with the same id")
+    add_common_io(vlan_p)
+
+    dhcp_p = sub.add_parser("add-dhcp-pool", help="append or update one router DHCP pool metadata record")
+    add_plan_arg(dhcp_p)
+    dhcp_p.add_argument("--name", required=True)
+    dhcp_p.add_argument("--device", default="")
+    dhcp_p.add_argument("--vlan", type=int)
+    dhcp_p.add_argument("--network", default="")
+    dhcp_p.add_argument("--mask", default="")
+    dhcp_p.add_argument("--start", default="")
+    dhcp_p.add_argument("--end", default="")
+    dhcp_p.add_argument("--gateway", default="")
+    dhcp_p.add_argument("--dns", default="")
+    dhcp_p.add_argument("--replace", action="store_true", help="replace/update an existing DHCP pool with the same device and name")
+    add_common_io(dhcp_p)
+
+    server_p = sub.add_parser("add-server-config", help="append or update one Server-PT service config record")
+    add_plan_arg(server_p)
+    server_p.add_argument("--name", required=True)
+    server_p.add_argument("--port", default="FastEthernet0")
+    server_p.add_argument("--http", action="store_true")
+    server_p.add_argument("--tftp", action="store_true")
+    server_p.add_argument("--service", action="append", default=[], help="enable a service: http, tftp, ftp, dns, email, ntp, syslog, or dhcp")
+    server_p.add_argument("--ftp-json", default="", help="FTP service JSON object or @file")
+    server_p.add_argument("--dns-json", default="", help="DNS service JSON object or @file")
+    server_p.add_argument("--email-json", default="", help="Email service JSON object or @file")
+    server_p.add_argument("--ntp-json", default="", help="NTP service JSON object or @file")
+    server_p.add_argument("--syslog-json", default="", help="Syslog service JSON object or @file")
+    server_p.add_argument("--dhcp-json", default="", help="DHCP service JSON object or @file")
+    server_p.add_argument("--replace", action="store_true", help="replace/update an existing Server-PT config with the same name")
+    add_common_io(server_p)
+
+    ios_p = sub.add_parser("add-ios-config", help="append or update one IOS command config record")
+    add_plan_arg(ios_p)
+    ios_p.add_argument("--device", required=True)
+    ios_p.add_argument("--source", default="pt730-plan")
+    ios_p.add_argument("--init-dialog", action="store_true")
+    ios_p.add_argument("--save", action="store_true")
+    ios_p.add_argument("--command", action="append", default=[], help="one IOS command; can be repeated")
+    ios_p.add_argument("--commands-file", type=Path, help="newline-delimited IOS commands")
+    ios_p.add_argument("--commands-json", default="", help="JSON array of IOS commands or @file")
+    ios_p.add_argument("--replace", action="store_true", help="replace/update an existing IOS config with the same device and source")
+    add_common_io(ios_p)
+
+    security_p = sub.add_parser("add-security-policy", help="append or update one security policy metadata record")
+    add_plan_arg(security_p)
+    security_p.add_argument("--device", required=True)
+    security_p.add_argument("--type", required=True)
+    security_p.add_argument("--interface", default="")
+    security_p.add_argument("--acl", default="")
+    security_p.add_argument("--direction", default="")
+    security_p.add_argument("--summary", default="")
+    security_p.add_argument("--replace", action="store_true", help="replace/update an existing security policy with the same device/type/interface")
+    add_common_io(security_p)
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "schema":
@@ -239,6 +493,18 @@ def main(argv: list[str] | None = None) -> int:
             _emit(add_annotation(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-pc-config":
             _emit(add_pc_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-ipv6-config":
+            _emit(add_ipv6_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-vlan-config":
+            _emit(add_vlan_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-dhcp-pool":
+            _emit(add_dhcp_pool(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-server-config":
+            _emit(add_server_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-ios-config":
+            _emit(add_ios_config(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-security-policy":
+            _emit(add_security_policy(plan, args), args.output, compact=args.compact)
         else:
             raise ValueError(f"unknown command: {args.cmd}")
         return 0

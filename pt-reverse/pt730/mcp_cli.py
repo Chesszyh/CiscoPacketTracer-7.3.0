@@ -254,6 +254,19 @@ def _append_output_and_compact(command: list[str], args: dict[str, Any]) -> None
         command.append("--compact")
 
 
+def _json_cli_value(args: dict[str, Any], name: str) -> str:
+    if name not in args or args.get(name) is None:
+        return ""
+    value = args.get(name)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return json.dumps(value, ensure_ascii=False)
+    raise ToolError(f"{name} must be a JSON string, object, or array of strings")
+
+
 def tool_plan_new(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     command = [str(bin_path(root, "pt730-plan")), "new"]
     name = str_arg(args, "name", required=False)
@@ -316,6 +329,101 @@ def tool_plan_add_pc_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
             command.extend([flag, value])
     if bool_arg(args, "dhcp", default=False):
         command.append("--dhcp")
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_ipv6_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-ipv6-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    for key, flag in (("port", "--port"), ("ipv6", "--ipv6"), ("prefix", "--prefix"), ("gateway", "--gateway"), ("dns", "--dns"), ("note", "--note")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_vlan_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-vlan-config", str_arg(args, "plan"), "--id", str(int_arg(args, "id", default=0))]
+    for key, flag in (("name", "--name"), ("network", "--network"), ("gateway", "--gateway"), ("description", "--description")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_dhcp_pool(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-dhcp-pool", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    for key, flag in (("device", "--device"), ("network", "--network"), ("mask", "--mask"), ("start", "--start"), ("end", "--end"), ("gateway", "--gateway"), ("dns", "--dns")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
+    vlan = optional_int_arg(args, "vlan")
+    if vlan is not None:
+        command.extend(["--vlan", str(vlan)])
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_server_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-server-config", str_arg(args, "plan"), "--name", str_arg(args, "name")]
+    port = str_arg(args, "port", required=False)
+    if port:
+        command.extend(["--port", port])
+    if bool_arg(args, "http", default=False):
+        command.append("--http")
+    if bool_arg(args, "tftp", default=False):
+        command.append("--tftp")
+    for service in list_str_arg(args, "service", required=False):
+        command.extend(["--service", service])
+    for key, flag in (("ftp_json", "--ftp-json"), ("dns_json", "--dns-json"), ("email_json", "--email-json"), ("ntp_json", "--ntp-json"), ("syslog_json", "--syslog-json"), ("dhcp_json", "--dhcp-json")):
+        value = _json_cli_value(args, key)
+        if value:
+            command.extend([flag, value])
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_ios_config(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-ios-config", str_arg(args, "plan"), "--device", str_arg(args, "device")]
+    source = str_arg(args, "source", required=False)
+    if source:
+        command.extend(["--source", source])
+    if bool_arg(args, "init_dialog", default=False):
+        command.append("--init-dialog")
+    if bool_arg(args, "save", default=False):
+        command.append("--save")
+    for item in list_str_arg(args, "commands", required=False):
+        command.extend(["--command", item])
+    commands_file = str_arg(args, "commands_file", required=False)
+    if commands_file:
+        command.extend(["--commands-file", commands_file])
+    commands_json = _json_cli_value(args, "commands_json")
+    if commands_json:
+        command.extend(["--commands-json", commands_json])
+    if bool_arg(args, "replace", default=False):
+        command.append("--replace")
+    _append_output_and_compact(command, args)
+    return run_cli(root, command)
+
+
+def tool_plan_add_security_policy(root: Path, args: dict[str, Any]) -> dict[str, Any]:
+    command = [str(bin_path(root, "pt730-plan")), "add-security-policy", str_arg(args, "plan"), "--device", str_arg(args, "device"), "--type", str_arg(args, "type")]
+    for key, flag in (("interface", "--interface"), ("acl", "--acl"), ("direction", "--direction"), ("summary", "--summary")):
+        value = str_arg(args, key, required=False)
+        if value:
+            command.extend([flag, value])
     if bool_arg(args, "replace", default=False):
         command.append("--replace")
     _append_output_and_compact(command, args)
@@ -1742,6 +1850,8 @@ def tools() -> list[dict[str, Any]]:
     integer = {"type": "integer", "minimum": 0}
     annotation_object = {"type": "object", "additionalProperties": True}
     annotations = {"oneOf": [annotation_object, {"type": "array", "items": annotation_object}, string]}
+    json_object_or_string = {"oneOf": [{"type": "object", "additionalProperties": True}, string]}
+    string_array_or_string = {"oneOf": [string_array, string]}
     return [
         tool("pt730_capabilities", "Print PT 7.3 automation capabilities.", schema({"table": boolean, "compact": boolean}), tool_capabilities),
         tool("pt730_schema", "Print offline input schemas/examples for PT 7.3 template, IP plan, compose, config plan, pipeline, lab, render, plan editor, or IOS template workflows.", schema({"target": {"type": "string", "enum": ["template", "ip_plan", "compose", "config_plan", "pipeline", "lab", "render", "plan", "ios_template"]}, "compact": boolean}, ["target"]), tool_schema),
@@ -1750,6 +1860,12 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_plan_add_link", "Append one link between topology plan devices.", schema({"plan": string, "a": string, "b": string, "pa": string, "pb": string, "cable": string, "vlan": integer, "note": string, "allow_missing": boolean, "output": string, "compact": boolean}, ["plan", "a", "b"]), tool_plan_add_link),
         tool("pt730_plan_add_annotation", "Append one report/diagram callout annotation to a topology JSON plan.", schema({"plan": string, "id": string, "kind": string, "target": string, "title": string, "text": string, "x": integer, "y": integer, "width": integer, "height": integer, "color": string, "output": string, "compact": boolean}, ["plan"]), tool_plan_add_annotation),
         tool("pt730_plan_add_pc_config", "Append or update one PC/server IPv4 config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "dhcp": boolean, "ip": string, "mask": string, "gateway": string, "dns": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_pc_config),
+        tool("pt730_plan_add_ipv6_config", "Append or update one PC/server IPv6 config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "ipv6": string, "prefix": string, "gateway": string, "dns": string, "note": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_ipv6_config),
+        tool("pt730_plan_add_vlan_config", "Append or update one VLAN metadata record in a topology JSON plan.", schema({"plan": string, "id": integer, "name": string, "network": string, "gateway": string, "description": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "id"]), tool_plan_add_vlan_config),
+        tool("pt730_plan_add_dhcp_pool", "Append or update one router DHCP pool metadata record in a topology JSON plan.", schema({"plan": string, "name": string, "device": string, "vlan": integer, "network": string, "mask": string, "start": string, "end": string, "gateway": string, "dns": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_dhcp_pool),
+        tool("pt730_plan_add_server_config", "Append or update one Server-PT service config record in a topology JSON plan.", schema({"plan": string, "name": string, "port": string, "http": boolean, "tftp": boolean, "service": string_array, "ftp_json": json_object_or_string, "dns_json": json_object_or_string, "email_json": json_object_or_string, "ntp_json": json_object_or_string, "syslog_json": json_object_or_string, "dhcp_json": json_object_or_string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "name"]), tool_plan_add_server_config),
+        tool("pt730_plan_add_ios_config", "Append or update one IOS command config record in a topology JSON plan.", schema({"plan": string, "device": string, "source": string, "init_dialog": boolean, "save": boolean, "commands": string_array, "commands_file": string, "commands_json": string_array_or_string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "device"]), tool_plan_add_ios_config),
+        tool("pt730_plan_add_security_policy", "Append or update one security policy metadata record in a topology JSON plan.", schema({"plan": string, "device": string, "type": string, "interface": string, "acl": string, "direction": string, "summary": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "device", "type"]), tool_plan_add_security_policy),
         tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, diagram-audit, verification-json, or verification-md.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
         tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_verification_plan", "Generate an offline JSON or Markdown live/manual validation checklist for a topology plan.", schema({"plan": string, "format": {"type": "string", "enum": ["json", "markdown"]}, "output": string, "compact": boolean, "max_hosts": integer, "max_service_targets": integer, "strict_safety": boolean, "allow_risky": boolean}, ["plan"]), tool_verification_plan),

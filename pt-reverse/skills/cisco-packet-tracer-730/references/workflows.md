@@ -307,8 +307,12 @@ representative live/manual validation steps for pings, IOS show commands, and
 Server-PT services. Template specs use snake_case `template_options`; both
 paths can set render `formats`, `theme`, title, legend, labels, and `group_by`.
 When a template is not suitable, use `pt730-plan new` plus `add-device`,
-`add-link`, `add-annotation`, and `add-pc-config` or the matching MCP
-`pt730_plan_*` tools to build custom topology JSON before layout/render/safety.
+`add-link`, `add-annotation`, `add-pc-config`, `add-ipv6-config`,
+`add-vlan-config`, `add-dhcp-pool`, `add-server-config`, `add-ios-config`, and
+`add-security-policy` or the matching MCP `pt730_plan_*` tools to build custom
+topology JSON and config metadata before layout/render/safety/config export.
+Complex Server-PT service objects accept JSON strings or `@file`, for example
+`--dns-json '{"enabled":true,"records":[{"name":"www.lab.local","ip":"192.168.10.10"}]}'`.
 Topology plans can also include top-level `annotations` callouts; Mermaid,
 SVG/draw.io, and HTML render them visually, while Markdown/summary outputs keep
 them as reportable metadata. For render-only labels, use CLI `--annotation` /
