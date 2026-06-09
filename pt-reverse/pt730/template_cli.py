@@ -104,8 +104,8 @@ def schema() -> dict[str, Any]:
                 "options": ["--name", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--routing none|rip|eigrp|ospf", "--layout-style", "--no-layout"],
             },
             "enterprise-edge": {
-                "description": "Integrated enterprise topology with HQ VLANs, server zone, DMZ, ISP/Internet test LAN, branch WAN routers, representative hosts, services, NAT/ACL, and optional RIP/EIGRP/OSPF/static routing.",
-                "options": ["--name", "--campus-vlans", "--hosts-per-vlan", "--campus-servers", "--branches", "--branch-hosts", "--dmz-servers", "--internet-hosts", "--campus-pool", "--campus-prefix", "--server-network", "--server-vlan", "--vlan-base", "--branch-pool", "--branch-prefix", "--wan-pool", "--dmz-network", "--isp-wan-network", "--internet-network", "--domain", "--routing none|rip|eigrp|ospf|static", "--layout-style", "--no-layout"],
+                "description": "Integrated enterprise topology with HQ VLANs, server zone, DMZ, ISP/Internet test LAN, branch WAN routers, representative hosts, services, NAT/ACL, and optional RIP/EIGRP/OSPF/static/BGP routing.",
+                "options": ["--name", "--campus-vlans", "--hosts-per-vlan", "--campus-servers", "--branches", "--branch-hosts", "--dmz-servers", "--internet-hosts", "--campus-pool", "--campus-prefix", "--server-network", "--server-vlan", "--vlan-base", "--branch-pool", "--branch-prefix", "--wan-pool", "--dmz-network", "--isp-wan-network", "--internet-network", "--domain", "--routing none|rip|eigrp|ospf|static|bgp", "--layout-style", "--no-layout"],
             },
         },
     }
@@ -2010,6 +2010,8 @@ def enterprise_edge(
     internet_switch = f"SW-{slug}-INET"
     branch_routers = [f"R-{slug}-BR{index}" for index in range(1, branches + 1)]
     branch_switches = [f"SW-{slug}-BR{index}" for index in range(1, branches + 1)]
+    enterprise_asn = 65001
+    isp_asn = 65000
 
     server_gateway = _host(server_net, 1)
     server_addresses = _host_list(server_net, count=campus_servers, skip={server_gateway})
@@ -2065,6 +2067,7 @@ def enterprise_edge(
                 "summary": f"Permit public HTTP to {dmz_web_ip}, DNS to {dmz_dns_ip}, deny inbound to private enterprise networks",
             },
         ],
+        "bgp_sessions": [],
         "ios_configs": [],
         "metadata": {
             "source": "pt730-template enterprise-edge",
@@ -2303,12 +2306,32 @@ def enterprise_edge(
                 commands.append(f"network {network}")
             commands.append("exit")
 
-    if routing == "static":
+    if routing in ("static", "bgp"):
         for info in branch_infos:
             next_hop = static_hq_routes.get(info["router"])
             if next_hop:
                 edge_commands.append(f"ip route {info['network'].network_address} {info['network'].netmask} {next_hop}")
     add_routing(edge_commands, edge, "10.255.30.1", [f"GigabitEthernet0/0.{server_vlan}", *[f"GigabitEthernet0/0.{info['vlan']}" for info in campus_infos], "GigabitEthernet0/1"])
+    if routing == "bgp":
+        plan["metadata"]["features"].append("bgp_edge")
+        plan["bgp_sessions"].append(
+            {
+                "local_device": edge,
+                "local_as": enterprise_asn,
+                "local_ip": str(edge_wan),
+                "peer_device": isp,
+                "peer_as": isp_asn,
+                "peer_ip": str(isp_wan),
+                "description": "Enterprise edge eBGP to ISP",
+            }
+        )
+        edge_commands.extend([f"router bgp {enterprise_asn}", "bgp log-neighbor-changes", f"neighbor {isp_wan} remote-as {isp_asn}", f"neighbor {isp_wan} description ISP"])
+        for network in [server_net, *campus_networks, dmz_net, *branch_networks]:
+            edge_commands.append(f"network {network.network_address} mask {network.netmask}")
+        edge_commands.append("exit")
+        isp_commands.extend([f"router bgp {isp_asn}", "bgp log-neighbor-changes", f"neighbor {edge_wan} remote-as {enterprise_asn}", f"neighbor {edge_wan} description ENTERPRISE_EDGE"])
+        isp_commands.append(f"network {inet_net.network_address} mask {inet_net.netmask}")
+        isp_commands.append("exit")
     edge_commands.append("end")
     isp_commands.append("end")
     plan["ios_configs"].extend([{"device": edge, "init_dialog": True, "commands": edge_commands}, {"device": isp, "init_dialog": True, "commands": isp_commands}])
@@ -2330,7 +2353,7 @@ def enterprise_edge(
             if clock:
                 commands.append("clock rate 64000")
             commands.extend(["no shutdown", "exit"])
-        if routing == "static":
+        if routing in ("static", "bgp"):
             next_hop = static_next_hop_to_hq.get(router)
             if next_hop:
                 commands.append(f"ip route 0.0.0.0 0.0.0.0 {next_hop}")
@@ -2600,7 +2623,7 @@ def main(argv: list[str] | None = None) -> int:
     enterprise_p.add_argument("--isp-wan-network", default="203.0.113.0/30")
     enterprise_p.add_argument("--internet-network", default="198.51.100.0/24")
     enterprise_p.add_argument("--domain", default="enterprise.local")
-    enterprise_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf", "static"), default="ospf")
+    enterprise_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf", "static", "bgp"), default="ospf")
     enterprise_p.add_argument("--layout-style", choices=STYLES, default="campus")
     enterprise_p.add_argument("--no-layout", action="store_true")
     enterprise_p.add_argument("--output", type=Path)

@@ -560,6 +560,38 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("## Service Checks", markdown.stdout)
         self.assertIn("pt-reverse/bin/pt730-ftp PC_DHCP", markdown.stdout)
 
+    def test_verification_plan_includes_bgp_show_commands(self) -> None:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "devices": [{"name": "R-BGP", "category": "router", "model": "2911"}],
+                    "ios_configs": [
+                        {
+                            "device": "R-BGP",
+                            "commands": [
+                                "router bgp 65001",
+                                "neighbor 203.0.113.2 remote-as 65000",
+                                "network 172.16.1.0 mask 255.255.255.192",
+                            ],
+                        }
+                    ],
+                },
+                f,
+            )
+            path = f.name
+        try:
+            result = self.run_render("verification-plan", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        ios_checks = [check for check in data["checks"] if check.get("category") == "ios"]
+        self.assertTrue(ios_checks)
+        commands = ios_checks[0]["mcp"]["arguments"]["commands"]
+        self.assertIn("show ip bgp summary", commands)
+        self.assertIn("show ip route bgp", commands)
+        self.assertIn("show ip protocols", commands)
+
     def test_bundle_report_preset_adds_report_defaults_and_diagram_audit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "bundle"

@@ -330,6 +330,7 @@ printf '%s' '{"device":"R1","hostname":"R1","vlans":[{"id":10}],"spanning_tree":
 "$BIN/pt730-ios-template" schema | python3 -m json.tool >/dev/null
 "$BIN/pt730-ios-template" render "$ROOT/pt-reverse/examples/ios-template-switching.json" >/dev/null
 "$BIN/pt730-ios-template" render "$ROOT/pt-reverse/examples/ios-template-fhrp-services.json" >/dev/null
+"$BIN/pt730-ios-template" render "$ROOT/pt-reverse/examples/ios-template-bgp-edge.json" >/dev/null
 printf '%s' '{"devices":[{"device":"R1","hostname":"R1","rip":{"version":2,"networks":["10.0.0.0"]}},{"device":"SW1","hostname":"SW1","vlans":[{"id":10}]}]}' >"$tmp/ios-template-batch.json"
 "$BIN/pt730-ios-template" render "$tmp/ios-template-batch.json" --topology-json >/dev/null
 printf '%s' '{"devices":[{"name":"R1","model":"2911","command_line":{"prompt":"R1#","output_tail":"spanning-tree mode rapid-pvst\nspanning-tree vlan 10 root primary\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n ip helper-address 172.16.1.10\n standby 10 ip 10.0.0.254\n standby 10 preempt\n ip access-group 10 in\n channel-group 1 mode active\nip dhcp pool VLAN10\n network 10.0.0.0 255.255.255.0\n default-router 10.0.0.254\nntp server 172.16.1.20\nlogging host 172.16.1.30\nsnmp-server community campusRO RO\nrouter rip\n network 10.0.0.0\n"}}],"links":[]}' >"$tmp/query.json"

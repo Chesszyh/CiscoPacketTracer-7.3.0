@@ -37,6 +37,7 @@ pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing eigrp
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
+pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing bgp
 pt-reverse/bin/pt730-lab schema
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
 pt-reverse/bin/pt730-lab plan pt-reverse/examples/two-router-serial-configured.json --output-dir plan-lab --basename serial --formats svg,summary,diagram-audit --title "Serial Lab" --legend
@@ -54,6 +55,7 @@ pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json
 pt-reverse/bin/pt730-layout pt-reverse/examples/simple-lan.json --style lan
 pt-reverse/bin/pt730-render mermaid pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render svg pt-reverse/examples/simple-lan.json --title "Simple LAN" --legend
@@ -99,7 +101,7 @@ options including DNS, IPv6 prefixes/gateways, SSID, 802.1Q, STP,
 EtherChannel, access/trunk ports, Server-PT
 HTTP/DNS/FTP/TFTP/Email/NTP/Syslog/DHCP metadata, NAT/ACL, DMZ, HSRP/STP, DHCP
 relay, branch WAN, ISP/Internet, RIP/EIGRP/OSPF/static WAN and campus L3 routing,
-layout, no-layout, compact, router DHCP pools, DHCP client hosts, and naming
+BGP enterprise edge peering, layout, no-layout, compact, router DHCP pools, DHCP client hosts, and naming
 controls from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
@@ -236,6 +238,7 @@ pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing eigrp
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
+pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing bgp
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir lab-out
 pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit,verification-json,verification-md --title "Campus Topology" --legend
 pt-reverse/bin/pt730-lab report topology-lab/manifest.json --output topology-lab/deliverable.md
@@ -396,8 +399,9 @@ Redundant-campus templates generate dual-core, dual-homed access/server
 topologies with HSRP gateways, STP root roles, DHCP relay, IOS DHCP pools,
 NTP/Syslog/SNMP, server services, and optional RIP/EIGRP/OSPF configs.
 Enterprise-edge templates combine HQ VLANs, server zone, DMZ, ISP/Internet
-test LAN, branch serial WAN routers, NAT overload, outside ACL metadata, and
-service configs into one render-friendly integrated topology.
+test LAN, branch serial WAN routers, NAT overload, outside ACL metadata,
+optional RIP/EIGRP/OSPF/static internal routing, optional eBGP edge peering to
+an ISP router, and service configs into one render-friendly integrated topology.
 Use `pt730-lab template <lab-spec.json> --output-dir <out-dir>` when an agent
 should start from one compact JSON spec and write a complete deliverable bundle:
 `topology.json`, `safety.json`, `render/<basename>.*`, `configs/*.cfg`, and
@@ -572,7 +576,7 @@ Promoting to `safe` requires `--save-reopen`.
 first supported template surface covers VLANs, access/trunk interfaces, routed
 interfaces, STP, EtherChannel/Port-channel, interface ACL binding with
 `acl_in`/`acl_out`, DHCP relay, HSRP/standby, IOS DHCP pools, NTP client,
-Syslog, SNMP, RIPv2, OSPF, static routes, standard/extended ACL lines, and NAT
+Syslog, SNMP, RIPv2, EIGRP, OSPF, BGP, static routes, standard/extended ACL lines, and NAT
 overload.
 
 ```bash
@@ -580,6 +584,7 @@ pt-reverse/bin/pt730-ios-template schema
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 ```
 

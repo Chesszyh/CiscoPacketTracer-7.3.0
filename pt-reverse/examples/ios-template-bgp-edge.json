@@ -1,0 +1,42 @@
+{
+  "device": "R-EDGE",
+  "hostname": "R-EDGE",
+  "interfaces": [
+    {
+      "name": "GigabitEthernet0/0",
+      "description": "ENTERPRISE_LAN",
+      "ip": "172.16.1.62",
+      "mask": "255.255.255.192"
+    },
+    {
+      "name": "GigabitEthernet0/2",
+      "description": "TO_ISP",
+      "ip": "203.0.113.1",
+      "mask": "255.255.255.252"
+    }
+  ],
+  "bgp": {
+    "asn": 65001,
+    "router_id": "10.255.255.1",
+    "neighbors": [
+      {
+        "ip": "203.0.113.2",
+        "remote_as": 65000,
+        "description": "ISP"
+      }
+    ],
+    "networks": [
+      {
+        "network": "172.16.1.0",
+        "mask": "255.255.255.192"
+      }
+    ]
+  },
+  "static_routes": [
+    {
+      "destination": "0.0.0.0",
+      "mask": "0.0.0.0",
+      "next_hop": "203.0.113.2"
+    }
+  ]
+}

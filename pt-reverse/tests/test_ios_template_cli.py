@@ -72,6 +72,13 @@ class IosTemplateCliTest(unittest.TestCase):
                     "passive_interfaces": ["Vlan10"],
                     "networks": [{"network": "192.168.10.0", "wildcard": "0.0.0.255", "area": 0}],
                 },
+                "bgp": {
+                    "asn": 65001,
+                    "router_id": "10.255.255.1",
+                    "neighbors": [{"ip": "203.0.113.2", "remote_as": 65000, "description": "ISP"}],
+                    "networks": [{"network": "172.16.1.0", "mask": "255.255.255.192"}],
+                    "redistribute": ["connected"],
+                },
                 "static_routes": [{"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "10.0.0.254"}],
                 "acls": [
                     {
@@ -109,6 +116,13 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("router-id 10.255.0.1", result.stdout)
         self.assertIn("passive-interface Vlan10", result.stdout)
         self.assertIn("network 192.168.10.0 0.0.0.255 area 0", result.stdout)
+        self.assertIn("router bgp 65001", result.stdout)
+        self.assertIn("bgp log-neighbor-changes", result.stdout)
+        self.assertIn("bgp router-id 10.255.255.1", result.stdout)
+        self.assertIn("neighbor 203.0.113.2 remote-as 65000", result.stdout)
+        self.assertIn("neighbor 203.0.113.2 description ISP", result.stdout)
+        self.assertIn("network 172.16.1.0 mask 255.255.255.192", result.stdout)
+        self.assertIn("redistribute connected", result.stdout)
         self.assertIn("ip route 0.0.0.0 0.0.0.0 10.0.0.254", result.stdout)
         self.assertIn("access-list 10 permit 192.168.10.0 0.0.0.255", result.stdout)
         self.assertIn("ip access-group 10 in", result.stdout)

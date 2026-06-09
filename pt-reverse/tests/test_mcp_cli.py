@@ -151,6 +151,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("ospf", redundant["inputSchema"]["properties"]["routing"]["enum"])
         enterprise = next(tool for tool in tools if tool["name"] == "pt730_template_enterprise_edge")
         self.assertIn("eigrp", enterprise["inputSchema"]["properties"]["routing"]["enum"])
+        self.assertIn("bgp", enterprise["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("static", enterprise["inputSchema"]["properties"]["routing"]["enum"])
         config_plan = next(tool for tool in tools if tool["name"] == "pt730_config_plan_campus")
         self.assertIn("eigrp", config_plan["inputSchema"]["properties"]["routing"]["enum"])
@@ -1399,6 +1400,40 @@ class McpCliTest(unittest.TestCase):
         joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
         self.assertIn("ip nat inside source list 10 interface GigabitEthernet0/2 overload", joined)
         self.assertIn("router ospf 1", joined)
+
+    def test_enterprise_edge_template_tool_supports_bgp_routing(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_enterprise_edge",
+                        "arguments": {
+                            "name": "BGP",
+                            "branches": 2,
+                            "routing": "bgp",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("enterprise-edge", command)
+        self.assertIn("bgp", command)
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["routing"], "bgp")
+        self.assertIn("bgp_edge", plan["metadata"]["features"])
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("router bgp 65001", joined)
+        self.assertIn("neighbor 203.0.113.2 remote-as 65000", joined)
+        self.assertIn("router bgp 65000", joined)
+        self.assertIn("neighbor 203.0.113.1 remote-as 65001", joined)
+        self.assertNotIn("router ospf 1", joined)
 
     def test_template_tool_rejects_unknown_layout_style(self) -> None:
         responses = self.run_mcp(

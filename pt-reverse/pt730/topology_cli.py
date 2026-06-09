@@ -1141,6 +1141,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     rip_networks: list[str] = []
     eigrp: dict[str, Any] = {"asn": "", "passive_interfaces": [], "networks": []}
     ospf: dict[str, Any] = {"process_id": "", "router_id": "", "passive_interfaces": [], "networks": []}
+    bgp: dict[str, Any] = {"asn": "", "router_id": "", "log_neighbor_changes": False, "neighbors": {}, "networks": [], "redistribute": []}
     spanning_tree: dict[str, Any] = {"mode": "", "roots": [], "priorities": [], "portfast_default": False, "bpduguard_default": False}
     dhcp: dict[str, Any] = {"excluded_addresses": [], "pools": {}}
     ntp: dict[str, Any] = {"servers": [], "authentication_keys": [], "authenticate": False, "trusted_keys": [], "source": ""}
@@ -1187,6 +1188,8 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
                 ospf["process_id"] = router_match.group(2) or ""
             elif current_router == "eigrp":
                 eigrp["asn"] = router_match.group(2) or ""
+            elif current_router == "bgp":
+                bgp["asn"] = router_match.group(2) or ""
             current_interface = None
             current_vlan = None
             current_dhcp_pool = None
@@ -1388,6 +1391,33 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             network_match = re.match(r"^network\s+(\S+)\s+(\S+)\s+area\s+(\S+)", line, flags=re.IGNORECASE)
             if network_match:
                 ospf["networks"].append({"network": network_match.group(1), "wildcard": network_match.group(2), "area": network_match.group(3)})
+        elif current_router == "bgp":
+            router_id_match = re.match(r"^bgp\s+router-id\s+(\S+)", line, flags=re.IGNORECASE)
+            if router_id_match:
+                bgp["router_id"] = router_id_match.group(1)
+            if re.match(r"^bgp\s+log-neighbor-changes$", line, flags=re.IGNORECASE):
+                bgp["log_neighbor_changes"] = True
+            neighbor_match = re.match(r"^neighbor\s+(\S+)\s+remote-as\s+(\S+)", line, flags=re.IGNORECASE)
+            if neighbor_match:
+                bgp["neighbors"].setdefault(neighbor_match.group(1), {"ip": neighbor_match.group(1)})["remote_as"] = neighbor_match.group(2)
+            neighbor_desc_match = re.match(r"^neighbor\s+(\S+)\s+description\s+(.+)", line, flags=re.IGNORECASE)
+            if neighbor_desc_match:
+                bgp["neighbors"].setdefault(neighbor_desc_match.group(1), {"ip": neighbor_desc_match.group(1)})["description"] = neighbor_desc_match.group(2).strip()
+            neighbor_update_match = re.match(r"^neighbor\s+(\S+)\s+update-source\s+(.+)", line, flags=re.IGNORECASE)
+            if neighbor_update_match:
+                bgp["neighbors"].setdefault(neighbor_update_match.group(1), {"ip": neighbor_update_match.group(1)})["update_source"] = neighbor_update_match.group(2).strip()
+            neighbor_next_hop_match = re.match(r"^neighbor\s+(\S+)\s+next-hop-self$", line, flags=re.IGNORECASE)
+            if neighbor_next_hop_match:
+                bgp["neighbors"].setdefault(neighbor_next_hop_match.group(1), {"ip": neighbor_next_hop_match.group(1)})["next_hop_self"] = True
+            network_match = re.match(r"^network\s+(\S+)(?:\s+mask\s+(\S+))?", line, flags=re.IGNORECASE)
+            if network_match:
+                record = {"network": network_match.group(1)}
+                if network_match.group(2):
+                    record["mask"] = network_match.group(2)
+                bgp["networks"].append(record)
+            redistribute_match = re.match(r"^redistribute\s+(.+)", line, flags=re.IGNORECASE)
+            if redistribute_match:
+                bgp["redistribute"].append(redistribute_match.group(1).strip())
         elif current_dhcp_pool:
             pool = dhcp["pools"].setdefault(current_dhcp_pool, {})
             network_match = re.match(r"^network\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
@@ -1410,7 +1440,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     return {
         "interfaces": interfaces,
         "vlans": vlans,
-        "routing": {"rip_networks": rip_networks, "eigrp": eigrp, "ospf": ospf, "static_routes": static_routes},
+        "routing": {"rip_networks": rip_networks, "eigrp": eigrp, "ospf": ospf, "bgp": {**bgp, "neighbors": list(bgp["neighbors"].values())}, "static_routes": static_routes},
         "spanning_tree": spanning_tree,
         "dhcp": dhcp,
         "ntp": ntp,
@@ -1638,6 +1668,7 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                 rip_networks = routing.get("rip_networks", [])
                 eigrp = routing.get("eigrp", {})
                 ospf = routing.get("ospf", {})
+                bgp = routing.get("bgp", {})
                 static_routes = routing.get("static_routes", [])
                 if rip_networks:
                     lines.append("")
@@ -1669,6 +1700,29 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                         for network in networks:
                             if isinstance(network, dict):
                                 lines.append(f"- {network.get('network', '')} {network.get('wildcard', '')} area {network.get('area', '')}")
+                if isinstance(bgp, dict) and (bgp.get("neighbors") or bgp.get("networks") or bgp.get("asn")):
+                    lines.append("")
+                    lines.append(f"BGP AS {bgp.get('asn', '')}".rstrip())
+                    if bgp.get("router_id"):
+                        lines.append(f"BGP router-id: {bgp.get('router_id')}")
+                    neighbors = bgp.get("neighbors", [])
+                    if neighbors:
+                        lines.append("BGP neighbors:")
+                        for neighbor in neighbors:
+                            if isinstance(neighbor, dict):
+                                line = f"- {neighbor.get('ip', '')} remote-as {neighbor.get('remote_as', '')}".rstrip()
+                                if neighbor.get("description"):
+                                    line += f" ({neighbor.get('description')})"
+                                lines.append(line)
+                    networks = bgp.get("networks", [])
+                    if networks:
+                        lines.append("BGP networks:")
+                        for network in networks:
+                            if isinstance(network, dict):
+                                line = f"- {network.get('network', '')}"
+                                if network.get("mask"):
+                                    line += f" mask {network.get('mask', '')}"
+                                lines.append(line)
                 if static_routes:
                     lines.append("")
                     lines.append("Static routes:")

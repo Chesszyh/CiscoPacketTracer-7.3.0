@@ -54,6 +54,8 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"p
   | pt-reverse/bin/pt730-mcp
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_enterprise_edge","arguments":{"name":"ENT","campus_vlans":3,"hosts_per_vlan":2,"branches":2,"branch_hosts":2,"dmz_servers":2,"routing":"ospf","layout_style":"campus","compact":true}}}' \
   | pt-reverse/bin/pt730-mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pt730_template_enterprise_edge","arguments":{"name":"ENT","campus_vlans":3,"hosts_per_vlan":2,"branches":2,"branch_hosts":2,"dmz_servers":2,"routing":"bgp","layout_style":"campus","compact":true}}}' \
+  | pt-reverse/bin/pt730-mcp
 ```
 
 Example full lab bundle through MCP:
@@ -139,6 +141,8 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switch
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json --topology-json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json --topology-json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json --topology-json
 ```
 
 The switching IOS template supports STP/Rapid PVST root and priority commands,
@@ -147,6 +151,8 @@ Port-channel trunk/access/routed interface configuration.
 The FHRP/services template supports DHCP relay `ip helper-address`, HSRP
 `standby` groups, IOS DHCP pools, NTP servers, Syslog hosts, and SNMP
 communities for dual-core campus labs.
+The BGP edge template supports `router bgp`, neighbor remote-AS/description,
+network statements, and a static default route toward the ISP.
 
 Example device preview:
 
@@ -197,6 +203,7 @@ pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing eigrp --output campus-eigrp.json
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf --output redundant-campus.json
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf --output enterprise-edge.json
+pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing bgp --output enterprise-edge-bgp.json
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir enterprise-demo-lab
 pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab --basename topology --formats svg,drawio,html,markdown,summary,diagram-audit,verification-json,verification-md --title "Campus Topology" --legend
 pt-reverse/bin/pt730-lab plan topology.json --output-dir topology-lab-report --basename topology --preset report
@@ -263,8 +270,10 @@ OSPF is not wanted.
 plan with HQ router-on-a-stick VLANs, server zone, DMZ public services,
 ISP/Internet test LAN, branch serial WAN routers, NAT overload, outside ACL
 metadata, and HTTP/DNS/FTP/email server configs. Use `--routing eigrp` for
-Cisco EIGRP dynamic routing, and use `--group-by auto` or `--group-by site` for
-clearer SVG/draw.io/HTML renders.
+Cisco EIGRP dynamic routing. Use `--routing bgp` when the lab needs enterprise
+edge eBGP peering; it keeps static branch reachability and emits AS 65001 to ISP
+AS 65000 neighbor/network statements. Use `--group-by auto` or `--group-by site`
+for clearer SVG/draw.io/HTML renders.
 
 `edge-security` uses verified `2911`, `2960-24TT`, `PC-PT`, and `Server-PT`
 models to generate an ISP edge, inside LAN, DMZ, Internet test host, NAT

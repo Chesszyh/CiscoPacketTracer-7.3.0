@@ -267,6 +267,13 @@ def schema_doc() -> dict[str, Any]:
             "passive_interfaces": ["Vlan10"],
             "networks": [{"network": "10.0.0.0", "wildcard": "0.0.0.255", "area": 0}],
         },
+        "bgp": {
+            "asn": 65001,
+            "router_id": "10.255.255.1",
+            "neighbors": [{"ip": "203.0.113.2", "remote_as": 65000, "description": "ISP"}],
+            "networks": [{"network": "172.16.1.0", "mask": "255.255.255.192"}],
+            "redistribute": ["connected"],
+        },
         "static_routes": [{"destination": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "10.0.0.254"}],
         "dhcp": {
             "excluded_addresses": [{"start": "192.168.10.1", "end": "192.168.10.20"}],
@@ -310,6 +317,11 @@ def schema_doc() -> dict[str, Any]:
             "eigrp.passive_interfaces": "Optional passive-interface commands for EIGRP.",
             "ospf.networks": "OSPF network statements; each entry is {network, wildcard, area}.",
             "ospf.passive_interfaces": "Optional passive-interface commands for OSPF.",
+            "bgp.asn": "BGP autonomous system number.",
+            "bgp.router_id": "Optional bgp router-id command.",
+            "bgp.neighbors": "Array of {ip|address, remote_as, description?, update_source?, next_hop_self?, soft_reconfiguration_inbound?}.",
+            "bgp.networks": "BGP network statements; entries may be strings or {network, mask?}.",
+            "bgp.redistribute": "Optional list of protocols for redistribute <protocol> under router bgp.",
             "static_routes": "Array of {destination, mask, next_hop|interface}.",
             "dhcp.excluded_addresses": "IOS DHCP excluded-address entries; string or {start,end}.",
             "dhcp.pools": "IOS DHCP pools with name, network, mask, default_router/gateway, dns_server/dns, domain_name/domain, lease.",
@@ -464,6 +476,40 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
                 f" network {require(network.get('network'), 'ospf network is required')} "
                 f"{require(network.get('wildcard'), 'ospf wildcard is required')} area {area}"
             )
+        commands.append("exit")
+
+    bgp = spec.get("bgp")
+    if isinstance(bgp, dict):
+        asn = bgp.get("asn", bgp.get("as", bgp.get("local_as")))
+        commands.append(f"router bgp {require(asn, 'bgp asn is required')}")
+        if bgp.get("log_neighbor_changes", True):
+            commands.append(" bgp log-neighbor-changes")
+        if bgp.get("router_id"):
+            commands.append(f" bgp router-id {bgp['router_id']}")
+        for neighbor in as_object_list(bgp.get("neighbors")):
+            address = require(neighbor.get("ip", neighbor.get("address", neighbor.get("neighbor"))), "bgp neighbor ip is required")
+            remote_as = require(neighbor.get("remote_as", neighbor.get("remote-as", neighbor.get("as"))), "bgp neighbor remote_as is required")
+            commands.append(f" neighbor {address} remote-as {remote_as}")
+            if neighbor.get("description"):
+                commands.append(f" neighbor {address} description {neighbor['description']}")
+            if neighbor.get("update_source", neighbor.get("update-source")):
+                commands.append(f" neighbor {address} update-source {neighbor.get('update_source', neighbor.get('update-source'))}")
+            if neighbor.get("next_hop_self", neighbor.get("next-hop-self")):
+                commands.append(f" neighbor {address} next-hop-self")
+            if neighbor.get("soft_reconfiguration_inbound", neighbor.get("soft-reconfiguration-inbound")):
+                commands.append(f" neighbor {address} soft-reconfiguration inbound")
+            if neighbor.get("default_originate", neighbor.get("default-originate")):
+                commands.append(f" neighbor {address} default-originate")
+        for network in as_list(bgp.get("networks")):
+            if isinstance(network, dict):
+                line = f" network {require(network.get('network'), 'bgp network is required')}"
+                if network.get("mask"):
+                    line += f" mask {network['mask']}"
+                commands.append(line)
+            else:
+                commands.append(f" network {network}")
+        for protocol in as_value_list(bgp.get("redistribute")):
+            commands.append(f" redistribute {protocol}")
         commands.append("exit")
 
     for route in as_list(spec.get("static_routes")):
