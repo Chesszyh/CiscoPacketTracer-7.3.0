@@ -538,6 +538,8 @@ def _ios_show_commands(commands: list[str]) -> list[str]:
     show = ["show ip interface brief", "show running-config | section hostname"]
     if "router ospf" in lowered:
         show.extend(["show ip ospf neighbor", "show ip route ospf", "show ip protocols"])
+    if "router eigrp" in lowered:
+        show.extend(["show ip eigrp neighbors", "show ip route eigrp", "show ip protocols"])
     if "router rip" in lowered:
         show.extend(["show ip route rip", "show ip protocols"])
     if re.search(r"(?m)^\s*ip route\s+", lowered):

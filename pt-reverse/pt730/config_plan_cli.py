@@ -214,6 +214,10 @@ def _ospf_network_record(network: ipaddress.IPv4Network) -> dict[str, Any]:
     return {"network": str(network.network_address), "wildcard": str(network.hostmask), "area": 0}
 
 
+def _eigrp_network_record(network: ipaddress.IPv4Network) -> dict[str, Any]:
+    return {"network": str(network.network_address), "wildcard": str(network.hostmask)}
+
+
 def _first_hop(adjacency: dict[str, list[dict[str, Any]]], source: str, target: str) -> ipaddress.IPv4Address | None:
     if source == target:
         return None
@@ -270,6 +274,7 @@ def _add_l3_plan(
 ) -> None:
     links = [link for link in plan.get("links", []) if isinstance(link, dict)]
     rip_networks: dict[str, set[str]] = {}
+    eigrp_networks: dict[str, dict[str, ipaddress.IPv4Network]] = {}
     ospf_networks: dict[str, dict[str, ipaddress.IPv4Network]] = {}
     ospf_passive_interfaces: dict[str, set[str]] = {}
     svi_networks: dict[str, list[ipaddress.IPv4Network]] = {}
@@ -296,6 +301,7 @@ def _add_l3_plan(
             },
         )
         rip_networks.setdefault(owner, set()).add(_rip_network(ipaddress.ip_address(gateway["gateway"])))
+        eigrp_networks.setdefault(owner, {})[str(gateway["network"])] = gateway["network"]
         ospf_networks.setdefault(owner, {})[str(gateway["network"])] = gateway["network"]
         ospf_passive_interfaces.setdefault(owner, set()).add(f"Vlan{vlan}")
         svi_networks.setdefault(owner, []).append(gateway["network"])
@@ -322,6 +328,8 @@ def _add_l3_plan(
         _add_l3_interface(configs, b, {"name": pb, "description": f"L3 link to {a} {network}", "mode": "routed", "ip": str(b_ip), "mask": mask})
         rip_networks.setdefault(a, set()).add(_rip_network(a_ip))
         rip_networks.setdefault(b, set()).add(_rip_network(b_ip))
+        eigrp_networks.setdefault(a, {})[str(network)] = network
+        eigrp_networks.setdefault(b, {})[str(network)] = network
         ospf_networks.setdefault(a, {})[str(network)] = network
         ospf_networks.setdefault(b, {})[str(network)] = network
         adjacency.setdefault(a, []).append({"neighbor": b, "next_hop": b_ip})
@@ -332,6 +340,17 @@ def _add_l3_plan(
             if networks:
                 spec = _ensure_spec(configs, device)
                 spec["rip"] = {"version": 2, "no_auto_summary": True, "networks": _sorted_networks(networks)}
+    elif routing == "eigrp":
+        for device in sorted(eigrp_networks):
+            networks = sorted(eigrp_networks[device].values(), key=lambda item: int(item.network_address))
+            if networks:
+                spec = _ensure_spec(configs, device)
+                spec["eigrp"] = {
+                    "asn": 100,
+                    "no_auto_summary": True,
+                    "passive_interfaces": sorted(ospf_passive_interfaces.get(device, set()), key=str),
+                    "networks": [_eigrp_network_record(network) for network in networks],
+                }
     elif routing == "ospf":
         for router_id_index, device in enumerate(sorted(ospf_networks), start=1):
             networks = sorted(ospf_networks[device].values(), key=lambda item: int(item.network_address))
@@ -438,11 +457,12 @@ def schema() -> dict[str, Any]:
             "--l3 derives VLAN SVI gateways from pc_configs gateway/mask values",
             "--l3 derives routed switch-switch links from note/subnet/network CIDR metadata",
             "--routing rip adds RIPv2 network statements to L3 switch configs",
+            "--routing eigrp adds EIGRP AS 100, passive SVI interfaces, and wildcard network statements to L3 switch configs",
             "--routing ospf adds OSPF process 1, router IDs, passive SVI interfaces, and network statements to L3 switch configs",
             "--routing static adds static routes between derived SVI networks",
             "existing ios_configs with other sources are preserved",
         ],
-        "options": ["--l3", "--routing none|rip|ospf|static", "--ios-only", "--compact", "--output", "export-configs --output-dir", "export-configs --source"],
+        "options": ["--l3", "--routing none|rip|eigrp|ospf|static", "--ios-only", "--compact", "--output", "export-configs --output-dir", "export-configs --source"],
         "output": "full topology JSON by default; use --ios-only for {ios_configs:[...]}",
     }
 
@@ -466,7 +486,7 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--output", type=Path, help="write JSON to a file instead of stdout")
     campus_p.add_argument("--ios-only", action="store_true", help="output only generated ios_configs")
     campus_p.add_argument("--l3", action="store_true", help="derive SVI gateways and routed switch-switch links")
-    campus_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="none", help="routing config to derive with --l3")
+    campus_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf", "static"), default="none", help="routing config to derive with --l3")
 
     export_p = sub.add_parser("export-configs", help="write ios_configs from a topology JSON into .cfg files")
     export_p.add_argument("plan", type=Path)

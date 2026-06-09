@@ -92,20 +92,20 @@ def schema() -> dict[str, Any]:
                 "options": ["--name", "--routers", "--interconnect-pool", "--layout-style", "--no-layout"],
             },
             "wan-ring": {
-                "description": "Serial multi-site WAN ring with one access LAN per site, representative PCs/servers, HTTP/DNS services, and optional RIP/OSPF/static routing.",
-                "options": ["--name", "--sites", "--hosts-per-site", "--servers-per-site", "--interconnect-pool", "--lan-pool", "--lan-prefix", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
+                "description": "Serial multi-site WAN ring with one access LAN per site, representative PCs/servers, HTTP/DNS services, and optional RIP/EIGRP/OSPF/static routing.",
+                "options": ["--name", "--sites", "--hosts-per-site", "--servers-per-site", "--interconnect-pool", "--lan-pool", "--lan-prefix", "--routing none|rip|eigrp|ospf|static", "--layout-style", "--no-layout"],
             },
             "campus": {
-                "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs, and optional RIP/OSPF/static routing.",
-                "options": ["--name", "--cores", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--interconnect-pool", "--l3", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
+                "description": "Core-switch campus with server VLAN, access VLANs, representative hosts, services, optional L3 IOS configs, and optional RIP/EIGRP/OSPF/static routing.",
+                "options": ["--name", "--cores", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--interconnect-pool", "--l3", "--routing none|rip|eigrp|ospf|static", "--layout-style", "--no-layout"],
             },
             "redundant-campus": {
-                "description": "Dual-core campus with dual-homed access switches, HSRP gateways, STP root roles, DHCP relay/pools, NTP/Syslog/SNMP, services, and optional RIP/OSPF routing.",
-                "options": ["--name", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--routing none|rip|ospf", "--layout-style", "--no-layout"],
+                "description": "Dual-core campus with dual-homed access switches, HSRP gateways, STP root roles, DHCP relay/pools, NTP/Syslog/SNMP, services, and optional RIP/EIGRP/OSPF routing.",
+                "options": ["--name", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--routing none|rip|eigrp|ospf", "--layout-style", "--no-layout"],
             },
             "enterprise-edge": {
-                "description": "Integrated enterprise topology with HQ VLANs, server zone, DMZ, ISP/Internet test LAN, branch WAN routers, representative hosts, services, NAT/ACL, and optional RIP/OSPF routing.",
-                "options": ["--name", "--campus-vlans", "--hosts-per-vlan", "--campus-servers", "--branches", "--branch-hosts", "--dmz-servers", "--internet-hosts", "--campus-pool", "--campus-prefix", "--server-network", "--server-vlan", "--vlan-base", "--branch-pool", "--branch-prefix", "--wan-pool", "--dmz-network", "--isp-wan-network", "--internet-network", "--domain", "--routing none|rip|ospf|static", "--layout-style", "--no-layout"],
+                "description": "Integrated enterprise topology with HQ VLANs, server zone, DMZ, ISP/Internet test LAN, branch WAN routers, representative hosts, services, NAT/ACL, and optional RIP/EIGRP/OSPF/static routing.",
+                "options": ["--name", "--campus-vlans", "--hosts-per-vlan", "--campus-servers", "--branches", "--branch-hosts", "--dmz-servers", "--internet-hosts", "--campus-pool", "--campus-prefix", "--server-network", "--server-vlan", "--vlan-base", "--branch-pool", "--branch-prefix", "--wan-pool", "--dmz-network", "--isp-wan-network", "--internet-network", "--domain", "--routing none|rip|eigrp|ospf|static", "--layout-style", "--no-layout"],
             },
         },
     }
@@ -1404,6 +1404,11 @@ def wan_ring(
             for network in sorted(rip_networks, key=lambda value: tuple(int(part) for part in value.split("."))):
                 commands.append(f"network {network}")
             commands.append("exit")
+        elif routing == "eigrp":
+            commands.extend(["router eigrp 100", "no auto-summary", "passive-interface GigabitEthernet0/0"])
+            for network in sorted(ospf_networks[router], key=lambda value: int(value.network_address)):
+                commands.append(f"network {network.network_address} {_wildcard(network)}")
+            commands.append("exit")
         elif routing == "ospf":
             commands.extend(["router ospf 1", f"router-id 10.255.0.{router_index + 1}", "passive-interface GigabitEthernet0/0"])
             for network in sorted(ospf_networks[router], key=lambda value: int(value.network_address)):
@@ -1903,6 +1908,13 @@ def redundant_campus(
             for spec in svi_specs:
                 commands.append(f"network {spec['network'].network_address} {_wildcard(spec['network'])} area 0")
             commands.append("exit")
+        elif routing == "eigrp":
+            commands.extend(["router eigrp 100", "no auto-summary"])
+            for spec in svi_specs:
+                commands.append(f"passive-interface Vlan{spec['vlan']}")
+            for spec in svi_specs:
+                commands.append(f"network {spec['network'].network_address} {_wildcard(spec['network'])}")
+            commands.append("exit")
         elif routing == "rip":
             networks = sorted({_rip_network(spec["ip"]) for spec in svi_specs}, key=lambda value: tuple(int(part) for part in value.split(".")))
             commands.extend(["router rip", "version 2", "no auto-summary"])
@@ -2277,6 +2289,13 @@ def enterprise_edge(
             for network in sorted(networks, key=lambda item: int(item.network_address)):
                 commands.append(f"network {network.network_address} {_wildcard(network)} area 0")
             commands.append("exit")
+        elif routing == "eigrp":
+            commands.extend(["router eigrp 100", "no auto-summary"])
+            for interface in passive_interfaces:
+                commands.append(f"passive-interface {interface}")
+            for network in sorted(networks, key=lambda item: int(item.network_address)):
+                commands.append(f"network {network.network_address} {_wildcard(network)}")
+            commands.append("exit")
         elif routing == "rip":
             rip_networks = sorted({_rip_network(network.network_address) for network in networks}, key=lambda value: tuple(int(part) for part in value.split(".")))
             commands.extend(["router rip", "version 2", "no auto-summary"])
@@ -2520,7 +2539,7 @@ def main(argv: list[str] | None = None) -> int:
     wan_p.add_argument("--interconnect-pool", default="10.30.0.0/28")
     wan_p.add_argument("--lan-pool", default="192.168.100.0/22")
     wan_p.add_argument("--lan-prefix", type=int, default=24)
-    wan_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="rip")
+    wan_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf", "static"), default="rip")
     wan_p.add_argument("--layout-style", choices=STYLES, default="ring")
     wan_p.add_argument("--no-layout", action="store_true")
     wan_p.add_argument("--output", type=Path)
@@ -2539,7 +2558,7 @@ def main(argv: list[str] | None = None) -> int:
     campus_p.add_argument("--vlan-base", type=int, default=20)
     campus_p.add_argument("--interconnect-pool", default="10.10.0.0/24")
     campus_p.add_argument("--l3", action="store_true")
-    campus_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="none")
+    campus_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf", "static"), default="none")
     campus_p.add_argument("--layout-style", choices=STYLES, default="campus")
     campus_p.add_argument("--no-layout", action="store_true")
     campus_p.add_argument("--output", type=Path)
@@ -2555,7 +2574,7 @@ def main(argv: list[str] | None = None) -> int:
     redundant_p.add_argument("--server-network", default="172.16.1.0/26")
     redundant_p.add_argument("--server-vlan", type=int, default=10)
     redundant_p.add_argument("--vlan-base", type=int, default=20)
-    redundant_p.add_argument("--routing", choices=("none", "rip", "ospf"), default="ospf")
+    redundant_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf"), default="ospf")
     redundant_p.add_argument("--layout-style", choices=STYLES, default="campus")
     redundant_p.add_argument("--no-layout", action="store_true")
     redundant_p.add_argument("--output", type=Path)
@@ -2581,7 +2600,7 @@ def main(argv: list[str] | None = None) -> int:
     enterprise_p.add_argument("--isp-wan-network", default="203.0.113.0/30")
     enterprise_p.add_argument("--internet-network", default="198.51.100.0/24")
     enterprise_p.add_argument("--domain", default="enterprise.local")
-    enterprise_p.add_argument("--routing", choices=("none", "rip", "ospf", "static"), default="ospf")
+    enterprise_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf", "static"), default="ospf")
     enterprise_p.add_argument("--layout-style", choices=STYLES, default="campus")
     enterprise_p.add_argument("--no-layout", action="store_true")
     enterprise_p.add_argument("--output", type=Path)

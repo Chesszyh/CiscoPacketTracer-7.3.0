@@ -192,7 +192,9 @@ pt-reverse/bin/pt730-template server-services --clients 3 --services all --domai
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local --output edge-security.json
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28 --output router-ring.json
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf --output wan-ring.json
+pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing eigrp --output wan-ring-eigrp.json
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf --output campus.json
+pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing eigrp --output campus-eigrp.json
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf --output redundant-campus.json
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf --output enterprise-edge.json
 pt-reverse/bin/pt730-lab template lab-spec.json --output-dir enterprise-demo-lab
@@ -242,24 +244,27 @@ such as `http,dns,ftp,dhcp`.
 
 `wan-ring --routing ospf` writes router IDs, passive LAN interfaces, and
 per-router `network ... area 0` statements for each direct LAN/serial subnet.
-Use `rip`, `static`, or `none` when that better matches the lab.
+Use `eigrp` for EIGRP AS 100 with wildcard `network ...` statements, or use
+`rip`, `static`, or `none` when that better matches the lab.
 
 `campus --l3 --routing ospf` writes OSPF process 1, deterministic router IDs,
 SVI passive-interface commands, and direct SVI/core-link `network ... area 0`
-statements for multi-core campus L3 labs. Use `rip`, `static`, or `none` when
-that better matches the assignment.
+statements for multi-core campus L3 labs. Use `eigrp` for EIGRP AS 100 with
+passive SVIs and wildcard network statements, or use `rip`, `static`, or `none`
+when that better matches the assignment.
 
 `redundant-campus --routing ospf` writes a dual-core, dual-homed campus plan
 with HSRP virtual gateways, STP primary/secondary root roles, DHCP relay, IOS
 DHCP pools, NTP/Syslog/SNMP client config, server services, and VLAN metadata
-for group-by-VLAN SVG/draw.io/HTML renders. Use `rip` or `none` when dynamic
+for group-by-VLAN SVG/draw.io/HTML renders. Use `eigrp`, `rip`, or `none` when
 OSPF is not wanted.
 
 `enterprise-edge --routing ospf` writes an integrated HQ/branch/DMZ/Internet
 plan with HQ router-on-a-stick VLANs, server zone, DMZ public services,
 ISP/Internet test LAN, branch serial WAN routers, NAT overload, outside ACL
-metadata, and HTTP/DNS/FTP/email server configs. Use `--group-by auto` or
-`--group-by site` for clearer SVG/draw.io/HTML renders.
+metadata, and HTTP/DNS/FTP/email server configs. Use `--routing eigrp` for
+Cisco EIGRP dynamic routing, and use `--group-by auto` or `--group-by site` for
+clearer SVG/draw.io/HTML renders.
 
 `edge-security` uses verified `2911`, `2960-24TT`, `PC-PT`, and `Server-PT`
 models to generate an ISP edge, inside LAN, DMZ, Internet test host, NAT
@@ -297,6 +302,11 @@ pt-reverse/bin/pt730-pipeline campus \
   --compose-spec pt-reverse/examples/compose-campus.json \
   --output-dir compose-campus-out \
   --routing ospf
+pt-reverse/bin/pt730-pipeline campus \
+  --ip-plan pt-reverse/examples/ip-plan-campus.json \
+  --compose-spec pt-reverse/examples/compose-campus.json \
+  --output-dir compose-campus-eigrp-out \
+  --routing eigrp
 ```
 
 Expected key outputs:
@@ -317,6 +327,7 @@ Expected key outputs:
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output topology.composed.json
 pt-reverse/bin/pt730-config-plan campus topology.composed.json --l3 --routing ospf --output topology.configured.json
+pt-reverse/bin/pt730-config-plan campus topology.composed.json --l3 --routing eigrp --output topology.eigrp-configured.json
 pt-reverse/bin/pt730-config-plan --compact campus topology.composed.json --ios-only
 pt-reverse/bin/pt730-layout topology.configured.json --style campus --output topology.layout.json
 pt-reverse/bin/pt730-safety plan topology.layout.json

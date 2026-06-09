@@ -85,9 +85,9 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("redundant-campus", data["templates"])
         self.assertIn("enterprise-edge", data["templates"])
         self.assertIn("ospf", " ".join(data["templates"]["wan-ring"]["options"]))
-        self.assertIn("--routing none|rip|ospf|static", data["templates"]["campus"]["options"])
-        self.assertIn("--routing none|rip|ospf", data["templates"]["redundant-campus"]["options"])
-        self.assertIn("--routing none|rip|ospf|static", data["templates"]["enterprise-edge"]["options"])
+        self.assertIn("--routing none|rip|eigrp|ospf|static", data["templates"]["campus"]["options"])
+        self.assertIn("--routing none|rip|eigrp|ospf", data["templates"]["redundant-campus"]["options"])
+        self.assertIn("--routing none|rip|eigrp|ospf|static", data["templates"]["enterprise-edge"]["options"])
         self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
         self.assertIn("--ipv6-prefix", data["templates"]["dual-stack-lan"]["options"])
         self.assertIn("--access-switches", data["templates"]["switching-lab"]["options"])
@@ -609,6 +609,36 @@ class TemplateCliTest(unittest.TestCase):
         self.assertNotIn("ip route", joined)
         self.assert_safe_and_renderable(plan)
 
+    def test_wan_ring_supports_eigrp_routing_configs(self) -> None:
+        result = self.run_template(
+            "wan-ring",
+            "--name",
+            "EIGRP",
+            "--sites",
+            "3",
+            "--hosts-per-site",
+            "1",
+            "--servers-per-site",
+            "0",
+            "--interconnect-pool",
+            "10.55.0.0/28",
+            "--lan-pool",
+            "192.168.150.0/22",
+            "--routing",
+            "eigrp",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("router eigrp 100", joined)
+        self.assertIn("no auto-summary", joined)
+        self.assertIn("passive-interface GigabitEthernet0/0", joined)
+        self.assertIn("network 192.168.150.0 0.0.0.255", joined)
+        self.assertIn("network 10.55.0.0 0.0.0.3", joined)
+        self.assertNotIn("router ospf 1", joined)
+        self.assertNotIn("ip route", joined)
+        self.assert_safe_and_renderable(plan)
+
     def test_campus_generates_core_access_servers_services_and_l3_configs(self) -> None:
         result = self.run_template(
             "campus",
@@ -677,6 +707,33 @@ class TemplateCliTest(unittest.TestCase):
         self.assertNotIn("router rip", joined)
         self.assert_safe_and_renderable(plan)
 
+    def test_campus_supports_eigrp_l3_configs(self) -> None:
+        result = self.run_template(
+            "campus",
+            "--name",
+            "EIGRP",
+            "--cores",
+            "2",
+            "--segments",
+            "3",
+            "--hosts-per-segment",
+            "1",
+            "--servers",
+            "2",
+            "--l3",
+            "--routing",
+            "eigrp",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("router eigrp 100", joined)
+        self.assertIn("passive-interface Vlan10", joined)
+        self.assertIn("network 172.16.1.0 0.0.0.63", joined)
+        self.assertIn("network 10.10.0.0 0.0.0.3", joined)
+        self.assertNotIn("router ospf 1", joined)
+        self.assert_safe_and_renderable(plan)
+
     def test_redundant_campus_generates_dual_core_hsrp_services_and_layout(self) -> None:
         result = self.run_template(
             "redundant-campus",
@@ -726,6 +783,31 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("router ospf 1", joined)
         self.assert_safe_and_renderable(plan)
 
+    def test_redundant_campus_supports_eigrp_routing_configs(self) -> None:
+        result = self.run_template(
+            "redundant-campus",
+            "--name",
+            "EIGRP",
+            "--segments",
+            "2",
+            "--hosts-per-segment",
+            "1",
+            "--servers",
+            "2",
+            "--routing",
+            "eigrp",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("router eigrp 100", joined)
+        self.assertIn("passive-interface Vlan10", joined)
+        self.assertIn("passive-interface Vlan20", joined)
+        self.assertIn("network 172.16.1.0 0.0.0.63", joined)
+        self.assertIn("network 192.168.0.0 0.0.0.255", joined)
+        self.assertNotIn("router ospf 1", joined)
+        self.assert_safe_and_renderable(plan)
+
     def test_enterprise_edge_generates_integrated_hq_dmz_branch_wan_topology(self) -> None:
         result = self.run_template("enterprise-edge", "--name", "ENT")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -766,6 +848,19 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("ip route 172.16.10.0 255.255.255.0 203.0.113.1", joined)
         self.assertNotIn("ASA5505", json.dumps(plan))
         self.assertNotIn("3560-24PS", json.dumps(plan))
+        self.assert_safe_and_renderable(plan)
+
+    def test_enterprise_edge_supports_eigrp_routing_configs(self) -> None:
+        result = self.run_template("enterprise-edge", "--name", "EIGRP", "--routing", "eigrp")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("router eigrp 100", joined)
+        self.assertIn("passive-interface GigabitEthernet0/0.10", joined)
+        self.assertIn("passive-interface GigabitEthernet0/0", joined)
+        self.assertIn("network 192.168.0.0 0.0.0.255", joined)
+        self.assertIn("network 10.60.0.0 0.0.0.3", joined)
+        self.assertNotIn("router ospf 1", joined)
         self.assert_safe_and_renderable(plan)
 
 

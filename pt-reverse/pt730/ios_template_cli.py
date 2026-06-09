@@ -260,6 +260,7 @@ def schema_doc() -> dict[str, Any]:
             }
         ],
         "rip": {"version": 2, "networks": ["10.0.0.0"], "no_auto_summary": True},
+        "eigrp": {"asn": 100, "networks": [{"network": "10.0.0.0", "wildcard": "0.0.0.255"}], "passive_interfaces": ["Vlan10"], "no_auto_summary": True},
         "ospf": {
             "process_id": 1,
             "router_id": "10.255.0.1",
@@ -304,6 +305,9 @@ def schema_doc() -> dict[str, Any]:
             "spanning_tree.root_primary": "VLAN list for spanning-tree vlan <list> root primary.",
             "etherchannels": "Array of {group, mode, interfaces, port_channel?} for channel-group and Port-channel config.",
             "rip.networks": "RIPv2 network statements.",
+            "eigrp.asn": "EIGRP autonomous system number; defaults to 100.",
+            "eigrp.networks": "EIGRP network statements; entries may be strings or {network, wildcard?}.",
+            "eigrp.passive_interfaces": "Optional passive-interface commands for EIGRP.",
             "ospf.networks": "OSPF network statements; each entry is {network, wildcard, area}.",
             "ospf.passive_interfaces": "Optional passive-interface commands for OSPF.",
             "static_routes": "Array of {destination, mask, next_hop|interface}.",
@@ -424,6 +428,24 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
             commands.append(" no auto-summary")
         for network in as_list(rip.get("networks")):
             commands.append(f" network {network}")
+        commands.append("exit")
+
+    eigrp = spec.get("eigrp")
+    if isinstance(eigrp, dict):
+        asn = eigrp.get("asn", eigrp.get("as", eigrp.get("process_id", 100)))
+        commands.append(f"router eigrp {asn}")
+        if eigrp.get("no_auto_summary", True):
+            commands.append(" no auto-summary")
+        for interface_name in as_list(eigrp.get("passive_interfaces")):
+            commands.append(f" passive-interface {interface_name}")
+        for network in as_list(eigrp.get("networks")):
+            if isinstance(network, dict):
+                line = f" network {require(network.get('network'), 'eigrp network is required')}"
+                if network.get("wildcard"):
+                    line += f" {network['wildcard']}"
+                commands.append(line)
+            else:
+                commands.append(f" network {network}")
         commands.append("exit")
 
     ospf = spec.get("ospf")

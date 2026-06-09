@@ -141,16 +141,22 @@ class McpCliTest(unittest.TestCase):
         server_services = next(tool for tool in tools if tool["name"] == "pt730_template_server_services")
         self.assertIn("services", server_services["inputSchema"]["properties"])
         wan_ring = next(tool for tool in tools if tool["name"] == "pt730_template_wan_ring")
+        self.assertIn("eigrp", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("ospf", wan_ring["inputSchema"]["properties"]["routing"]["enum"])
         campus = next(tool for tool in tools if tool["name"] == "pt730_template_campus")
+        self.assertIn("eigrp", campus["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("ospf", campus["inputSchema"]["properties"]["routing"]["enum"])
         redundant = next(tool for tool in tools if tool["name"] == "pt730_template_redundant_campus")
+        self.assertIn("eigrp", redundant["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("ospf", redundant["inputSchema"]["properties"]["routing"]["enum"])
         enterprise = next(tool for tool in tools if tool["name"] == "pt730_template_enterprise_edge")
+        self.assertIn("eigrp", enterprise["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("static", enterprise["inputSchema"]["properties"]["routing"]["enum"])
         config_plan = next(tool for tool in tools if tool["name"] == "pt730_config_plan_campus")
+        self.assertIn("eigrp", config_plan["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("ospf", config_plan["inputSchema"]["properties"]["routing"]["enum"])
         pipeline = next(tool for tool in tools if tool["name"] == "pt730_pipeline_campus")
+        self.assertIn("eigrp", pipeline["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("ospf", pipeline["inputSchema"]["properties"]["routing"]["enum"])
         live_count = next(tool for tool in tools if tool["name"] == "pt730_live_count")
         self.assertIn("allow_live", live_count["inputSchema"]["required"])
@@ -611,7 +617,7 @@ class McpCliTest(unittest.TestCase):
                             "branch_hosts": 1,
                             "dmz_servers": 1,
                             "internet_hosts": 1,
-                            "routing": "ospf",
+                            "routing": "eigrp",
                         },
                         "render": {"basename": "mcp-enterprise", "formats": ["svg", "summary"], "group_by": "auto"},
                         "export_configs": True,
@@ -652,6 +658,7 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "render" / "mcp-enterprise.svg").exists())
             self.assertTrue((out_dir / "render" / "mcp-enterprise.summary.json").exists())
             self.assertTrue((out_dir / "configs" / "R-MCP-EDGE.cfg").exists())
+            self.assertIn("router eigrp 100", (out_dir / "configs" / "R-MCP-EDGE.cfg").read_text(encoding="utf-8"))
 
     def test_tools_call_lab_plan_generates_manifest_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1078,7 +1085,7 @@ class McpCliTest(unittest.TestCase):
                             "interconnect_pool": "10.40.0.0/28",
                             "lan_pool": "192.168.120.0/22",
                             "lan_prefix": 24,
-                            "routing": "ospf",
+                            "routing": "eigrp",
                             "layout_style": "ring",
                             "compact": True,
                         },
@@ -1152,7 +1159,7 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(len(ring_plan["devices"]), 3)
         self.assertEqual(wan_plan["metadata"]["source"], "pt730-template wan-ring")
         self.assertEqual(len(wan_plan["ios_configs"]), 3)
-        self.assertIn("router ospf 1", "\n".join(command for config in wan_plan["ios_configs"] for command in config["commands"]))
+        self.assertIn("router eigrp 100", "\n".join(command for config in wan_plan["ios_configs"] for command in config["commands"]))
 
     def test_switching_lab_template_tool_generates_l2_switching_topology(self) -> None:
         responses = self.run_mcp(

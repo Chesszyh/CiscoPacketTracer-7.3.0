@@ -1139,6 +1139,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     vlans: dict[str, dict[str, str]] = {}
     static_routes: list[dict[str, str]] = []
     rip_networks: list[str] = []
+    eigrp: dict[str, Any] = {"asn": "", "passive_interfaces": [], "networks": []}
     ospf: dict[str, Any] = {"process_id": "", "router_id": "", "passive_interfaces": [], "networks": []}
     spanning_tree: dict[str, Any] = {"mode": "", "roots": [], "priorities": [], "portfast_default": False, "bpduguard_default": False}
     dhcp: dict[str, Any] = {"excluded_addresses": [], "pools": {}}
@@ -1184,6 +1185,8 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_router = router_match.group(1).lower()
             if current_router == "ospf":
                 ospf["process_id"] = router_match.group(2) or ""
+            elif current_router == "eigrp":
+                eigrp["asn"] = router_match.group(2) or ""
             current_interface = None
             current_vlan = None
             current_dhcp_pool = None
@@ -1365,6 +1368,16 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             network_match = re.match(r"^network\s+(\S+)", line, flags=re.IGNORECASE)
             if network_match:
                 rip_networks.append(network_match.group(1))
+        elif current_router == "eigrp":
+            passive_match = re.match(r"^passive-interface\s+(.+)", line, flags=re.IGNORECASE)
+            if passive_match:
+                eigrp["passive_interfaces"].append(passive_match.group(1).strip())
+            network_match = re.match(r"^network\s+(\S+)(?:\s+(\S+))?", line, flags=re.IGNORECASE)
+            if network_match:
+                record = {"network": network_match.group(1)}
+                if network_match.group(2):
+                    record["wildcard"] = network_match.group(2)
+                eigrp["networks"].append(record)
         elif current_router == "ospf":
             router_id_match = re.match(r"^router-id\s+(\S+)", line, flags=re.IGNORECASE)
             if router_id_match:
@@ -1397,7 +1410,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     return {
         "interfaces": interfaces,
         "vlans": vlans,
-        "routing": {"rip_networks": rip_networks, "ospf": ospf, "static_routes": static_routes},
+        "routing": {"rip_networks": rip_networks, "eigrp": eigrp, "ospf": ospf, "static_routes": static_routes},
         "spanning_tree": spanning_tree,
         "dhcp": dhcp,
         "ntp": ntp,
@@ -1623,11 +1636,27 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
             routing = config.get("routing", {})
             if isinstance(routing, dict):
                 rip_networks = routing.get("rip_networks", [])
+                eigrp = routing.get("eigrp", {})
                 ospf = routing.get("ospf", {})
                 static_routes = routing.get("static_routes", [])
                 if rip_networks:
                     lines.append("")
                     lines.append("RIP networks: " + ", ".join(str(item) for item in rip_networks))
+                if isinstance(eigrp, dict) and (eigrp.get("networks") or eigrp.get("asn")):
+                    lines.append("")
+                    lines.append(f"EIGRP AS {eigrp.get('asn', '')}".rstrip())
+                    passive = eigrp.get("passive_interfaces", [])
+                    if passive:
+                        lines.append("EIGRP passive interfaces: " + ", ".join(str(item) for item in passive))
+                    networks = eigrp.get("networks", [])
+                    if networks:
+                        lines.append("EIGRP networks:")
+                        for network in networks:
+                            if isinstance(network, dict):
+                                line = f"- {network.get('network', '')}"
+                                if network.get("wildcard"):
+                                    line += f" {network.get('wildcard', '')}"
+                                lines.append(line)
                 if isinstance(ospf, dict) and (ospf.get("networks") or ospf.get("router_id")):
                     lines.append("")
                     lines.append(f"OSPF process {ospf.get('process_id', '')} router-id {ospf.get('router_id', '')}".rstrip())

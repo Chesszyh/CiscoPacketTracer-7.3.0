@@ -61,6 +61,11 @@ class IosTemplateCliTest(unittest.TestCase):
                     }
                 ],
                 "rip": {"version": 2, "networks": ["10.0.0.0", "192.168.10.0"], "no_auto_summary": True},
+                "eigrp": {
+                    "asn": 100,
+                    "passive_interfaces": ["Vlan10"],
+                    "networks": [{"network": "10.0.0.0", "wildcard": "0.0.0.255"}],
+                },
                 "ospf": {
                     "process_id": 1,
                     "router_id": "10.255.0.1",
@@ -97,6 +102,9 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("interface Port-channel1", result.stdout)
         self.assertIn("description UPLINK_BUNDLE", result.stdout)
         self.assertIn("router rip", result.stdout)
+        self.assertIn("router eigrp 100", result.stdout)
+        self.assertIn("passive-interface Vlan10", result.stdout)
+        self.assertIn("network 10.0.0.0 0.0.0.255", result.stdout)
         self.assertIn("router ospf 1", result.stdout)
         self.assertIn("router-id 10.255.0.1", result.stdout)
         self.assertIn("passive-interface Vlan10", result.stdout)
@@ -218,6 +226,8 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("interfaces[].helper_addresses", fields)
         self.assertIn("interfaces[].hsrp", fields)
         self.assertIn("rip.networks", fields)
+        self.assertIn("eigrp.networks", fields)
+        self.assertIn("eigrp.passive_interfaces", fields)
         self.assertIn("ospf.networks", fields)
         self.assertIn("ospf.passive_interfaces", fields)
         self.assertIn("static_routes", fields)

@@ -54,13 +54,17 @@ pt-reverse/bin/pt730-template server-services --clients 3 --services all --domai
 pt-reverse/bin/pt730-template edge-security --inside-hosts 3 --dmz-servers 2 --internet-hosts 1 --domain edge.local
 pt-reverse/bin/pt730-template router-ring --routers 4 --interconnect-pool 10.20.0.0/28
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing ospf
+pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing eigrp
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
+pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing eigrp
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing ospf
+pt-reverse/bin/pt730-pipeline campus --ip-plan pt-reverse/examples/ip-plan-campus.json --compose-spec pt-reverse/examples/compose-campus.json --output-dir compose-campus-out --routing eigrp
 pt-reverse/bin/pt730-ip-plan campus pt-reverse/examples/ip-plan-campus.json --output ip-plan-campus.json
 pt-reverse/bin/pt730-compose campus pt-reverse/examples/compose-campus.json --segments-from-ip-plan ip-plan-campus.json --output compose-campus.layout.json
 pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --l3 --routing ospf --output compose-campus.configured.json
+pt-reverse/bin/pt730-config-plan campus compose-campus.layout.json --l3 --routing eigrp --output compose-campus.eigrp-configured.json
 pt-reverse/bin/pt730-config-plan export-configs compose-campus.configured.json --output-dir compose-campus-configs
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switching.json --topology-json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json --topology-json
@@ -95,9 +99,9 @@ router-on-a-stick VLAN, switching-lab, server-services, edge-security,
 router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template
 options including DNS, IPv6 metadata, SSID, 802.1Q, STP, EtherChannel,
 Server-PT services, NAT/ACL, DMZ, HSRP/STP, DHCP relay, branch WAN,
-ISP/Internet, RIP/OSPF/static WAN and campus L3 routing, layout, no-layout,
-compact, router DHCP pools, DHCP client hosts, and naming controls from the
-underlying `pt730-template` CLI.
+ISP/Internet, RIP/EIGRP/OSPF/static WAN and campus L3 routing, layout,
+no-layout, compact, router DHCP pools, DHCP client hosts, and naming controls
+from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
 `pt730_ip_plan_campus`, `pt730_compose_campus`, and `pt730_pipeline_campus`.
 Render MCP tools expose visual theme, label, and visual grouping controls
