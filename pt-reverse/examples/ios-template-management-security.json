@@ -1,0 +1,34 @@
+{
+  "device": "R-MGMT",
+  "hostname": "R-MGMT",
+  "enable_secret": "class",
+  "service_password_encryption": true,
+  "domain_name": "campus.local",
+  "users": [
+    {
+      "name": "admin",
+      "privilege": 15,
+      "secret": "cisco123"
+    }
+  ],
+  "ssh": {
+    "version": 2,
+    "timeout": 60,
+    "authentication_retries": 3,
+    "rsa_modulus": 1024
+  },
+  "line_console": {
+    "password": "console",
+    "login": true,
+    "logging_synchronous": true
+  },
+  "line_vty": {
+    "start": 0,
+    "end": 4,
+    "login_local": true,
+    "transport_input": ["ssh"],
+    "exec_timeout": [10, 0]
+  },
+  "banner_motd": "Authorized access only",
+  "save": false
+}

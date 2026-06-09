@@ -633,6 +633,47 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn("show ipv6 route rip", commands)
         self.assertIn("show ipv6 route static", commands)
 
+    def test_verification_plan_includes_management_show_commands(self) -> None:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "devices": [{"name": "R-MGMT", "category": "router", "model": "2911"}],
+                    "ios_configs": [
+                        {
+                            "device": "R-MGMT",
+                            "commands": [
+                                "enable secret class",
+                                "username admin privilege 15 secret cisco123",
+                                "ip domain-name campus.local",
+                                "ip ssh version 2",
+                                "crypto key generate rsa modulus 1024",
+                                "line console 0",
+                                "login",
+                                "line vty 0 4",
+                                "login local",
+                                "transport input ssh",
+                            ],
+                        }
+                    ],
+                },
+                f,
+            )
+            path = f.name
+        try:
+            result = self.run_render("verification-plan", path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        ios_checks = [check for check in data["checks"] if check.get("category") == "ios"]
+        self.assertTrue(ios_checks)
+        commands = ios_checks[0]["mcp"]["arguments"]["commands"]
+        self.assertIn("show ip ssh", commands)
+        self.assertIn("show running-config | include ^username", commands)
+        self.assertIn("show running-config | include enable", commands)
+        self.assertIn("show running-config | section line con", commands)
+        self.assertIn("show running-config | section line vty", commands)
+
     def test_bundle_report_preset_adds_report_defaults_and_diagram_audit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "bundle"

@@ -578,6 +578,7 @@ interfaces, STP, EtherChannel/Port-channel, interface ACL binding with
 `acl_in`/`acl_out`, DHCP relay, HSRP/standby, IOS DHCP pools, NTP client,
 Syslog, SNMP, RIPv2, EIGRP, OSPF, BGP, static routes, IPv6 interface
 addresses, IPv6 unicast routing, OSPFv3, RIPng, IPv6 static routes,
+IOS management access/security, local users, SSH, console/VTY lines, banners,
 standard/extended ACL lines, and NAT
 overload.
 
@@ -588,6 +589,7 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switch
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-ipv6-routing.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-management-security.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-campus-router.json --topology-json
 ```
 
@@ -605,7 +607,8 @@ IOS prompts, terminal output tails, and visible server-service states.  Add
 configuration hints for interfaces, VLANs, STP, EtherChannel membership, DHCP
 relay, HSRP groups, IOS DHCP pools, NTP, Syslog, SNMP, RIP networks, OSPF
 networks, BGP, interface IPv6 addresses, OSPFv3, RIPng, IPv6 static routes,
-static routes, ACL numbers, interface ACL applications, and NAT.  You
+static routes, management access metadata with password values redacted, ACL
+numbers, interface ACL applications, and NAT.  You
 can also summarize a saved query result offline:
 
 ```bash

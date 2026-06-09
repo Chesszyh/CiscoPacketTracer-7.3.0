@@ -1151,6 +1151,16 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     ntp: dict[str, Any] = {"servers": [], "authentication_keys": [], "authenticate": False, "trusted_keys": [], "source": ""}
     logging_cfg: dict[str, Any] = {"hosts": [], "trap": "", "source_interface": "", "timestamps_log": False, "console_disabled": False}
     snmp: dict[str, Any] = {"communities": [], "hosts": [], "location": "", "contact": ""}
+    management: dict[str, Any] = {
+        "enable_secret": False,
+        "enable_password": False,
+        "service_password_encryption": False,
+        "domain_name": "",
+        "users": [],
+        "ssh": {},
+        "lines": {},
+        "banners": [],
+    }
     acl_numbers: set[str] = set()
     acl_applications: list[dict[str, str]] = []
     nat = {"inside_interfaces": [], "outside_interfaces": [], "overload": False}
@@ -1158,6 +1168,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
     current_vlan: str | None = None
     current_router: str | None = None
     current_dhcp_pool: str | None = None
+    current_line: str | None = None
 
     for raw_line in text.replace("\r\n", "\n").splitlines():
         line = raw_line.strip()
@@ -1168,6 +1179,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_vlan = None
             current_router = None
             current_dhcp_pool = None
+            current_line = None
             continue
         if re.match(r"^ipv6\s+unicast-routing$", line, flags=re.IGNORECASE):
             ipv6_unicast_routing = True
@@ -1175,6 +1187,16 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_vlan = None
             current_router = None
             current_dhcp_pool = None
+            current_line = None
+            continue
+        line_match = re.match(r"^line\s+(.+)$", line, flags=re.IGNORECASE)
+        if line_match:
+            current_line = line_match.group(1).strip()
+            current_interface = None
+            current_vlan = None
+            current_router = None
+            current_dhcp_pool = None
+            management["lines"].setdefault(current_line, {})
             continue
         interface_match = re.match(r"^interface\s+(.+)$", line, flags=re.IGNORECASE)
         if interface_match:
@@ -1182,6 +1204,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_vlan = None
             current_router = None
             current_dhcp_pool = None
+            current_line = None
             interfaces.setdefault(current_interface, {})
             continue
         vlan_match = re.match(r"^vlan\s+(\S+)$", line, flags=re.IGNORECASE)
@@ -1190,6 +1213,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_interface = None
             current_router = None
             current_dhcp_pool = None
+            current_line = None
             vlans.setdefault(current_vlan, {})
             continue
         ipv6_router_match = re.match(r"^ipv6\s+router\s+(ospf|rip)\s+(\S+)", line, flags=re.IGNORECASE)
@@ -1203,6 +1227,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_interface = None
             current_vlan = None
             current_dhcp_pool = None
+            current_line = None
             continue
         router_match = re.match(r"^router\s+(\S+)(?:\s+(\S+))?", line, flags=re.IGNORECASE)
         if router_match:
@@ -1216,6 +1241,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_interface = None
             current_vlan = None
             current_dhcp_pool = None
+            current_line = None
             continue
         dhcp_pool_match = re.match(r"^ip\s+dhcp\s+pool\s+(.+)$", line, flags=re.IGNORECASE)
         if dhcp_pool_match:
@@ -1223,6 +1249,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_interface = None
             current_vlan = None
             current_router = None
+            current_line = None
             dhcp["pools"].setdefault(current_dhcp_pool, {})
             continue
         route_match = re.match(r"^ip\s+route\s+(\S+)\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
@@ -1231,6 +1258,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_vlan = None
             current_router = None
             current_dhcp_pool = None
+            current_line = None
             static_routes.append({"destination": route_match.group(1), "mask": route_match.group(2), "next_hop": route_match.group(3)})
             continue
         ipv6_route_match = re.match(r"^ipv6\s+route\s+(.+)$", line, flags=re.IGNORECASE)
@@ -1239,6 +1267,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             current_vlan = None
             current_router = None
             current_dhcp_pool = None
+            current_line = None
             parts = ipv6_route_match.group(1).split()
             if len(parts) < 2:
                 continue
@@ -1254,6 +1283,50 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
                 if len(parts) >= 3:
                     entry["distance"] = parts[2]
             ipv6_static_routes.append(entry)
+            continue
+        enable_secret_match = re.match(r"^enable\s+secret\s+", line, flags=re.IGNORECASE)
+        if enable_secret_match:
+            management["enable_secret"] = True
+            continue
+        enable_password_match = re.match(r"^enable\s+password\s+", line, flags=re.IGNORECASE)
+        if enable_password_match:
+            management["enable_password"] = True
+            continue
+        if re.match(r"^service\s+password-encryption$", line, flags=re.IGNORECASE):
+            management["service_password_encryption"] = True
+            continue
+        domain_match = re.match(r"^ip\s+domain-name\s+(.+)$", line, flags=re.IGNORECASE)
+        if domain_match:
+            management["domain_name"] = domain_match.group(1).strip()
+            continue
+        username_match = re.match(r"^username\s+(\S+)(.*)$", line, flags=re.IGNORECASE)
+        if username_match:
+            rest = username_match.group(2)
+            user = {"name": username_match.group(1), "secret": bool(re.search(r"\bsecret\b", rest, flags=re.IGNORECASE)), "password": bool(re.search(r"\bpassword\b", rest, flags=re.IGNORECASE))}
+            privilege_match = re.search(r"\bprivilege\s+(\S+)", rest, flags=re.IGNORECASE)
+            if privilege_match:
+                user["privilege"] = privilege_match.group(1)
+            management["users"].append(user)
+            continue
+        ssh_version_match = re.match(r"^ip\s+ssh\s+version\s+(\S+)", line, flags=re.IGNORECASE)
+        if ssh_version_match:
+            management["ssh"]["version"] = ssh_version_match.group(1)
+            continue
+        ssh_timeout_match = re.match(r"^ip\s+ssh\s+time-out\s+(\S+)", line, flags=re.IGNORECASE)
+        if ssh_timeout_match:
+            management["ssh"]["timeout"] = ssh_timeout_match.group(1)
+            continue
+        ssh_retries_match = re.match(r"^ip\s+ssh\s+authentication-retries\s+(\S+)", line, flags=re.IGNORECASE)
+        if ssh_retries_match:
+            management["ssh"]["authentication_retries"] = ssh_retries_match.group(1)
+            continue
+        rsa_match = re.match(r"^crypto\s+key\s+generate\s+rsa\s+modulus\s+(\S+)", line, flags=re.IGNORECASE)
+        if rsa_match:
+            management["ssh"]["rsa_modulus"] = rsa_match.group(1)
+            continue
+        banner_match = re.match(r"^banner\s+(\S+)\s+(.)(.*)\2$", line, flags=re.IGNORECASE)
+        if banner_match:
+            management["banners"].append({"type": banner_match.group(1), "text": banner_match.group(3)})
             continue
         excluded_match = re.match(r"^ip\s+dhcp\s+excluded-address\s+(\S+)(?:\s+(\S+))?", line, flags=re.IGNORECASE)
         if excluded_match:
@@ -1488,6 +1561,26 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
             redistribute_match = re.match(r"^redistribute\s+(.+)", line, flags=re.IGNORECASE)
             if redistribute_match:
                 ripng["redistribute"].append(redistribute_match.group(1).strip())
+        elif current_line:
+            line_info = management["lines"].setdefault(current_line, {})
+            if re.match(r"^login\s+local$", line, flags=re.IGNORECASE):
+                line_info["login_local"] = True
+            elif re.match(r"^login$", line, flags=re.IGNORECASE):
+                line_info["login"] = True
+            password_match = re.match(r"^password\s+", line, flags=re.IGNORECASE)
+            if password_match:
+                line_info["password"] = True
+            transport_match = re.match(r"^transport\s+input\s+(.+)$", line, flags=re.IGNORECASE)
+            if transport_match:
+                line_info["transport_input"] = transport_match.group(1).strip().split()
+            exec_timeout_match = re.match(r"^exec-timeout\s+(.+)$", line, flags=re.IGNORECASE)
+            if exec_timeout_match:
+                line_info["exec_timeout"] = exec_timeout_match.group(1).strip()
+            if re.match(r"^logging\s+synchronous$", line, flags=re.IGNORECASE):
+                line_info["logging_synchronous"] = True
+            access_class_match = re.match(r"^access-class\s+(\S+)\s+(in|out)$", line, flags=re.IGNORECASE)
+            if access_class_match:
+                line_info[f"access_class_{access_class_match.group(2).lower()}"] = access_class_match.group(1)
         elif current_dhcp_pool:
             pool = dhcp["pools"].setdefault(current_dhcp_pool, {})
             network_match = re.match(r"^network\s+(\S+)\s+(\S+)", line, flags=re.IGNORECASE)
@@ -1526,6 +1619,7 @@ def _parse_ios_config_summary(text: str) -> dict[str, Any]:
         "ntp": ntp,
         "logging": logging_cfg,
         "snmp": snmp,
+        "management": management,
         "acl_numbers": sorted(acl_numbers),
         "acl_applications": acl_applications,
         "nat": nat,
@@ -1751,6 +1845,54 @@ def _query_summary_markdown(summary: dict[str, Any]) -> str:
                     if isinstance(community, dict):
                         communities.append(str(community.get("name", "")))
                 lines.append("SNMP communities: " + ", ".join(communities))
+            management = config.get("management", {})
+            if isinstance(management, dict) and (
+                management.get("enable_secret")
+                or management.get("enable_password")
+                or management.get("domain_name")
+                or management.get("users")
+                or management.get("ssh")
+                or management.get("lines")
+                or management.get("banners")
+            ):
+                lines.append("")
+                lines.append("Management access:")
+                flags = []
+                if management.get("enable_secret"):
+                    flags.append("enable secret")
+                if management.get("enable_password"):
+                    flags.append("enable password")
+                if management.get("service_password_encryption"):
+                    flags.append("service password-encryption")
+                if flags:
+                    lines.append("- " + ", ".join(flags))
+                if management.get("domain_name"):
+                    lines.append(f"- domain {management.get('domain_name')}")
+                users = management.get("users", [])
+                if users:
+                    names = [str(user.get("name", "")) for user in users if isinstance(user, dict)]
+                    lines.append("- local users: " + ", ".join(name for name in names if name))
+                ssh = management.get("ssh", {})
+                if isinstance(ssh, dict) and ssh:
+                    ssh_bits = []
+                    if ssh.get("version"):
+                        ssh_bits.append(f"version {ssh.get('version')}")
+                    if ssh.get("rsa_modulus"):
+                        ssh_bits.append(f"rsa {ssh.get('rsa_modulus')}")
+                    if ssh_bits:
+                        lines.append("- SSH " + ", ".join(ssh_bits))
+                line_cfg = management.get("lines", {})
+                if isinstance(line_cfg, dict) and line_cfg:
+                    for line_name, line_details in sorted(line_cfg.items()):
+                        if isinstance(line_details, dict):
+                            attrs = []
+                            if line_details.get("login_local"):
+                                attrs.append("login local")
+                            elif line_details.get("login"):
+                                attrs.append("login")
+                            if line_details.get("transport_input"):
+                                attrs.append("transport " + " ".join(str(item) for item in line_details.get("transport_input", [])))
+                            lines.append(f"- line {line_name}: " + ", ".join(attrs))
             routing = config.get("routing", {})
             if isinstance(routing, dict):
                 rip_networks = routing.get("rip_networks", [])

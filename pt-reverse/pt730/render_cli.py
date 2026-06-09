@@ -572,6 +572,16 @@ def _ios_show_commands(commands: list[str]) -> list[str]:
         show.append("show ntp associations")
     if "snmp-server" in lowered:
         show.append("show snmp")
+    if "ip ssh " in lowered or "crypto key generate rsa" in lowered:
+        show.append("show ip ssh")
+    if re.search(r"(?m)^\s*username\s+", lowered):
+        show.append("show running-config | include ^username")
+    if re.search(r"(?m)^\s*enable\s+(secret|password)\s+", lowered):
+        show.append("show running-config | include enable")
+    if "line console" in lowered:
+        show.append("show running-config | section line con")
+    if "line vty" in lowered:
+        show.append("show running-config | section line vty")
     deduped: list[str] = []
     for command in show:
         if command not in deduped:

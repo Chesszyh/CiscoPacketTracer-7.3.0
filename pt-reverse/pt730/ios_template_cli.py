@@ -271,6 +271,93 @@ def render_snmp_commands(value: Any) -> list[str]:
     return commands
 
 
+def render_line_commands(line_name: str, value: Any) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    commands = [f"line {line_name}"]
+    if value.get("password"):
+        commands.append(f" password {value['password']}")
+    if value.get("login_local"):
+        commands.append(" login local")
+    elif value.get("login", bool(value.get("password"))):
+        commands.append(" login")
+    if value.get("transport_input", value.get("transport")):
+        commands.append(f" transport input {space_list(value.get('transport_input', value.get('transport')))}")
+    if value.get("exec_timeout", value.get("timeout")):
+        commands.append(f" exec-timeout {space_list(value.get('exec_timeout', value.get('timeout')))}")
+    if value.get("logging_synchronous"):
+        commands.append(" logging synchronous")
+    if value.get("access_class_in"):
+        commands.append(f" access-class {value['access_class_in']} in")
+    if value.get("access_class_out"):
+        commands.append(f" access-class {value['access_class_out']} out")
+    commands.append("exit")
+    return commands
+
+
+def render_banner_commands(spec: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    banner_values = spec.get("banners")
+    if spec.get("banner_motd"):
+        banner_values = as_value_list(banner_values) + [{"type": "motd", "text": spec["banner_motd"]}]
+    for banner in as_value_list(banner_values):
+        if isinstance(banner, dict):
+            banner_type = banner.get("type", "motd")
+            text = str(require(banner.get("text", banner.get("message")), "banner text is required"))
+            delimiter = str(banner.get("delimiter", "#"))
+        else:
+            banner_type = "motd"
+            text = str(banner)
+            delimiter = "#"
+        if delimiter in text:
+            raise ValueError("banner delimiter must not appear in banner text")
+        commands.append(f"banner {banner_type} {delimiter}{text}{delimiter}")
+    return commands
+
+
+def render_management_commands(spec: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    if spec.get("enable_secret"):
+        commands.append(f"enable secret {spec['enable_secret']}")
+    if spec.get("enable_password"):
+        commands.append(f"enable password {spec['enable_password']}")
+    if spec.get("service_password_encryption"):
+        commands.append("service password-encryption")
+    domain_name = spec.get("domain_name", spec.get("ip_domain_name"))
+    if domain_name:
+        commands.append(f"ip domain-name {domain_name}")
+    for user in as_object_list(spec.get("users")):
+        name = require(user.get("name", user.get("username")), "username is required")
+        parts = ["username", str(name)]
+        if user.get("privilege") not in (None, ""):
+            parts.extend(["privilege", str(user["privilege"])])
+        if user.get("secret"):
+            parts.extend(["secret", str(user["secret"])])
+        elif user.get("password"):
+            parts.extend(["password", str(user["password"])])
+        else:
+            raise ValueError("user secret/password is required")
+        commands.append(" ".join(parts))
+    ssh = spec.get("ssh")
+    if isinstance(ssh, dict):
+        if ssh.get("version"):
+            commands.append(f"ip ssh version {ssh['version']}")
+        if ssh.get("timeout"):
+            commands.append(f"ip ssh time-out {ssh['timeout']}")
+        if ssh.get("authentication_retries", ssh.get("auth_retries")):
+            commands.append(f"ip ssh authentication-retries {ssh.get('authentication_retries', ssh.get('auth_retries'))}")
+        if ssh.get("rsa_modulus", ssh.get("modulus")):
+            commands.append(f"crypto key generate rsa modulus {ssh.get('rsa_modulus', ssh.get('modulus'))}")
+    commands.extend(render_banner_commands(spec))
+    commands.extend(render_line_commands("console 0", spec.get("line_console")))
+    line_vty = spec.get("line_vty")
+    if isinstance(line_vty, dict):
+        start = line_vty.get("start", 0)
+        end = line_vty.get("end", 4)
+        commands.extend(render_line_commands(f"vty {start} {end}", line_vty))
+    return commands
+
+
 def render_ospfv3_commands(value: Any) -> list[str]:
     commands: list[str] = []
     if not isinstance(value, dict):
@@ -335,6 +422,14 @@ def schema_doc() -> dict[str, Any]:
         "hostname": "R1",
         "ip_routing": True,
         "ipv6_unicast_routing": True,
+        "enable_secret": "class",
+        "service_password_encryption": True,
+        "domain_name": "campus.local",
+        "users": [{"name": "admin", "privilege": 15, "secret": "cisco123"}],
+        "ssh": {"version": 2, "timeout": 60, "authentication_retries": 3, "rsa_modulus": 1024},
+        "line_console": {"password": "console", "login": True, "logging_synchronous": True},
+        "line_vty": {"start": 0, "end": 4, "login_local": True, "transport_input": ["ssh"], "exec_timeout": [10, 0]},
+        "banner_motd": "Authorized access only",
         "vlans": [{"id": 10, "name": "SERVER"}],
         "interfaces": [
             {"name": "GigabitEthernet0/0", "ip": "10.0.0.1", "mask": "255.255.255.0", "ipv6": "2001:db8:10::1/64", "ospfv3": {"process_id": 10, "area": 0}, "ripng": "CAMPUS6", "acl_in": 10, "nat": "inside"},
@@ -400,6 +495,16 @@ def schema_doc() -> dict[str, Any]:
             "hostname": "Optional IOS hostname command.",
             "ip_routing": "True adds global ip routing for multilayer switches/routers.",
             "ipv6_unicast_routing": "True adds global ipv6 unicast-routing.",
+            "enable_secret": "Adds enable secret <value>.",
+            "enable_password": "Adds enable password <value>.",
+            "service_password_encryption": "True adds service password-encryption.",
+            "domain_name": "Adds ip domain-name <value>; alias ip_domain_name is accepted.",
+            "users": "Array of local users with name/username, privilege?, and secret or password.",
+            "ssh": "Object for ip ssh version/time-out/authentication-retries and crypto key rsa modulus.",
+            "line_console": "Object for line console 0 password/login/login_local/exec_timeout/logging_synchronous.",
+            "line_vty": "Object for line vty start/end plus password/login_local/transport_input/exec_timeout/access_class.",
+            "banner_motd": "Adds banner motd with a safe delimiter.",
+            "banners": "Array of {type, text, delimiter?}; delimiter must not appear in text.",
             "vlans": "Array of {id, name?}.",
             "interfaces": "Array of routed, access, or trunk interface declarations.",
             "interfaces[].mode=access": "Adds switchport mode access and switchport access vlan.",
@@ -459,6 +564,7 @@ def render_commands(spec: dict[str, Any]) -> list[str]:
         commands.append("ipv6 unicast-routing")
     if spec.get("no_ip_domain_lookup"):
         commands.append("no ip domain-lookup")
+    commands.extend(render_management_commands(spec))
 
     for vlan in as_list(spec.get("vlans")):
         if not isinstance(vlan, dict):

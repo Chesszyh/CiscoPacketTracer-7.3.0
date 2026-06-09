@@ -145,6 +145,8 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-ed
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json --topology-json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-ipv6-routing.json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-ipv6-routing.json --topology-json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-management-security.json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-management-security.json --topology-json
 ```
 
 The switching IOS template supports STP/Rapid PVST root and priority commands,
@@ -158,6 +160,10 @@ network statements, and a static default route toward the ISP.
 The IPv6 routing template supports global `ipv6 unicast-routing`, interface
 `ipv6 address`, OSPFv3 interface activation, RIPng interface activation,
 `ipv6 router ospf`, `ipv6 router rip`, and IPv6 static routes.
+The management/security template supports `enable secret`, local `username`
+entries, SSH version/RSA generation knobs, console/VTY login settings, and
+banner MOTD snippets. Query summaries redact actual password values and only
+record whether a password/secret is configured.
 
 Example device preview:
 

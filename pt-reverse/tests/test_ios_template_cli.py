@@ -228,6 +228,39 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("redistribute connected", result.stdout)
         self.assertIn("ipv6 route 2001:db8:ffff::/64 GigabitEthernet0/0 2001:db8:10::fe", result.stdout)
 
+    def test_render_management_security_features(self) -> None:
+        result = self.run_template(
+            {
+                "device": "R1",
+                "hostname": "R1",
+                "enable_secret": "class",
+                "service_password_encryption": True,
+                "domain_name": "campus.local",
+                "users": [{"name": "admin", "privilege": 15, "secret": "cisco123"}],
+                "ssh": {"version": 2, "timeout": 60, "authentication_retries": 3, "rsa_modulus": 1024},
+                "line_console": {"password": "console", "login": True, "logging_synchronous": True},
+                "line_vty": {"start": 0, "end": 4, "login_local": True, "transport_input": ["ssh"], "exec_timeout": [10, 0]},
+                "banner_motd": "Authorized access only",
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("enable secret class", result.stdout)
+        self.assertIn("service password-encryption", result.stdout)
+        self.assertIn("ip domain-name campus.local", result.stdout)
+        self.assertIn("username admin privilege 15 secret cisco123", result.stdout)
+        self.assertIn("ip ssh version 2", result.stdout)
+        self.assertIn("ip ssh time-out 60", result.stdout)
+        self.assertIn("ip ssh authentication-retries 3", result.stdout)
+        self.assertIn("crypto key generate rsa modulus 1024", result.stdout)
+        self.assertIn("banner motd #Authorized access only#", result.stdout)
+        self.assertIn("line console 0", result.stdout)
+        self.assertIn("password console", result.stdout)
+        self.assertIn("logging synchronous", result.stdout)
+        self.assertIn("line vty 0 4", result.stdout)
+        self.assertIn("login local", result.stdout)
+        self.assertIn("transport input ssh", result.stdout)
+        self.assertIn("exec-timeout 10 0", result.stdout)
+
     def test_render_as_topology_ios_config_json(self) -> None:
         result = self.run_template({"device": "R1", "hostname": "R1"}, "--topology-json")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -275,6 +308,11 @@ class IosTemplateCliTest(unittest.TestCase):
         self.assertIn("interfaces[].mode=routed", fields)
         self.assertIn("ip_routing", fields)
         self.assertIn("ipv6_unicast_routing", fields)
+        self.assertIn("enable_secret", fields)
+        self.assertIn("users", fields)
+        self.assertIn("ssh", fields)
+        self.assertIn("line_vty", fields)
+        self.assertIn("banner_motd", fields)
         self.assertIn("interfaces[].ipv6", fields)
         self.assertIn("interfaces[].ospfv3", fields)
         self.assertIn("interfaces[].ripng", fields)

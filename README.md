@@ -71,6 +71,7 @@ pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-switch
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-fhrp-services.json --topology-json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-bgp-edge.json --topology-json
 pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-ipv6-routing.json --topology-json
+pt-reverse/bin/pt730-ios-template render pt-reverse/examples/ios-template-management-security.json --topology-json
 pt-reverse/bin/pt730-safety plan pt-reverse/course-design/college-network-topology-pt73-safe.json
 pt-reverse/bin/pt730-layout pt-reverse/course-design/college-network-topology-pt73-safe.json --style campus --preserve-existing --output college-network-topology-pt73-safe.layout.json
 pt-reverse/bin/pt730-render svg pt-reverse/course-design/college-network-topology-pt73-safe.json --output college-network-topology-pt73-safe.svg
@@ -103,7 +104,7 @@ router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template
 options including DNS, IPv6 metadata, SSID, 802.1Q, STP, EtherChannel,
 Server-PT services, NAT/ACL, DMZ, HSRP/STP, DHCP relay, branch WAN,
 ISP/Internet, RIP/EIGRP/OSPF/static WAN and campus L3 routing, BGP enterprise
-edge peering, IOS template IPv6 routing snippets, layout,
+edge peering, IOS template IPv6 and management/security snippets, layout,
 no-layout, compact, router DHCP pools, DHCP client hosts, and naming controls
 from the underlying `pt730-template` CLI.
 Campus workflow MCP tools expose compact JSON and layout-style controls through
