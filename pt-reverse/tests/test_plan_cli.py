@@ -35,7 +35,9 @@ class PlanCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(data["kind"], "pt730-plan-schema")
         self.assertIn("add-device", data["commands"])
+        self.assertIn("add-module", data["commands"])
         self.assertIn("add-link", data["commands"])
+        self.assertIn("add-ap-config", data["commands"])
         self.assertIn("add-pc-config", data["commands"])
         self.assertIn("add-ipv6-config", data["commands"])
         self.assertIn("add-vlan-config", data["commands"])
@@ -100,6 +102,54 @@ class PlanCliTest(unittest.TestCase):
             summary = json.loads(render.stdout)
             self.assertEqual(summary["counts"]["devices"], 3)
             self.assertEqual(summary["counts"]["annotations"], 1)
+
+    def test_plan_editor_adds_modules_and_wireless_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "wan-wifi.json"
+            steps = [
+                ("new", "--name", "WAN WiFi", "--output", str(path)),
+                ("add-device", str(path), "--name", "R1", "--category", "router", "--model", "2911", "--output", str(path)),
+                ("add-device", str(path), "--name", "R2", "--category", "router", "--model", "2911", "--output", str(path)),
+                ("add-device", str(path), "--name", "AP1", "--category", "accesspoint", "--model", "AccessPoint-PT", "--ssid", "CLASSROOM", "--output", str(path)),
+                ("add-device", str(path), "--name", "LAP1", "--category", "laptop", "--model", "Laptop-PT", "--ssid", "CLASSROOM", "--output", str(path)),
+                ("add-module", str(path), "--device", "R1", "--slot", "0/0", "--model", "HWIC-2T", "--output", str(path)),
+                ("add-module", str(path), "--device", "R2", "--slot", "0/0", "--model", "HWIC-2T", "--output", str(path)),
+                ("add-link", str(path), "--a", "R1", "--pa", "Serial0/0/0", "--b", "R2", "--pb", "Serial0/0/0", "--cable", "serial", "--note", "WAN serial", "--output", str(path)),
+                ("add-link", str(path), "--a", "AP1", "--pa", "Port 0", "--b", "LAP1", "--pb", "FastEthernet0", "--cable", "wireless", "--note", "SSID CLASSROOM", "--output", str(path)),
+                ("add-ap-config", str(path), "--name", "AP1", "--ssid", "CLASSROOM", "--channel", "6", "--auth", "wpa2-psk", "--password", "packet123", "--note", "offline metadata", "--output", str(path)),
+            ]
+            for step in steps:
+                result = self.run_plan(*step)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual([module["model"] for module in data["modules"]], ["HWIC-2T", "HWIC-2T"])
+            self.assertEqual(data["devices"][2]["ssid"], "CLASSROOM")
+            self.assertEqual(data["ap_configs"][0]["auth"], "wpa2-psk")
+
+            safety = subprocess.run(
+                [str(SAFETY), "plan", str(path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(safety.returncode, 0, safety.stdout + safety.stderr)
+            render = subprocess.run(
+                [str(RENDER), "summary", str(path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(render.returncode, 0, render.stderr)
+            summary = json.loads(render.stdout)
+            self.assertEqual(summary["counts"]["modules"], 2)
+            self.assertEqual(summary["counts"]["ap_configs"], 1)
+            self.assertEqual(summary["wireless"]["ssids"], ["CLASSROOM"])
 
     def test_plan_editor_adds_config_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -202,6 +252,14 @@ class PlanCliTest(unittest.TestCase):
             result = self.run_plan("add-link", str(path), "--a", "R1", "--b", "SW1")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("not found", result.stderr)
+
+    def test_add_module_rejects_missing_device_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "bad-module.json"
+            self.assertEqual(self.run_plan("new", "--output", str(path)).returncode, 0)
+            result = self.run_plan("add-module", str(path), "--device", "R1", "--slot", "0/0", "--model", "HWIC-2T")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("target device not found", result.stderr)
 
 
 if __name__ == "__main__":

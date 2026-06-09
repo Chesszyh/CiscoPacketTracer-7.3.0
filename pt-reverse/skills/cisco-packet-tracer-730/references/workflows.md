@@ -307,10 +307,14 @@ representative live/manual validation steps for pings, IOS show commands, and
 Server-PT services. Template specs use snake_case `template_options`; both
 paths can set render `formats`, `theme`, title, legend, labels, and `group_by`.
 When a template is not suitable, use `pt730-plan new` plus `add-device`,
-`add-link`, `add-annotation`, `add-pc-config`, `add-ipv6-config`,
-`add-vlan-config`, `add-dhcp-pool`, `add-server-config`, `add-ios-config`, and
-`add-security-policy` or the matching MCP `pt730_plan_*` tools to build custom
-topology JSON and config metadata before layout/render/safety/config export.
+`add-module`, `add-link`, `add-ap-config`, `add-annotation`, `add-pc-config`,
+`add-ipv6-config`, `add-vlan-config`, `add-dhcp-pool`, `add-server-config`,
+`add-ios-config`, and `add-security-policy` or the matching MCP `pt730_plan_*`
+tools to build custom topology JSON, serial modules, wireless metadata, and
+config metadata before layout/render/safety/config export.
+Use `add-module --device R1 --slot 0/0 --model HWIC-2T` for PT 7.3.0 serial
+WAN modules, and `add-ap-config --name AP1 --ssid CLASSROOM` for report/render
+wireless AP metadata.
 Complex Server-PT service objects accept JSON strings or `@file`, for example
 `--dns-json '{"enabled":true,"records":[{"name":"www.lab.local","ip":"192.168.10.10"}]}'`.
 Topology plans can also include top-level `annotations` callouts; Mermaid,

@@ -43,7 +43,9 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_schema", names)
         self.assertIn("pt730_plan_new", names)
         self.assertIn("pt730_plan_add_device", names)
+        self.assertIn("pt730_plan_add_module", names)
         self.assertIn("pt730_plan_add_link", names)
+        self.assertIn("pt730_plan_add_ap_config", names)
         self.assertIn("pt730_plan_add_annotation", names)
         self.assertIn("pt730_plan_add_pc_config", names)
         self.assertIn("pt730_plan_add_ipv6_config", names)
@@ -180,9 +182,16 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("plan", plan_add_device["inputSchema"]["required"])
         self.assertIn("name", plan_add_device["inputSchema"]["required"])
         self.assertIn("output", plan_add_device["inputSchema"]["properties"])
+        self.assertIn("ssid", plan_add_device["inputSchema"]["properties"])
+        plan_add_module = next(tool for tool in tools if tool["name"] == "pt730_plan_add_module")
+        self.assertIn("device", plan_add_module["inputSchema"]["required"])
+        self.assertIn("slot", plan_add_module["inputSchema"]["required"])
+        self.assertIn("model", plan_add_module["inputSchema"]["required"])
         plan_add_link = next(tool for tool in tools if tool["name"] == "pt730_plan_add_link")
         self.assertIn("a", plan_add_link["inputSchema"]["required"])
         self.assertIn("b", plan_add_link["inputSchema"]["required"])
+        plan_add_ap = next(tool for tool in tools if tool["name"] == "pt730_plan_add_ap_config")
+        self.assertIn("ssid", plan_add_ap["inputSchema"]["required"])
         plan_add_vlan = next(tool for tool in tools if tool["name"] == "pt730_plan_add_vlan_config")
         self.assertIn("id", plan_add_vlan["inputSchema"]["required"])
         plan_add_server = next(tool for tool in tools if tool["name"] == "pt730_plan_add_server_config")
@@ -335,13 +344,22 @@ class McpCliTest(unittest.TestCase):
                         "id": 4,
                         "method": "tools/call",
                         "params": {
+                            "name": "pt730_plan_add_module",
+                            "arguments": {"plan": str(path), "device": "R1", "slot": "0/0", "model": "HWIC-2T", "output": str(path)},
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 5,
+                        "method": "tools/call",
+                        "params": {
                             "name": "pt730_plan_add_link",
                             "arguments": {"plan": str(path), "a": "R1", "b": "SW1", "pa": "GigabitEthernet0/0", "pb": "FastEthernet0/1", "output": str(path)},
                         },
                     },
                     {
                         "jsonrpc": "2.0",
-                        "id": 5,
+                        "id": 6,
                         "method": "tools/call",
                         "params": {
                             "name": "pt730_plan_add_annotation",
@@ -355,8 +373,40 @@ class McpCliTest(unittest.TestCase):
             data = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(data["metadata"]["name"], "MCP Plan")
             self.assertEqual([device["name"] for device in data["devices"]], ["R1", "SW1"])
+            self.assertEqual(data["modules"][0]["model"], "HWIC-2T")
             self.assertEqual(data["links"][0]["pa"], "GigabitEthernet0/0")
             self.assertEqual(data["annotations"][0]["title"], "Core")
+
+    def test_plan_wireless_tools_build_ap_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "mcp-wireless-plan.json"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_new", "arguments": {"name": "MCP Wireless Plan", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_device", "arguments": {"plan": str(path), "name": "AP1", "category": "accesspoint", "model": "AccessPoint-PT", "ssid": "CLASSROOM", "output": str(path)}},
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "pt730_plan_add_ap_config", "arguments": {"plan": str(path), "name": "AP1", "ssid": "CLASSROOM", "mode": "access-point", "channel": "6", "auth": "wpa2-psk", "password": "packet123", "output": str(path)}},
+                    },
+                ]
+            )
+            for response in responses:
+                self.assertEqual(response["result"]["isError"], False, response["result"]["structuredContent"].get("stderr", ""))
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["devices"][0]["ssid"], "CLASSROOM")
+            self.assertEqual(data["ap_configs"][0]["channel"], "6")
 
     def test_plan_config_tools_build_config_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

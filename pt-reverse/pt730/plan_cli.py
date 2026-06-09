@@ -92,18 +92,21 @@ def _first_present(item: dict[str, Any], keys: tuple[str, ...]) -> str:
 def schema() -> dict[str, Any]:
     return {
         "kind": "pt730-plan-schema",
-        "commands": ["schema", "new", "add-device", "add-link", "add-annotation", "add-pc-config", "add-ipv6-config", "add-vlan-config", "add-dhcp-pool", "add-server-config", "add-ios-config", "add-security-policy"],
+        "commands": ["schema", "new", "add-device", "add-module", "add-link", "add-ap-config", "add-annotation", "add-pc-config", "add-ipv6-config", "add-vlan-config", "add-dhcp-pool", "add-server-config", "add-ios-config", "add-security-policy"],
         "workflow": [
             "pt730-plan new --name LAB --output lab.json",
             "pt730-plan add-device lab.json --name R1 --category router --model 2911 --output lab.json",
+            "pt730-plan add-module lab.json --device R1 --slot 0/0 --model HWIC-2T --output lab.json",
             "pt730-plan add-device lab.json --name SW1 --category switch --model 2960-24TT --output lab.json",
             "pt730-plan add-link lab.json --a R1 --pa GigabitEthernet0/0 --b SW1 --pb FastEthernet0/1 --output lab.json",
             "pt730-plan add-ios-config lab.json --device R1 --command 'enable' --command 'configure terminal' --command 'end' --output lab.json",
             "pt730-layout lab.json --style lan --output lab-layout.json",
             "pt730-render svg lab-layout.json --preset report --output lab.svg",
         ],
-        "device_fields": ["name", "model", "category", "x", "y", "site", "role", "vlan", "note"],
+        "device_fields": ["name", "model", "category", "x", "y", "site", "role", "vlan", "ssid", "note"],
+        "module_fields": ["device", "slot", "model", "module_type", "note"],
         "link_fields": ["a", "pa", "b", "pb", "cable", "vlan", "note"],
+        "ap_config_fields": ["name", "ssid", "mode", "channel", "auth", "password", "note"],
         "annotation_fields": ["id", "kind", "target", "title", "text", "x", "y", "width", "height", "color"],
         "pc_config_fields": ["name", "port", "dhcp", "ip", "mask", "gateway", "dns"],
         "ipv6_config_fields": ["name", "port", "ipv6", "prefix", "gateway", "dns", "note"],
@@ -129,7 +132,7 @@ def add_device(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]
     if existing_index is not None and not args.replace:
         raise ValueError(f"device {name!r} already exists; use --replace to update it")
     device: dict[str, Any] = {"name": name}
-    for key in ("model", "category", "site", "role", "note"):
+    for key in ("model", "category", "site", "role", "ssid", "note"):
         value = _str_value(getattr(args, key))
         if value:
             device[key] = value
@@ -147,6 +150,27 @@ def add_device(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]
     return plan
 
 
+def add_module(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    names = _device_names(plan)
+    if args.device not in names and not args.allow_missing:
+        raise ValueError(f"module target device not found: {args.device}; use --allow-missing to keep a forward reference")
+    modules = _ensure_list(plan, "modules")
+    key = (args.device, args.slot)
+    existing_index = next((index for index, item in enumerate(modules) if isinstance(item, dict) and (str(item.get("device", item.get("device_name", item.get("on", "")))), str(item.get("slot", ""))) == key), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"module for {args.device!r} slot {args.slot!r} already exists; use --replace to update it")
+    module: dict[str, Any] = {"device": args.device, "slot": args.slot, "model": args.model}
+    for key_name in ("module_type", "note"):
+        value = _str_value(getattr(args, key_name))
+        if value:
+            module[key_name] = value
+    if existing_index is None:
+        modules.append(module)
+    else:
+        modules[existing_index] = {**modules[existing_index], **module}
+    return plan
+
+
 def add_link(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     names = _device_names(plan)
     missing = [name for name in (args.a, args.b) if name not in names]
@@ -161,6 +185,23 @@ def add_link(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     if vlan is not None:
         link["vlan"] = vlan
     _ensure_list(plan, "links").append(link)
+    return plan
+
+
+def add_ap_config(plan: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    configs = _ensure_list(plan, "ap_configs")
+    existing_index = next((index for index, item in enumerate(configs) if isinstance(item, dict) and _first_present(item, ("name", "device", "ap")) == args.name), None)
+    if existing_index is not None and not args.replace:
+        raise ValueError(f"ap_config for {args.name!r} already exists; use --replace to update it")
+    config: dict[str, Any] = {"name": args.name}
+    for key_name in ("ssid", "mode", "channel", "auth", "password", "note"):
+        value = _str_value(getattr(args, key_name))
+        if value:
+            config[key_name] = value
+    if existing_index is None:
+        configs.append(config)
+    else:
+        configs[existing_index] = {**configs[existing_index], **config}
     return plan
 
 
@@ -358,9 +399,21 @@ def main(argv: list[str] | None = None) -> int:
     device_p.add_argument("--site", default="")
     device_p.add_argument("--role", default="")
     device_p.add_argument("--vlan", type=int)
+    device_p.add_argument("--ssid", default="")
     device_p.add_argument("--note", default="")
     device_p.add_argument("--replace", action="store_true", help="replace/update an existing device with the same name")
     add_common_io(device_p)
+
+    module_p = sub.add_parser("add-module", help="append or update one device module record")
+    add_plan_arg(module_p)
+    module_p.add_argument("--device", required=True)
+    module_p.add_argument("--slot", required=True)
+    module_p.add_argument("--model", required=True)
+    module_p.add_argument("--module-type", default="", help="optional Packet Tracer module type id when catalog inference is unavailable")
+    module_p.add_argument("--note", default="")
+    module_p.add_argument("--allow-missing", action="store_true", help="allow a module target device not yet present in the plan")
+    module_p.add_argument("--replace", action="store_true", help="replace/update an existing module with the same device and slot")
+    add_common_io(module_p)
 
     link_p = sub.add_parser("add-link", help="append one topology link")
     add_plan_arg(link_p)
@@ -373,6 +426,18 @@ def main(argv: list[str] | None = None) -> int:
     link_p.add_argument("--note", default="")
     link_p.add_argument("--allow-missing", action="store_true", help="allow links to devices not yet present in the plan")
     add_common_io(link_p)
+
+    ap_p = sub.add_parser("add-ap-config", help="append or update one wireless AP metadata record")
+    add_plan_arg(ap_p)
+    ap_p.add_argument("--name", required=True)
+    ap_p.add_argument("--ssid", required=True)
+    ap_p.add_argument("--mode", default="access-point")
+    ap_p.add_argument("--channel", default="")
+    ap_p.add_argument("--auth", default="")
+    ap_p.add_argument("--password", default="")
+    ap_p.add_argument("--note", default="")
+    ap_p.add_argument("--replace", action="store_true", help="replace/update an existing AP config with the same name")
+    add_common_io(ap_p)
 
     annotation_p = sub.add_parser("add-annotation", help="append one report/diagram callout")
     add_plan_arg(annotation_p)
@@ -487,8 +552,12 @@ def main(argv: list[str] | None = None) -> int:
         plan = _load_plan(args.plan)
         if args.cmd == "add-device":
             _emit(add_device(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-module":
+            _emit(add_module(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-link":
             _emit(add_link(plan, args), args.output, compact=args.compact)
+        elif args.cmd == "add-ap-config":
+            _emit(add_ap_config(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-annotation":
             _emit(add_annotation(plan, args), args.output, compact=args.compact)
         elif args.cmd == "add-pc-config":
