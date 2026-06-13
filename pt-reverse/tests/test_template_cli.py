@@ -71,6 +71,7 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("edge-security", data["commands"])
         self.assertIn("campus", data["commands"])
         self.assertIn("redundant-campus", data["commands"])
+        self.assertIn("college-network", data["commands"])
         self.assertIn("enterprise-edge", data["commands"])
         self.assertIn("lan-star", data["templates"])
         self.assertIn("dual-stack-lan", data["templates"])
@@ -83,10 +84,12 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("wan-ring", data["templates"])
         self.assertIn("campus", data["templates"])
         self.assertIn("redundant-campus", data["templates"])
+        self.assertIn("college-network", data["templates"])
         self.assertIn("enterprise-edge", data["templates"])
         self.assertIn("ospf", " ".join(data["templates"]["wan-ring"]["options"]))
         self.assertIn("--routing none|rip|eigrp|ospf|static", data["templates"]["campus"]["options"])
         self.assertIn("--routing none|rip|eigrp|ospf", data["templates"]["redundant-campus"]["options"])
+        self.assertIn("--total-pcs", data["templates"]["college-network"]["options"])
         self.assertIn("--routing none|rip|eigrp|ospf|static|bgp", data["templates"]["enterprise-edge"]["options"])
         self.assertIn("--client-addressing static|dhcp", data["templates"]["vlan-router-on-stick"]["options"])
         self.assertIn("--ipv6-prefix", data["templates"]["dual-stack-lan"]["options"])
@@ -806,6 +809,43 @@ class TemplateCliTest(unittest.TestCase):
         self.assertIn("network 172.16.1.0 0.0.0.63", joined)
         self.assertIn("network 192.168.0.0 0.0.0.255", joined)
         self.assertNotIn("router ospf 1", joined)
+        self.assert_safe_and_renderable(plan)
+
+    def test_college_network_generates_course_design_ip_plan_and_configs(self) -> None:
+        result = self.run_template(
+            "college-network",
+            "--name",
+            "SCHOOL",
+            "--routing",
+            "ospf",
+            "--representative-hosts",
+            "2",
+            "--representative-servers",
+            "5",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        names = {device["name"] for device in plan["devices"]}
+        self.assertTrue({"MLS1", "MLS2", "MLS3", "MLS4", "MLS5", "MLS6"}.issubset(names))
+        self.assertIn("SW-SCHOOL-SRV", names)
+        self.assertIn("SRV-SCHOOL-WEB", names)
+        self.assertIn("PC-SCHOOL-LAB6-2", names)
+        self.assertEqual(plan["metadata"]["source"], "pt730-template college-network")
+        self.assertEqual(plan["metadata"]["total_pcs"], 1900)
+        self.assertEqual(plan["metadata"]["servers"], 50)
+        self.assertEqual(plan["metadata"]["l3_switches"], 6)
+        self.assertIn("3560-24PS", plan["metadata"]["risky_models_avoided"])
+        self.assertEqual(plan["vlan_configs"][0]["host_range"], "172.16.1.1-172.16.1.61")
+        self.assertEqual(plan["vlan_configs"][0]["gateway"], "172.16.1.62")
+        self.assertEqual(len(plan["vlan_configs"]), 11)
+        self.assertEqual(sum(segment["assigned_hosts"] for segment in plan["metadata"]["ip_plan"]["segments"]), 1900)
+        self.assertEqual(plan["metadata"]["ip_plan"]["segments"][0]["network"], "192.168.0.0/26")
+        self.assertEqual(plan["metadata"]["ip_plan"]["segments"][3]["assigned_hosts"], 200)
+        self.assertEqual(plan["metadata"]["ip_plan"]["segments"][-1]["assigned_hosts"], 190)
+        self.assertEqual(len(plan["metadata"]["website_plan"]["sections"]), 5)
+        joined = "\n".join(command for config in plan["ios_configs"] for command in config["commands"])
+        self.assertIn("ip routing", joined)
+        self.assertIn("router ospf 1", joined)
         self.assert_safe_and_renderable(plan)
 
     def test_enterprise_edge_generates_integrated_hq_dmz_branch_wan_topology(self) -> None:

@@ -84,6 +84,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_template_wan_ring", names)
         self.assertIn("pt730_template_campus", names)
         self.assertIn("pt730_template_redundant_campus", names)
+        self.assertIn("pt730_template_college_network", names)
         self.assertIn("pt730_template_enterprise_edge", names)
         self.assertIn("pt730_catalog", names)
         self.assertIn("pt730_safety_js", names)
@@ -179,6 +180,10 @@ class McpCliTest(unittest.TestCase):
         redundant = next(tool for tool in tools if tool["name"] == "pt730_template_redundant_campus")
         self.assertIn("eigrp", redundant["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("ospf", redundant["inputSchema"]["properties"]["routing"]["enum"])
+        college = next(tool for tool in tools if tool["name"] == "pt730_template_college_network")
+        self.assertIn("total_pcs", college["inputSchema"]["properties"])
+        self.assertIn("l3_switches", college["inputSchema"]["properties"])
+        self.assertIn("static", college["inputSchema"]["properties"]["routing"]["enum"])
         enterprise = next(tool for tool in tools if tool["name"] == "pt730_template_enterprise_edge")
         self.assertIn("eigrp", enterprise["inputSchema"]["properties"]["routing"]["enum"])
         self.assertIn("bgp", enterprise["inputSchema"]["properties"]["routing"]["enum"])
@@ -1732,6 +1737,44 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("standby 20 ip 192.168.0.254", joined)
         self.assertIn("ip helper-address 172.16.1.1", joined)
         self.assertIn("ntp server 172.16.1.4 prefer", joined)
+
+    def test_college_network_template_tool_generates_course_design_topology(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_template_college_network",
+                        "arguments": {
+                            "name": "SCHOOL",
+                            "total_pcs": 1900,
+                            "servers": 50,
+                            "representative_hosts": 2,
+                            "representative_servers": 5,
+                            "l3_switches": 6,
+                            "routing": "ospf",
+                            "layout_style": "campus",
+                            "compact": True,
+                        },
+                    },
+                }
+            ]
+        )
+        result = responses[0]["result"]
+        self.assertEqual(result["isError"], False)
+        command = result["structuredContent"]["command"]
+        self.assertIn("college-network", command)
+        self.assertIn("--total-pcs", command)
+        self.assertIn("--compact", command)
+        self.assertNotIn("\n  ", result["structuredContent"]["stdout"])
+        plan = json.loads(result["structuredContent"]["stdout"])
+        self.assertEqual(plan["metadata"]["source"], "pt730-template college-network")
+        self.assertEqual(plan["metadata"]["total_pcs"], 1900)
+        self.assertEqual(sum(segment["assigned_hosts"] for segment in plan["metadata"]["ip_plan"]["segments"]), 1900)
+        self.assertEqual(len(plan["vlan_configs"]), 11)
+        self.assertIn("router ospf 1", "\n".join(command for config in plan["ios_configs"] for command in config["commands"]))
 
     def test_enterprise_edge_template_tool_generates_integrated_topology(self) -> None:
         responses = self.run_mcp(

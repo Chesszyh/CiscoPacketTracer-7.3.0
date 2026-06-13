@@ -57,7 +57,7 @@ def _maybe_layout(plan: dict[str, Any], *, style: str, no_layout: bool) -> dict[
 
 def schema() -> dict[str, Any]:
     return {
-        "commands": ["schema", "lan-star", "dual-stack-lan", "wireless-lan", "vlan-router-on-stick", "switching-lab", "server-services", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "enterprise-edge"],
+        "commands": ["schema", "lan-star", "dual-stack-lan", "wireless-lan", "vlan-router-on-stick", "switching-lab", "server-services", "edge-security", "router-ring", "wan-ring", "campus", "redundant-campus", "college-network", "enterprise-edge"],
         "templates": {
             "lan-star": {
                 "description": "One router, one access switch, static PCs, optional HTTP servers.",
@@ -102,6 +102,10 @@ def schema() -> dict[str, Any]:
             "redundant-campus": {
                 "description": "Dual-core campus with dual-homed access switches, HSRP gateways, STP root roles, DHCP relay/pools, NTP/Syslog/SNMP, services, and optional RIP/EIGRP/OSPF routing.",
                 "options": ["--name", "--segments", "--hosts-per-segment", "--access-switches-per-segment", "--servers", "--address-pool", "--segment-prefix", "--server-network", "--server-vlan", "--vlan-base", "--routing none|rip|eigrp|ospf", "--layout-style", "--no-layout"],
+            },
+            "college-network": {
+                "description": "Course-design college network for 1900 PCs, 50 servers, six assignment L3 switches, complete VLAN/IP allocation metadata, representative hosts, website plan, and optional RIP/EIGRP/OSPF/static routing.",
+                "options": ["--name", "--total-pcs", "--servers", "--representative-hosts", "--representative-servers", "--l3-switches", "--domain", "--routing none|rip|eigrp|ospf|static", "--layout-style", "--no-layout"],
             },
             "enterprise-edge": {
                 "description": "Integrated enterprise topology with HQ VLANs, server zone, DMZ, ISP/Internet test LAN, branch WAN routers, representative hosts, services, NAT/ACL, and optional RIP/EIGRP/OSPF/static/BGP routing.",
@@ -1515,6 +1519,185 @@ def campus(
     return plan
 
 
+def _college_user_segments(total_pcs: int) -> list[dict[str, Any]]:
+    fixed = [
+        {"key": "office", "name": "OFFICE", "display": "办公用计算机", "hosts": 60, "vlan": 20, "network": "192.168.0.0/26"},
+        {"key": "teaching", "name": "TEACHING", "display": "教学用计算机", "hosts": 60, "vlan": 21, "network": "192.168.0.64/26"},
+        {"key": "research", "name": "RESEARCH", "display": "科研用计算机", "hosts": 120, "vlan": 22, "network": "192.168.0.128/25"},
+        {"key": "graduate", "name": "GRADUATE", "display": "研究生计算机", "hosts": 200, "vlan": 23, "network": "192.168.1.0/24"},
+    ]
+    remaining = total_pcs - sum(int(item["hosts"]) for item in fixed)
+    if remaining < 0:
+        raise ValueError("college-network total-pcs must be at least 440 for the fixed office/teaching/research/graduate groups")
+    lab_networks = [f"192.168.{index}.0/24" for index in range(2, 8)]
+    if remaining > 6 * 254:
+        raise ValueError("college-network supports at most 1964 PCs in 192.168.0.0/21 with the default lab VLAN split")
+    lab_segments: list[dict[str, Any]] = []
+    for index, network in enumerate(lab_networks, start=1):
+        if remaining <= 0:
+            break
+        hosts = min(254, remaining)
+        remaining -= hosts
+        lab_segments.append({"key": f"student_lab_{index}", "name": f"LAB{index}", "display": f"学生实验电脑-{index}", "hosts": hosts, "vlan": 29 + index, "network": network})
+    return fixed + lab_segments
+
+
+def college_network(
+    *,
+    name: str,
+    total_pcs: int,
+    servers: int,
+    representative_hosts: int,
+    representative_servers: int,
+    l3_switches: int,
+    routing: str,
+    domain: str,
+    layout_style: str,
+    no_layout: bool,
+) -> dict[str, Any]:
+    if total_pcs < 440:
+        raise ValueError("college-network total-pcs must be >= 440")
+    if servers < 1 or servers > 61:
+        raise ValueError("college-network servers must fit 172.16.1.1-172.16.1.61/26")
+    if representative_hosts < 0:
+        raise ValueError("representative-hosts must be >= 0")
+    if representative_servers < 1:
+        raise ValueError("representative-servers must be >= 1")
+    if representative_servers > servers:
+        raise ValueError("representative-servers cannot exceed servers")
+    if l3_switches < 1 or l3_switches > 6:
+        raise ValueError("college-network supports 1-6 L3 switches; assignment default is 6")
+
+    slug = name.upper()
+    server_net = ipaddress.ip_network("172.16.1.0/26")
+    server_gateway = ipaddress.ip_address("172.16.1.62")
+    server_addresses = _host_list(server_net, count=representative_servers, skip={server_gateway})
+    dns_ip = str(server_addresses[1] if len(server_addresses) > 1 else server_addresses[0])
+    segments = _college_user_segments(total_pcs)
+    segment_specs: list[dict[str, Any]] = []
+    vlan_configs: list[dict[str, Any]] = [
+        {
+            "id": 10,
+            "name": "SERVER",
+            "network": str(server_net),
+            "mask": _mask(server_net),
+            "gateway": str(server_gateway),
+            "host_range": "172.16.1.1-172.16.1.61",
+            "capacity_hosts": 61,
+            "assigned_hosts": servers,
+            "description": "学院服务器区",
+        }
+    ]
+    ip_plan_segments: list[dict[str, Any]] = []
+    for index, item in enumerate(segments):
+        network = ipaddress.ip_network(str(item["network"]))
+        gateway = _last_gateway(network)
+        hosts = int(item["hosts"])
+        capacity = network.num_addresses - 2
+        sample_hosts = min(representative_hosts, hosts, 3)
+        l3_owner = f"MLS{(index % l3_switches) + 1}"
+        segment_specs.append(
+            {
+                "name": str(item["name"]),
+                "vlan": int(item["vlan"]),
+                "subnet": str(network),
+                "gateway": str(gateway),
+                "dns": dns_ip,
+                "representative_hosts": sample_hosts,
+                "access_switches": 1,
+                "core": l3_owner,
+                "host_prefix": f"PC-{slug}-{item['name']}",
+            }
+        )
+        plan_item = {
+            "key": item["key"],
+            "name": item["display"],
+            "vlan": int(item["vlan"]),
+            "network": str(network),
+            "mask": _mask(network),
+            "gateway": str(gateway),
+            "host_range": f"{_host(network, 1)}-{ipaddress.ip_address(int(gateway) - 1)}",
+            "capacity_hosts": capacity,
+            "assigned_hosts": hosts,
+            "l3_switch": l3_owner,
+        }
+        ip_plan_segments.append(plan_item)
+        vlan_configs.append(
+            {
+                "id": plan_item["vlan"],
+                "name": str(item["name"]),
+                "network": plan_item["network"],
+                "mask": plan_item["mask"],
+                "gateway": plan_item["gateway"],
+                "host_range": plan_item["host_range"],
+                "capacity_hosts": capacity,
+                "assigned_hosts": hosts,
+                "description": item["display"],
+            }
+        )
+
+    services_by_index: list[tuple[str, dict[str, Any]]] = [
+        ("WEB", {"http": True}),
+        ("DNS", {"dns": {"enabled": True, "records": [{"name": f"www.{domain}", "ip": str(server_addresses[0])}]}}),
+        ("FTP", {"ftp": {"enabled": True, "accounts": [{"username": "student", "password": "packet", "permissions": "RWDNL"}]}}),
+        ("MAIL", {"email": {"enabled": True, "domain": domain, "accounts": [{"username": "student", "password": "packet"}]}}),
+        ("NMS", {"ntp": {"enabled": True, "authentication": False}, "syslog": {"enabled": True, "port": 514}}),
+    ]
+    server_specs: list[dict[str, Any]] = []
+    for index, address in enumerate(server_addresses, start=1):
+        label, services_config = services_by_index[index - 1] if index <= len(services_by_index) else (str(index), {"http": True})
+        server_specs.append({"name": f"SRV-{slug}-{label}", "ip": str(address), "services": services_config})
+
+    spec = {
+        "name": name,
+        "core": {"count": l3_switches, "prefix": "MLS", "interconnect_pool": "10.10.0.0/24", "interconnect_prefix": 30},
+        "server_defaults": {"mask": _mask(server_net), "gateway": str(server_gateway), "dns": dns_ip},
+        "server_switch": {"name": f"SW-{slug}-SRV", "vlan": 10, "core": "MLS1"},
+        "servers": server_specs,
+        "segments": segment_specs,
+    }
+    plan = compose_campus(spec, do_layout=not no_layout, layout_style=layout_style)
+    for device in plan.get("devices", []):
+        if isinstance(device, dict) and str(device.get("name", "")).startswith("MLS"):
+            device["role"] = "l3_switch"
+            device["pt_note"] = "PT 7.3 automation-safe visual substitute for assignment L3 switch; avoid 3560-24PS live automation."
+
+    plan["vlan_configs"] = vlan_configs
+    plan["metadata"] = {
+        "source": "pt730-template college-network",
+        "name": name,
+        "domain": domain,
+        "assignment": "学院网络IP规划与设计",
+        "total_pcs": total_pcs,
+        "servers": servers,
+        "l3_switches": l3_switches,
+        "l2_switch_model": "2960-24TT",
+        "l3_switch_visual_model": "2960-24TT",
+        "risky_models_avoided": ["3560-24PS", "3650-24PS"],
+        "routing": routing,
+        "representative_hosts_per_vlan": representative_hosts,
+        "representative_servers": representative_servers,
+        "ip_plan": {
+            "server": vlan_configs[0],
+            "pc_pool": "192.168.0.0/21",
+            "segments": ip_plan_segments,
+        },
+        "website_plan": {
+            "domain": domain,
+            "sections": [
+                {"name": "学院概况", "description": "发布学院简介、组织结构、通知公告。"},
+                {"name": "教学服务", "description": "课程信息、实验预约、资料下载。"},
+                {"name": "科研平台", "description": "科研团队、项目成果、论文与实验室入口。"},
+                {"name": "学生服务", "description": "研究生与实验电脑使用说明、账号与网络服务申请。"},
+                {"name": "运维管理", "description": "服务器状态、故障报修、网络安全公告。"},
+            ],
+        },
+    }
+    plan = configured_plan(plan, include_l3=True, routing=routing)
+    plan["metadata"]["source"] = "pt730-template college-network"
+    return plan
+
+
 def redundant_campus(
     *,
     name: str,
@@ -2602,6 +2785,19 @@ def main(argv: list[str] | None = None) -> int:
     redundant_p.add_argument("--no-layout", action="store_true")
     redundant_p.add_argument("--output", type=Path)
 
+    college_p = sub.add_parser("college-network", help="generate a course-design college network topology and IP plan")
+    college_p.add_argument("--name", default="COLLEGE")
+    college_p.add_argument("--total-pcs", type=int, default=1900)
+    college_p.add_argument("--servers", type=int, default=50)
+    college_p.add_argument("--representative-hosts", type=int, default=2)
+    college_p.add_argument("--representative-servers", type=int, default=5)
+    college_p.add_argument("--l3-switches", type=int, default=6)
+    college_p.add_argument("--domain", default="college.local")
+    college_p.add_argument("--routing", choices=("none", "rip", "eigrp", "ospf", "static"), default="ospf")
+    college_p.add_argument("--layout-style", choices=STYLES, default="campus")
+    college_p.add_argument("--no-layout", action="store_true")
+    college_p.add_argument("--output", type=Path)
+
     enterprise_p = sub.add_parser("enterprise-edge", help="generate an integrated enterprise HQ/branch/DMZ/Internet topology")
     enterprise_p.add_argument("--name", default="ENTERPRISE")
     enterprise_p.add_argument("--campus-vlans", type=int, default=3)
@@ -2827,6 +3023,24 @@ def main(argv: list[str] | None = None) -> int:
                     server_vlan=args.server_vlan,
                     vlan_base=args.vlan_base,
                     routing=args.routing,
+                    layout_style=args.layout_style,
+                    no_layout=args.no_layout,
+                ),
+                args.output,
+                compact=args.compact,
+            )
+            return 0
+        if args.cmd == "college-network":
+            _emit(
+                college_network(
+                    name=args.name,
+                    total_pcs=args.total_pcs,
+                    servers=args.servers,
+                    representative_hosts=args.representative_hosts,
+                    representative_servers=args.representative_servers,
+                    l3_switches=args.l3_switches,
+                    routing=args.routing,
+                    domain=args.domain,
                     layout_style=args.layout_style,
                     no_layout=args.no_layout,
                 ),

@@ -35,6 +35,7 @@ pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-pe
 pt-reverse/bin/pt730-template wan-ring --sites 3 --hosts-per-site 2 --servers-per-site 1 --routing eigrp
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing ospf
 pt-reverse/bin/pt730-template campus --cores 2 --segments 4 --hosts-per-segment 2 --servers 4 --l3 --routing eigrp
+pt-reverse/bin/pt730-template college-network --total-pcs 1900 --servers 50 --l3-switches 6 --routing ospf
 pt-reverse/bin/pt730-template redundant-campus --segments 4 --hosts-per-segment 2 --servers 4 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing ospf
 pt-reverse/bin/pt730-template enterprise-edge --campus-vlans 3 --branches 2 --dmz-servers 2 --routing bgp
@@ -102,7 +103,8 @@ topology JSON through reversible edits without hand-editing files before
 layout/render/safety/config export/lab bundling.
 Built-in template MCP tools expose LAN-star, dual-stack-LAN, wireless-LAN,
 router-on-a-stick VLAN, switching-lab, server-services, edge-security,
-router-ring, WAN-ring, campus, redundant-campus, and enterprise-edge template
+router-ring, WAN-ring, campus, redundant-campus, college-network, and
+enterprise-edge template
 options including DNS, IPv6 prefixes/gateways, SSID, 802.1Q, STP,
 EtherChannel, access/trunk ports, Server-PT
 HTTP/DNS/FTP/TFTP/Email/NTP/Syslog/DHCP metadata, NAT/ACL, DMZ, HSRP/STP, DHCP
@@ -381,7 +383,8 @@ Use `pt730-template lan-star ...`, `pt730-template dual-stack-lan ...`,
 `pt730-template switching-lab ...`, `pt730-template server-services ...`,
 `pt730-template edge-security ...`, `pt730-template router-ring ...`,
 `pt730-template wan-ring ...`, `pt730-template campus ...`, and
-`pt730-template enterprise-edge ...` when an agent needs a common lab topology
+`pt730-template college-network ...`, and `pt730-template enterprise-edge ...`
+when an agent needs a common lab topology
 without first writing a topology JSON file.
 Dual-stack-LAN templates generate IPv4 static host configs, IPv6 host metadata,
 IOS `ipv6 unicast-routing`, and renderable IPv6 address summaries. IPv6 host
@@ -405,6 +408,12 @@ services, and optional L3 IOS configs with RIP, EIGRP, OSPF, or static routing.
 Redundant-campus templates generate dual-core, dual-homed access/server
 topologies with HSRP gateways, STP root roles, DHCP relay, IOS DHCP pools,
 NTP/Syslog/SNMP, server services, and optional RIP/EIGRP/OSPF configs.
+College-network templates target the course-design case directly: by default
+they allocate 1900 PCs and 50 servers across `172.16.1.0/26` and
+`192.168.0.0/21`, place six assignment L3-switch visual substitutes with safe
+PT 7.3 models, generate representative hosts, emit `vlan_configs`/`metadata`
+with the full IP/VLAN plan and website sections, and add RIP/EIGRP/OSPF/static
+IOS configs for report and video validation.
 Enterprise-edge templates combine HQ VLANs, server zone, DMZ, ISP/Internet
 test LAN, branch serial WAN routers, NAT overload, outside ACL metadata,
 optional RIP/EIGRP/OSPF/static internal routing, optional eBGP edge peering to
