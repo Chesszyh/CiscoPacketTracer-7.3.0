@@ -1744,6 +1744,45 @@ def markdown_table(headers: list[str], rows: list[list[Any]]) -> list[str]:
     return lines
 
 
+def assignment_ip_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    metadata = plan.get("metadata")
+    if isinstance(metadata, dict) and isinstance(metadata.get("ip_plan"), dict):
+        ip_plan = metadata["ip_plan"]
+        server = ip_plan.get("server") if isinstance(ip_plan.get("server"), dict) else {}
+        segments = ip_plan.get("segments") if isinstance(ip_plan.get("segments"), list) else []
+        return {
+            "server": dict(server),
+            "pc_pool": str(ip_plan.get("pc_pool", "")),
+            "segments": [dict(item) for item in segments if isinstance(item, dict)],
+        }
+
+    vlan_configs = [config for config in plan.get("vlan_configs", []) if isinstance(config, dict)]
+    planned = [config for config in vlan_configs if any(key in config for key in ("host_range", "assigned_hosts", "capacity_hosts"))]
+    if not planned:
+        return {}
+    server = planned[0] if str(planned[0].get("name", "")).upper() == "SERVER" else {}
+    segments = planned[1:] if server else planned
+    return {
+        "server": dict(server),
+        "pc_pool": "",
+        "segments": [dict(item) for item in segments],
+    }
+
+
+def website_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    metadata = plan.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    value = metadata.get("website_plan")
+    if not isinstance(value, dict):
+        return {}
+    sections = value.get("sections") if isinstance(value.get("sections"), list) else []
+    return {
+        "domain": str(value.get("domain", "")),
+        "sections": [dict(section) for section in sections if isinstance(section, dict)],
+    }
+
+
 def markdown(plan: dict[str, Any]) -> str:
     lines: list[str] = ["# Packet Tracer Topology Plan", ""]
 
@@ -1844,6 +1883,47 @@ def markdown(plan: dict[str, Any]) -> str:
         lines.extend(markdown_table(["Network", "Gateway", "DNS", "Configured Hosts", "Sample Hosts"], address_rows))
         lines.append("")
 
+    ip_plan = assignment_ip_plan(plan)
+    if ip_plan:
+        server = ip_plan.get("server") if isinstance(ip_plan.get("server"), dict) else {}
+        server_rows = []
+        if server:
+            server_rows.append(
+                [
+                    pick(server, ("name",), "SERVER"),
+                    pick(server, ("network", "subnet")),
+                    pick(server, ("mask",)),
+                    pick(server, ("gateway",)),
+                    pick(server, ("host_range",)),
+                    pick(server, ("assigned_hosts",)),
+                    pick(server, ("capacity_hosts",)),
+                ]
+            )
+        if server_rows:
+            lines.extend(["## Assignment Server Plan", ""])
+            lines.extend(markdown_table(["Name", "Network", "Mask", "Gateway", "Host Range", "Assigned", "Capacity"], server_rows))
+            lines.append("")
+        segment_rows = []
+        for segment in ip_plan.get("segments", []):
+            if isinstance(segment, dict):
+                segment_rows.append(
+                    [
+                        pick(segment, ("name",)),
+                        pick(segment, ("vlan", "id", "vlan_id")),
+                        pick(segment, ("network", "subnet")),
+                        pick(segment, ("mask",)),
+                        pick(segment, ("gateway",)),
+                        pick(segment, ("host_range",)),
+                        pick(segment, ("assigned_hosts",)),
+                        pick(segment, ("capacity_hosts",)),
+                        pick(segment, ("l3_switch", "core")),
+                    ]
+                )
+        if segment_rows:
+            lines.extend(["## Assignment PC VLAN Plan", ""])
+            lines.extend(markdown_table(["Name", "VLAN", "Network", "Mask", "Gateway", "Host Range", "Assigned", "Capacity", "L3 Switch"], segment_rows))
+            lines.append("")
+
     ipv6_address_rows = []
     for group in ipv6_address_groups(plan):
         hosts = group["hosts"]
@@ -1870,6 +1950,22 @@ def markdown(plan: dict[str, Any]) -> str:
         lines.extend(["## VLAN Configs", ""])
         lines.extend(markdown_table(["VLAN", "Name", "Network", "Gateway", "Note"], vlan_rows))
         lines.append("")
+
+    site = website_plan(plan)
+    if site:
+        section_rows = []
+        for section in site.get("sections", []):
+            if isinstance(section, dict):
+                section_rows.append([pick(section, ("name", "title")), pick(section, ("description", "text", "summary"))])
+        if section_rows:
+            title = "## Website Plan"
+            domain = site.get("domain")
+            lines.extend([title, ""])
+            if domain:
+                lines.extend(markdown_table(["Field", "Value"], [["Domain", domain]]))
+                lines.append("")
+            lines.extend(markdown_table(["Section", "Description"], section_rows))
+            lines.append("")
 
     dhcp_pool_rows = []
     for pool in plan.get("dhcp_pools", []):
@@ -2002,6 +2098,8 @@ def summary(plan: dict[str, Any]) -> str:
             )
 
     service_rows = server_service_rows(plan)
+    ip_plan = assignment_ip_plan(plan)
+    site_plan = website_plan(plan)
     data = {
         "counts": {
             "devices": len(plan.get("devices", [])),
@@ -2048,10 +2146,16 @@ def summary(plan: dict[str, Any]) -> str:
                 "name": pick(config, ("name",)),
                 "network": pick(config, ("network", "subnet")),
                 "gateway": pick(config, ("gateway",)),
+                "mask": pick(config, ("mask",)),
+                "host_range": pick(config, ("host_range",)),
+                "assigned_hosts": pick(config, ("assigned_hosts",)),
+                "capacity_hosts": pick(config, ("capacity_hosts",)),
             }
             for config in plan.get("vlan_configs", [])
             if isinstance(config, dict)
         ],
+        "assignment_ip_plan": ip_plan,
+        "website_plan": site_plan,
         "dhcp_pools": [
             {
                 "device": pick(pool, ("device", "router")),

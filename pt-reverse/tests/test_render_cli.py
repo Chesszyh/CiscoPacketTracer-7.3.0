@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RENDER = ROOT / "bin" / "pt730-render"
+TEMPLATE = ROOT / "bin" / "pt730-template"
 
 
 class RenderCliTest(unittest.TestCase):
@@ -467,6 +468,37 @@ class RenderCliTest(unittest.TestCase):
         self.assertIn('"links": 40', result.stdout)
         self.assertIn('"address_groups"', result.stdout)
         self.assertIn('"192.168.0.0/26"', result.stdout)
+
+    def test_college_network_markdown_and_summary_include_assignment_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_path = Path(tmpdir) / "college.json"
+            template = subprocess.run(
+                [str(TEMPLATE), "college-network", "--output", str(plan_path)],
+                cwd=ROOT.parent,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+            self.assertEqual(template.returncode, 0, template.stderr)
+            markdown_result = self.run_render("markdown", str(plan_path))
+            summary_result = self.run_render("summary", str(plan_path))
+
+        self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
+        self.assertIn("## Assignment Server Plan", markdown_result.stdout)
+        self.assertIn("| SERVER | 172.16.1.0/26 | 255.255.255.192 | 172.16.1.62 | 172.16.1.1-172.16.1.61 | 50 | 61 |", markdown_result.stdout)
+        self.assertIn("## Assignment PC VLAN Plan", markdown_result.stdout)
+        self.assertIn("| 学生实验电脑-6 | 35 | 192.168.7.0/24 | 255.255.255.0 | 192.168.7.254 |", markdown_result.stdout)
+        self.assertIn("## Website Plan", markdown_result.stdout)
+        self.assertIn("| 教学服务 | 课程信息、实验预约、资料下载。 |", markdown_result.stdout)
+        self.assertEqual(summary_result.returncode, 0, summary_result.stderr)
+        data = json.loads(summary_result.stdout)
+        self.assertEqual(data["assignment_ip_plan"]["server"]["host_range"], "172.16.1.1-172.16.1.61")
+        self.assertEqual(sum(segment["assigned_hosts"] for segment in data["assignment_ip_plan"]["segments"]), 1900)
+        self.assertEqual(data["assignment_ip_plan"]["segments"][-1]["gateway"], "192.168.7.254")
+        self.assertEqual(data["website_plan"]["domain"], "college.local")
+        self.assertEqual(len(data["website_plan"]["sections"]), 5)
 
     def test_diagram_audit_accepts_clean_render(self) -> None:
         result = self.run_render("diagram-audit", str(ROOT / "examples" / "simple-lan.json"))

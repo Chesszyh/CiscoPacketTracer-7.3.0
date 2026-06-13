@@ -464,6 +464,10 @@ Use `pt730-render markdown <plan.json>` for report-ready offline tables.  It
 includes link VLAN/notes, configured host IPs, inferred address groups, server
 service details, and IOS config counts.  Use `pt730-render summary <plan.json>`
 for a compact JSON summary that agents can consume before any live operation.
+When topology metadata includes course-design fields such as `metadata.ip_plan`
+or `metadata.website_plan`, Markdown adds assignment IP/VLAN and website-section
+tables, and summary JSON exposes `assignment_ip_plan` and `website_plan` fields
+for report generators.
 Use `pt730-render svg <plan.json> --title <title> --legend --output <diagram.svg>`
 for an offline topology diagram that respects existing `x`/`y` coordinates and
 falls back to a deterministic grid when coordinates are missing.
