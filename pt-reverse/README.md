@@ -644,6 +644,7 @@ pt-reverse/bin/pt730-topo export --raw-out pt-reverse/course-design/current-quer
 pt-reverse/bin/pt730-app count
 pt-reverse/bin/pt730-app save
 pt-reverse/bin/pt730-app save-as out/demo.pkt
+pt-reverse/bin/pt730-app inspect-pkt out/demo.pkt
 pt-reverse/bin/pt730-app open out/demo.pkt
 pt-reverse/bin/pt730-app new
 pt-reverse/bin/pt730-app screenshot out/demo.png
@@ -657,6 +658,13 @@ directory with an ASCII temporary filename, then calls `fileOpen()` with that
 absolute Windows path.  PT 7.3.0 returns `"0"` for a successful path-based open.
 Use `--direct` only when you want Packet Tracer/Wine to touch the source/target
 path itself.
+
+Before `open` contacts live Packet Tracer, it runs an offline `.pkt` preflight.
+The preflight blocks known crash fingerprints and any visible risky/blocked
+model signatures such as `3560-24PS` or `3650-24PS`.  PT 7.3.0 `.pkt` files are
+opaque here, so a clean preflight is not a full parser guarantee.  Use
+`inspect-pkt` for a JSON report, and pass `--allow-risky` only for a supervised
+recovery attempt where a Packet Tracer crash is acceptable.
 
 ## IOS CLI helper
 

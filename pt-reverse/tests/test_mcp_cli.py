@@ -2523,12 +2523,22 @@ class McpCliTest(unittest.TestCase):
                     "method": "tools/call",
                     "params": {"name": "pt730_live_recover", "arguments": {"wait": 5, "notify": True, "dry_run": True}},
                 },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_live_app",
+                        "arguments": {"action": "open", "path": "risky.pkt", "allow_risky": True, "dry_run": True},
+                    },
+                },
             ]
         )
         app_command = previews[0]["result"]["structuredContent"]["command"]
         bridge_command = previews[1]["result"]["structuredContent"]["command"]
         launch_command = previews[2]["result"]["structuredContent"]["command"]
         recover_command = previews[3]["result"]["structuredContent"]["command"]
+        open_command = previews[4]["result"]["structuredContent"]["command"]
         self.assertIn("pt730-app", app_command[0])
         self.assertIn("save-as", app_command)
         self.assertIn("pt730-bridge", bridge_command[0])
@@ -2536,6 +2546,8 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730-launch", launch_command[0])
         self.assertIn("status", launch_command)
         self.assertIn("pt730-recover", recover_command[0])
+        self.assertIn("open", open_command)
+        self.assertIn("--allow-risky", open_command)
         self.assertIn("--notify", recover_command)
 
     def test_live_eval_and_smoke_require_allow_live_or_dry_run(self) -> None:

@@ -64,6 +64,11 @@ For exact command patterns, read `references/workflows.md` only when needed.
 - Fixed version is Cisco Packet Tracer 7.3.0. Do not switch to newer Packet Tracer behavior or docs.
 - Treat live Script Module operations as crash-prone. Keep live mutations sequential and small.
 - Avoid risky/blocked models unless the user explicitly asks to validate them.
+- Before opening an existing `.pkt` through `pt730-app open` or MCP
+  `pt730_live_app action=open`, run or rely on the built-in
+  `pt730-app inspect-pkt` preflight. Known crash fingerprints and visible
+  risky model strings such as `3560-24PS`/`3650-24PS` are blocked by default;
+  pass `--allow-risky`/`allow_risky=true` only for supervised recovery attempts.
 - For unattended wireless templates, use the built-in `wireless-lan` template's verified `AccessPoint-PT` and `Laptop-PT` models; treat wireless cable code `8109` warnings as offline-only until live validation is explicitly requested.
 - For VLAN/trunk labs, prefer the built-in `vlan-router-on-stick` template; it uses verified models and emits router 802.1Q subinterfaces, switch trunk/access ports, VLAN metadata, static hosts, and optional per-VLAN servers.
 - For STP/EtherChannel labs, prefer the built-in `switching-lab` template for complete safe topologies; use `pt730-ios-template` when adding custom switching snippets to another plan. Keep live paste/apply small because model support varies by IOS device.

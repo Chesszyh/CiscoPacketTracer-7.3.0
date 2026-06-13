@@ -45,6 +45,10 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("pt730-template", data["offline_tools"])
         self.assertIn("pt730-topo", data["live_tools"])
         self.assertIn("dhcpRun(", data["blocked_patterns"])
+        self.assertIn(
+            ".pkt open: run pt730-app inspect-pkt first; known crash fingerprints and visible risky model signatures are blocked by default.",
+            data["guarded_operations"],
+        )
         self.assertIn("schema", data["ios_template_features"])
         self.assertIn("routed_interfaces", data["ios_template_features"])
         self.assertIn("spanning_tree", data["ios_template_features"])
@@ -218,6 +222,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("write_gated_model_records", data["mcp_features"])
         self.assertIn("topo_query_export_wrappers", data["mcp_features"])
         self.assertIn("model_registry_wrappers", data["mcp_features"])
+        self.assertIn("pkt_open_preflight", data["mcp_features"])
         self.assertIn("live_lifecycle_dry_run", data["mcp_features"])
         self.assertIn("live_eval_dry_run", data["mcp_features"])
         self.assertIn("live_smoke_dry_run", data["mcp_features"])
@@ -303,6 +308,7 @@ class CapabilitiesCliTest(unittest.TestCase):
         self.assertIn("MCP pt730_live_pc_inspect/pt730_live_pc_dhcp/pt730_live_server_service/pt730_live_server_dns_add/pt730_live_server_ftp_add/pt730_live_server_ftp_remove/pt730_live_server_email_add/pt730_live_server_email_remove/pt730_live_server_ntp_config/pt730_live_server_syslog_config/pt730_live_server_dhcp_config/pt730_live_ftp/pt730_live_sim support dry_run=true command previews", data["recommended_workflow"])
         self.assertIn("MCP pt730_topo_summarize_query/pt730_topo_export expose saved-query summarization/export; live export requires allow_live=true", data["recommended_workflow"])
         self.assertIn("MCP pt730_models_manifest/pt730_models_queue/pt730_models_probe_plan/pt730_models_validate/pt730_models_validate_batch/pt730_models_record expose model validation workflows; record requires allow_write=true", data["recommended_workflow"])
+        self.assertIn("MCP pt730_live_app open uses pt730-app .pkt preflight by default; allow_risky=true only passes --allow-risky for supervised recovery attempts", data["recommended_workflow"])
         self.assertIn("MCP pt730_live_app/pt730_live_bridge/pt730_live_launch/pt730_live_recover support dry_run=true command previews for lifecycle operations", data["recommended_workflow"])
         self.assertIn("MCP pt730_live_eval/pt730_live_smoke support dry_run=true command previews and require allow_live=true for live execution", data["recommended_workflow"])
 

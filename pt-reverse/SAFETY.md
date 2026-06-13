@@ -46,6 +46,21 @@ pt-reverse/bin/pt730-capabilities
 pt-reverse/bin/pt730-models manifest
 ```
 
+Before opening an existing `.pkt` through the live app bridge, run the offline
+Packet Tracer file preflight:
+
+```bash
+pt-reverse/bin/pt730-app inspect-pkt path/to/file.pkt
+pt-reverse/bin/pt730-app open path/to/file.pkt
+```
+
+`open` runs the same preflight automatically before it touches live Packet
+Tracer.  Known crash fingerprints and visible risky model strings such as
+`3560-24PS` and `3650-24PS` are blocked by default.  Because PT 7.3.0 `.pkt`
+files are opaque in this setup, a clean preflight only means "no known bad
+evidence was found", not "the file is fully safe".  Use `--allow-risky` only for
+a supervised recovery attempt.
+
 For an offline visual preview of a plan:
 
 ```bash

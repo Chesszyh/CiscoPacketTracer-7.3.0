@@ -22,6 +22,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EVAL_BIN = ROOT / "pt-reverse" / "bin" / "pt730-eval"
+sys.path.insert(0, str(ROOT / "pt-reverse" / "pt730"))
+
+from pkt_safety import assert_packet_file_safe, inspect_packet_file  # noqa: E402
 
 
 def packet_tracer_bin() -> Path:
@@ -105,12 +108,26 @@ def save_as(target: Path, *, timeout: float, direct: bool) -> None:
     print(target)
 
 
-def open_file(source: Path, *, timeout: float, direct: bool) -> None:
+def inspect_pkt(source: Path, *, allow_risky: bool) -> int:
+    report = inspect_packet_file(source)
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+    if report.issues and not allow_risky:
+        return 1
+    return 0
+
+
+def open_file(source: Path, *, timeout: float, direct: bool, allow_risky: bool) -> None:
     source = source.expanduser()
     if not source.is_absolute():
         source = Path.cwd() / source
     if not source.exists():
         raise FileNotFoundError(source)
+    report = assert_packet_file_safe(source, allow_risky=allow_risky)
+    if report.issues and allow_risky:
+        print(
+            f"pt730-app: safety override for risky Packet Tracer file sha256={report.sha256}",
+            file=sys.stderr,
+        )
 
     if direct:
         open_path = wine_path(source)
@@ -187,6 +204,11 @@ def main(argv: list[str] | None = None) -> int:
     open_p = sub.add_parser("open", help="experimental: try to open a Packet Tracer file from a Linux path")
     open_p.add_argument("path", type=Path)
     open_p.add_argument("--direct", action="store_true", help="let Packet Tracer open the source path directly")
+    open_p.add_argument("--allow-risky", action="store_true", help="override .pkt preflight warnings for supervised recovery only")
+
+    inspect_p = sub.add_parser("inspect-pkt", help="offline safety preflight for a Packet Tracer file")
+    inspect_p.add_argument("path", type=Path)
+    inspect_p.add_argument("--allow-risky", action="store_true", help="return success even when the preflight finds risky evidence")
 
     screenshot_p = sub.add_parser("screenshot", help="capture the Packet Tracer window on Hyprland")
     screenshot_p.add_argument("path", type=Path)
@@ -200,7 +222,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "save-as":
             save_as(args.path, timeout=args.timeout, direct=args.direct)
         elif args.cmd == "open":
-            open_file(args.path, timeout=args.timeout, direct=args.direct)
+            open_file(args.path, timeout=args.timeout, direct=args.direct, allow_risky=args.allow_risky)
+        elif args.cmd == "inspect-pkt":
+            return inspect_pkt(args.path, allow_risky=args.allow_risky)
         elif args.cmd == "new":
             new_file(args.timeout)
         elif args.cmd == "screenshot":

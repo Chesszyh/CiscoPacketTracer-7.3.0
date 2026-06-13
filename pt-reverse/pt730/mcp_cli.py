@@ -1593,6 +1593,8 @@ def tool_live_app(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         command.extend(["open", str_arg(args, "path")])
         if bool_arg(args, "direct", default=False):
             command.append("--direct")
+        if bool_arg(args, "allow_risky", default=False):
+            command.append("--allow-risky")
     elif action == "screenshot":
         command.extend(["screenshot", str_arg(args, "path")])
     return run_live_cli(root, args, "pt730_live_app", command)
@@ -2083,7 +2085,7 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_live_query", "Query the live Packet Tracer canvas. Requires allow_live=true.", schema({"allow_live": boolean, "summary": boolean, "timeout": integer}, ["allow_live"]), tool_live_query),
         tool("pt730_live_apply", "Apply a topology plan to live Packet Tracer, or run offline dry_run without live access.", schema({"plan": string, "dry_run": boolean, "allow_live": boolean, "replace": boolean, "batch_size": integer, "allow_risky": boolean, "strict_safety": boolean, "timeout": integer}, ["plan"]), tool_live_apply),
         tool("pt730_live_save_as", "Save the current live Packet Tracer file to a Linux path. Requires allow_live=true.", schema({"allow_live": boolean, "path": string, "direct": boolean, "timeout": integer}, ["allow_live", "path"]), tool_live_save_as),
-        tool("pt730_live_app", "Run guarded Packet Tracer appWindow helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["count", "save", "new", "save_as", "open", "screenshot"]}, "path": string, "direct": boolean, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["action"]), tool_live_app),
+        tool("pt730_live_app", "Run guarded Packet Tracer appWindow helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["count", "save", "new", "save_as", "open", "screenshot"]}, "path": string, "direct": boolean, "allow_risky": boolean, "dry_run": boolean, "allow_live": boolean, "timeout": integer}, ["action"]), tool_live_app),
         tool("pt730_live_bridge", "Run guarded localhost bridge lifecycle helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["start", "stop", "restart", "status", "bootstrap", "logs"]}, "lines": string, "dry_run": boolean, "allow_live": boolean}, ["action"]), tool_live_bridge),
         tool("pt730_live_launch", "Run guarded Packet Tracer tmux launcher helpers, or return a safe dry_run command preview.", schema({"action": {"type": "string", "enum": ["start", "stop", "restart", "status", "logs"]}, "lines": string, "dry_run": boolean, "allow_live": boolean}, ["action"]), tool_live_launch),
         tool("pt730_live_recover", "Run guarded Packet Tracer bridge recovery, or return a safe dry_run command preview.", schema({"wait": integer, "notify": boolean, "dry_run": boolean, "allow_live": boolean}), tool_live_recover),
