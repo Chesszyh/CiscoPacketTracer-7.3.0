@@ -68,6 +68,7 @@ pt-reverse/bin/pt730-render diagram-audit pt-reverse/examples/simple-lan.json
 pt-reverse/bin/pt730-render verification-plan pt-reverse/examples/server-dhcp-lan.json --format markdown
 pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-render --basename simple-lan --title "Simple LAN" --legend
 pt-reverse/bin/pt730-render bundle pt-reverse/examples/simple-lan.json --output-dir simple-lan-report --basename simple-lan --preset report
+pt-reverse/bin/pt730-render views pt-reverse/examples/simple-lan.json --output-dir simple-lan-views --basename simple-lan --preset presentation --group-by auto
 pt-reverse/bin/pt730-render course-audit pt-reverse/course-design/college-network-topology-pt73-safe.json
 ```
 
@@ -124,6 +125,10 @@ same agent-friendly grouping/audit defaults with a dark high-contrast theme for
 slides, screenshots, and video walkthroughs.
 The `pt730_render_bundle` MCP tool writes a multi-format render bundle plus a
 manifest in one offline call.
+The `pt730_render_views` MCP tool writes an overview plus grouped detail
+SVG/draw.io/HTML/summary artifacts for large topologies, so an agent can
+produce both a clean high-level diagram and readable per-network/VLAN/site
+slides without hand-splitting JSON.
 The `pt730_verification_plan` MCP tool writes JSON or Markdown live/manual
 validation checklists from topology JSON without contacting Packet Tracer.  The
 checks map representative pings, IOS `show` commands, and Server-PT services to
@@ -514,6 +519,11 @@ from one existing plan.  Add `--formats svg,drawio,html,markdown,summary,course-
 or `--formats svg,drawio,html,markdown,summary,diagram-audit,verification-json,verification-md`, plus
 `--title <title> --legend`, when a bundle should include or limit specific
 artifacts.
+Use `pt730-render views <plan.json> --output-dir <render-dir> --basename <name>
+--preset presentation --group-by auto` for complex diagrams that need more than
+one picture. It writes `<basename>.overview.*`, one grouped detail set per
+network/VLAN/site/category group, and `<basename>.views.manifest.json`; view
+formats are `svg,drawio,html,summary`, and `--max-views` limits detail output.
 For this course assignment, `pt730-render course-audit <plan.json>` checks the
 required VLAN links, the server address space `172.16.1.0/26`, the PC address
 space `192.168.0.0/21`, and representative host coverage.

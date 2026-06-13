@@ -69,6 +69,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("pt730_plan_remove_security_policy", names)
         self.assertIn("pt730_render", names)
         self.assertIn("pt730_render_bundle", names)
+        self.assertIn("pt730_render_views", names)
         self.assertIn("pt730_verification_plan", names)
         self.assertIn("pt730_lab_template", names)
         self.assertIn("pt730_lab_plan", names)
@@ -145,6 +146,12 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("annotations", bundle["inputSchema"]["properties"])
         self.assertIn("diagram-audit", bundle["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
         self.assertIn("verification-md", bundle["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"])
+        views = next(tool for tool in tools if tool["name"] == "pt730_render_views")
+        self.assertIn("output_dir", views["inputSchema"]["required"])
+        self.assertIn("formats", views["inputSchema"]["properties"])
+        self.assertEqual(views["inputSchema"]["properties"]["formats"]["oneOf"][0]["items"]["enum"], ["svg", "drawio", "html", "summary"])
+        self.assertIn("max_views", views["inputSchema"]["properties"])
+        self.assertIn("presentation", views["inputSchema"]["properties"]["preset"]["enum"])
         verification = next(tool for tool in tools if tool["name"] == "pt730_verification_plan")
         self.assertIn("plan", verification["inputSchema"]["required"])
         self.assertIn("max_hosts", verification["inputSchema"]["properties"])
@@ -984,6 +991,48 @@ class McpCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "mcp-simple.summary.json").exists())
             self.assertTrue((out_dir / "mcp-simple.diagram-audit.json").exists())
             self.assertTrue((out_dir / "mcp-simple.manifest.json").exists())
+
+    def test_tools_call_render_views_generates_overview_and_detail_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "mcp-render-views"
+            responses = self.run_mcp(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "pt730_render_views",
+                            "arguments": {
+                                "plan": "pt-reverse/examples/simple-lan.json",
+                                "output_dir": str(out_dir),
+                                "basename": "mcp-views",
+                                "formats": ["svg", "summary"],
+                                "preset": "presentation",
+                                "group_by": "network",
+                                "max_views": 2,
+                            },
+                        },
+                    }
+                ]
+            )
+            result = responses[0]["result"]
+            self.assertEqual(result["isError"], False)
+            command = result["structuredContent"]["command"]
+            self.assertIn("views", command)
+            self.assertIn("--formats", command)
+            self.assertIn("svg,summary", command)
+            self.assertIn("--preset", command)
+            self.assertIn("presentation", command)
+            self.assertIn("--max-views", command)
+            manifest = json.loads(result["structuredContent"]["stdout"])
+            self.assertEqual(manifest["kind"], "pt730-render-views")
+            self.assertEqual(manifest["formats"], ["svg", "summary"])
+            self.assertEqual(manifest["options"]["preset"], "presentation")
+            self.assertEqual(manifest["counts"]["views_written"], 1)
+            self.assertTrue((out_dir / "mcp-views.overview.svg").exists())
+            self.assertTrue((out_dir / "mcp-views.views.manifest.json").exists())
+            self.assertTrue((out_dir / manifest["views"][0]["artifacts"]["svg"]).exists())
 
     def test_tools_call_render_bundle_report_preset_generates_report_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

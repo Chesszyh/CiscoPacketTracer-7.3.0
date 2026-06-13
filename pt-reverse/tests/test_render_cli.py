@@ -48,6 +48,7 @@ class RenderCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(data["kind"], "pt730-render-schema")
         self.assertIn("svg", data["formats"])
+        self.assertIn("summary", data["view_formats"])
         self.assertIn("presentation", data["presets"])
         self.assertIn("render_time", data["annotation"]["cli"])
         self.assertIn("annotations", data["annotation"]["mcp"])
@@ -856,6 +857,44 @@ class RenderCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "presentation-simple.diagram-audit.json").exists())
             self.assertTrue((out_dir / "presentation-simple.verification.json").exists())
             self.assertTrue((out_dir / "presentation-simple.verification.md").exists())
+
+    def test_views_render_overview_and_group_detail_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "views"
+            result = self.run_render(
+                "views",
+                str(ROOT / "examples" / "simple-lan.json"),
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "simple",
+                "--formats",
+                "svg,summary",
+                "--preset",
+                "presentation",
+                "--group-by",
+                "network",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["kind"], "pt730-render-views")
+            self.assertEqual(manifest["formats"], ["svg", "summary"])
+            self.assertEqual(manifest["options"]["preset"], "presentation")
+            self.assertEqual(manifest["options"]["theme"], "dark")
+            self.assertEqual(manifest["options"]["group_by"], "network")
+            self.assertEqual(manifest["counts"]["groups_total"], 1)
+            self.assertEqual(manifest["counts"]["views_written"], 1)
+            self.assertTrue((out_dir / "simple.overview.svg").exists())
+            self.assertTrue((out_dir / "simple.overview.summary.json").exists())
+            self.assertTrue((out_dir / "simple.views.manifest.json").exists())
+            detail = manifest["views"][0]
+            self.assertEqual(detail["label"], "192.168.50.0/24 gw 192.168.50.1")
+            self.assertEqual(detail["counts"]["devices"], 3)
+            self.assertIn("svg", detail["artifacts"])
+            self.assertTrue((out_dir / detail["artifacts"]["svg"]).exists())
+            overview_svg = (out_dir / "simple.overview.svg").read_text(encoding="utf-8")
+            self.assertIn("background: #0f172a", overview_svg)
+            self.assertNotIn("GigabitEthernet0/0", overview_svg)
 
     def test_course_audit_accepts_course_design_plan(self) -> None:
         result = self.run_render("course-audit", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))

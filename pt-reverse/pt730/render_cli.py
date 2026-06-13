@@ -42,6 +42,9 @@ BUNDLE_RENDER_FORMATS = (
 )
 BUNDLE_DEFAULT_FORMATS = ("svg", "drawio", "html", "markdown", "summary")
 BUNDLE_REPORT_FORMATS = ("svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md")
+VIEW_RENDER_FORMATS = ("svg", "drawio", "html", "summary")
+VIEW_DEFAULT_FORMATS = ("svg", "drawio", "html", "summary")
+VIEW_MAX_VIEWS = 32
 DIAGRAM_AUDIT_OVERLAP_X = 120.0
 DIAGRAM_AUDIT_OVERLAP_Y = 90.0
 DIAGRAM_AUDIT_MAX_WIDTH = 1800.0
@@ -68,6 +71,7 @@ def render_schema() -> dict[str, Any]:
         "formats": list(BUNDLE_RENDER_FORMATS),
         "single_formats": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-plan"],
         "bundle_formats": list(BUNDLE_RENDER_FORMATS),
+        "view_formats": list(VIEW_RENDER_FORMATS),
         "themes": list(RENDER_THEMES),
         "presets": list(RENDER_PRESETS),
         "group_by": list(RENDER_GROUP_BY),
@@ -110,6 +114,7 @@ def render_schema() -> dict[str, Any]:
             "svg_report": "pt-reverse/bin/pt730-render svg plan.json --preset report --title 'Campus Topology'",
             "render_time_annotation": "pt-reverse/bin/pt730-render summary plan.json --annotation '{\"target\":\"R1\",\"title\":\"Core\",\"text\":\"Gateway check\"}'",
             "bundle": "pt-reverse/bin/pt730-render bundle plan.json --output-dir out --preset report --formats svg,drawio,html,markdown,summary,diagram-audit",
+            "views": "pt-reverse/bin/pt730-render views plan.json --output-dir out --preset presentation --group-by auto",
         },
     }
 
@@ -1122,6 +1127,14 @@ def visual_groups(plan: dict[str, Any], devices: list[dict[str, Any]], group_by:
             label_text = group["network"]
             members = {name for name in group["hosts"] if name in known}
             for member in list(members):
+                for neighbor in direct_neighbors.get(member, set()):
+                    neighbor_device = next((device for device in devices if pick(device, ("name", "id")) == neighbor), {})
+                    if svg_device_kind(neighbor_device) in {"switch", "router", "wireless"}:
+                        members.add(neighbor)
+            for member in list(members):
+                member_device = next((device for device in devices if pick(device, ("name", "id")) == member), {})
+                if svg_device_kind(member_device) not in {"switch", "router", "wireless"}:
+                    continue
                 for neighbor in direct_neighbors.get(member, set()):
                     neighbor_device = next((device for device in devices if pick(device, ("name", "id")) == neighbor), {})
                     if svg_device_kind(neighbor_device) in {"switch", "router", "wireless"}:
@@ -2537,6 +2550,21 @@ def parse_bundle_formats(value: str) -> list[str]:
     return formats
 
 
+def parse_view_formats(value: str) -> list[str]:
+    formats: list[str] = []
+    for raw in value.split(","):
+        fmt = raw.strip()
+        if not fmt:
+            continue
+        if fmt not in VIEW_RENDER_FORMATS:
+            raise ValueError(f"view format must be one of: {', '.join(VIEW_RENDER_FORMATS)}")
+        if fmt not in formats:
+            formats.append(fmt)
+    if not formats:
+        raise ValueError("view formats cannot be empty")
+    return formats
+
+
 def default_bundle_formats(preset: str) -> str:
     if preset in {"report", "presentation"}:
         return ",".join(BUNDLE_REPORT_FORMATS)
@@ -2576,6 +2604,15 @@ def bundle_filename(basename: str, fmt: str) -> str:
     return f"{basename}.{BUNDLE_EXTENSIONS[fmt]}"
 
 
+def view_slug(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", value.strip().lower()).strip("-._")
+    return slug or "view"
+
+
+def view_filename(basename: str, view_id: str, fmt: str) -> str:
+    return f"{basename}.{view_id}.{BUNDLE_EXTENSIONS[fmt]}"
+
+
 def render_format(plan: dict[str, Any], fmt: str, *, options: RenderOptions, direction: str) -> tuple[str, int]:
     if fmt == "mermaid":
         return mermaid(plan, direction=direction, link_labels=options.link_labels), 0
@@ -2602,6 +2639,229 @@ def render_format(plan: dict[str, Any], fmt: str, *, options: RenderOptions, dir
         report = verification_plan(plan)
         return verification_markdown(report), 0
     raise ValueError(f"unsupported render format: {fmt}")
+
+
+def _view_device_name(value: dict[str, Any], aliases: tuple[str, ...]) -> str:
+    return pick(value, aliases)
+
+
+def _filter_records_by_device(records: Any, selected: set[str], aliases: tuple[str, ...]) -> list[Any]:
+    filtered = []
+    for record in (records if isinstance(records, list) else []):
+        if not isinstance(record, dict):
+            continue
+        if _view_device_name(record, aliases) in selected:
+            filtered.append(dict(record))
+    return filtered
+
+
+def filtered_view_plan(plan: dict[str, Any], selected_devices: list[str]) -> dict[str, Any]:
+    selected = set(selected_devices)
+    view: dict[str, Any] = {}
+    metadata = plan.get("metadata")
+    if isinstance(metadata, dict):
+        view["metadata"] = dict(metadata)
+
+    devices = []
+    for index, device in enumerate(plan.get("devices", [])):
+        if not isinstance(device, dict):
+            continue
+        name = pick(device, ("name", "id"), f"device_{index}")
+        if name in selected:
+            devices.append(dict(device))
+    view["devices"] = devices
+
+    links = []
+    view_vlans: set[str] = set()
+    for link in plan.get("links", []):
+        if not isinstance(link, dict):
+            continue
+        a = pick(link, ("a", "device_a", "from", "from_device"))
+        b = pick(link, ("b", "device_b", "to", "to_device"))
+        if a in selected and b in selected:
+            links.append(dict(link))
+            vlan = pick(link, ("vlan", "vlan_id"))
+            if vlan:
+                view_vlans.add(vlan)
+    view["links"] = links
+
+    view["modules"] = _filter_records_by_device(plan.get("modules", []), selected, ("device", "device_name", "on"))
+    view["pc_configs"] = _filter_records_by_device(plan.get("pc_configs", []), selected, ("name", "device", "pc", "server"))
+    view["ipv6_configs"] = _filter_records_by_device(plan.get("ipv6_configs", []), selected, ("name", "device", "pc", "server"))
+    view["ap_configs"] = _filter_records_by_device(plan.get("ap_configs", []), selected, ("name", "device", "ap"))
+    view["server_configs"] = _filter_records_by_device(plan.get("server_configs", []), selected, ("name", "device", "server"))
+    view["ios_configs"] = _filter_records_by_device(plan.get("ios_configs", []), selected, ("device", "name", "router", "switch"))
+    view["security_policies"] = _filter_records_by_device(plan.get("security_policies", []), selected, ("device", "router", "name"))
+
+    vlan_configs = []
+    for config in plan.get("vlan_configs", []):
+        if not isinstance(config, dict):
+            continue
+        vlan = pick(config, ("id", "vlan", "vlan_id"))
+        if not view_vlans or vlan in view_vlans:
+            vlan_configs.append(dict(config))
+    view["vlan_configs"] = vlan_configs
+
+    dhcp_pools = []
+    for pool in plan.get("dhcp_pools", []):
+        if not isinstance(pool, dict):
+            continue
+        device = pick(pool, ("device", "router"))
+        vlan = pick(pool, ("vlan", "vlan_id"))
+        if device in selected or (vlan and vlan in view_vlans):
+            dhcp_pools.append(dict(pool))
+    view["dhcp_pools"] = dhcp_pools
+
+    annotations = []
+    for annotation in annotation_items(plan):
+        target = str(annotation.get("target", ""))
+        if not target or target in selected:
+            annotations.append({key: value for key, value in annotation.items() if key not in {"lines"}})
+    if annotations:
+        view["annotations"] = annotations
+    return view
+
+
+def detail_view_options(options: RenderOptions, *, title: str) -> RenderOptions:
+    return RenderOptions(
+        theme=options.theme,
+        link_labels=options.link_labels,
+        model_labels=options.model_labels,
+        group_by="none",
+        title=title,
+        legend=options.legend,
+        preset=options.preset,
+    )
+
+
+def write_view_artifacts(
+    *,
+    plan: dict[str, Any],
+    output_dir: Path,
+    basename: str,
+    view_id: str,
+    formats: list[str],
+    options: RenderOptions,
+    direction: str,
+) -> dict[str, Any]:
+    artifacts: dict[str, str] = {}
+    paths: dict[str, str] = {}
+    bytes_written: dict[str, int] = {}
+    exit_codes: dict[str, int] = {}
+    for fmt in formats:
+        text, code = render_format(plan, fmt, options=options, direction=direction)
+        path = output_dir / view_filename(basename, view_id, fmt)
+        path.write_text(text, encoding="utf-8")
+        artifacts[fmt] = path.name
+        paths[fmt] = str(path)
+        bytes_written[fmt] = path.stat().st_size
+        exit_codes[fmt] = code
+    return {"artifacts": artifacts, "paths": paths, "bytes": bytes_written, "exit_codes": exit_codes}
+
+
+def render_views(
+    plan: dict[str, Any],
+    *,
+    plan_path: Path,
+    output_dir: Path,
+    basename: str,
+    formats: list[str],
+    options: RenderOptions,
+    direction: str = "LR",
+    max_views: int = VIEW_MAX_VIEWS,
+) -> tuple[dict[str, Any], int]:
+    if max_views < 1:
+        raise ValueError("--max-views must be at least 1")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    devices = svg_devices(plan)
+    grouping = options.group_by if options.group_by != "none" else "auto"
+    groups = visual_groups(plan, devices, grouping)
+    base_title = options.title or basename
+    overview_options = RenderOptions(
+        theme=options.theme,
+        link_labels=options.link_labels,
+        model_labels=options.model_labels,
+        group_by=grouping,
+        title=base_title,
+        legend=options.legend,
+        preset=options.preset,
+    )
+    overview = write_view_artifacts(
+        plan=plan,
+        output_dir=output_dir,
+        basename=basename,
+        view_id="overview",
+        formats=formats,
+        options=overview_options,
+        direction=direction,
+    )
+    exit_codes = list(overview["exit_codes"].values())
+    view_records: list[dict[str, Any]] = []
+    used_ids = {"overview"}
+    for index, group in enumerate(groups[:max_views], start=1):
+        label_text = str(group["label"])
+        raw_id = f"view-{index:02d}-{view_slug(label_text)}"
+        view_id = raw_id
+        suffix = 2
+        while view_id in used_ids:
+            view_id = f"{raw_id}-{suffix}"
+            suffix += 1
+        used_ids.add(view_id)
+        subplan = filtered_view_plan(plan, list(group["devices"]))
+        rendered = write_view_artifacts(
+            plan=subplan,
+            output_dir=output_dir,
+            basename=basename,
+            view_id=view_id,
+            formats=formats,
+            options=detail_view_options(options, title=f"{base_title}: {label_text}"),
+            direction=direction,
+        )
+        exit_codes.extend(rendered["exit_codes"].values())
+        view_records.append(
+            {
+                "id": view_id,
+                "label": label_text,
+                "devices": list(group["devices"]),
+                "counts": {
+                    "devices": len(subplan.get("devices", [])),
+                    "links": len(subplan.get("links", [])),
+                    "annotations": len(annotation_items(subplan)),
+                },
+                **rendered,
+            }
+        )
+
+    manifest_path = output_dir / f"{basename}.views.manifest.json"
+    manifest = {
+        "kind": "pt730-render-views",
+        "plan": str(plan_path),
+        "output_dir": str(output_dir),
+        "basename": basename,
+        "formats": formats,
+        "options": {
+            "preset": options.preset,
+            "theme": options.theme,
+            "link_labels": options.link_labels,
+            "model_labels": options.model_labels,
+            "group_by": grouping,
+            "direction": direction,
+            "title": base_title,
+            "legend": options.legend,
+            "max_views": max_views,
+        },
+        "overview": overview,
+        "views": view_records,
+        "counts": {
+            "groups_total": len(groups),
+            "views_written": len(view_records),
+            "views_omitted": max(0, len(groups) - len(view_records)),
+        },
+        "artifacts": {"manifest": manifest_path.name},
+        "paths": {"manifest": str(manifest_path)},
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return manifest, max(exit_codes, default=0)
 
 
 def render_bundle(
@@ -2843,6 +3103,16 @@ def main(argv: list[str] | None = None) -> int:
     add_visual_options(bundle_p)
     add_annotation_options(bundle_p)
 
+    views_p = sub.add_parser("views", help="render overview plus grouped detail diagrams for large topology plans")
+    views_p.add_argument("plan", type=Path)
+    views_p.add_argument("--output-dir", type=Path, required=True, help="directory for generated view artifacts")
+    views_p.add_argument("--basename", default="topology", help="artifact filename prefix")
+    views_p.add_argument("--formats", default=",".join(VIEW_DEFAULT_FORMATS), help="comma-separated formats for each view: svg,drawio,html,summary")
+    views_p.add_argument("--direction", default="LR", choices=["LR", "TD", "TB", "RL", "BT"], help="Mermaid direction if a future view format needs it")
+    views_p.add_argument("--max-views", type=int, default=VIEW_MAX_VIEWS, help="maximum grouped detail views to write")
+    add_visual_options(views_p)
+    add_annotation_options(views_p)
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "schema":
@@ -2929,6 +3199,21 @@ def main(argv: list[str] | None = None) -> int:
                 formats=parse_bundle_formats(args.formats or default_bundle_formats(args.preset)),
                 options=render_options(args, default_title=args.basename),
                 direction=args.direction,
+            )
+            print(json.dumps(manifest, ensure_ascii=False, indent=2))
+            return code
+        if args.cmd == "views":
+            plan = load_plan_for_render(args)
+            _enforce_plan_safety(plan, allow_risky=args.allow_risky, strict=args.strict_safety)
+            manifest, code = render_views(
+                plan,
+                plan_path=args.plan,
+                output_dir=args.output_dir,
+                basename=args.basename,
+                formats=parse_view_formats(args.formats),
+                options=render_options(args, default_title=args.basename),
+                direction=args.direction,
+                max_views=args.max_views,
             )
             print(json.dumps(manifest, ensure_ascii=False, indent=2))
             return code
