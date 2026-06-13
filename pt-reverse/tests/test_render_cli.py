@@ -48,6 +48,7 @@ class RenderCliTest(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(data["kind"], "pt730-render-schema")
         self.assertIn("svg", data["formats"])
+        self.assertIn("presentation", data["presets"])
         self.assertIn("render_time", data["annotation"]["cli"])
         self.assertIn("annotations", data["annotation"]["mcp"])
 
@@ -99,6 +100,15 @@ class RenderCliTest(unittest.TestCase):
         result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--preset", "report")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("background: #fbf7ef", result.stdout)
+        self.assertIn('<title id="title">simple-lan</title>', result.stdout)
+        self.assertIn('class="legend"', result.stdout)
+        self.assertIn("192.168.50.0/24 gw 192.168.50.1", result.stdout)
+        self.assertNotIn("GigabitEthernet0/0", result.stdout)
+
+    def test_svg_presentation_preset_uses_dark_high_contrast_defaults(self) -> None:
+        result = self.run_render("svg", str(ROOT / "examples" / "simple-lan.json"), "--preset", "presentation")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("background: #0f172a", result.stdout)
         self.assertIn('<title id="title">simple-lan</title>', result.stdout)
         self.assertIn('class="legend"', result.stdout)
         self.assertIn("192.168.50.0/24 gw 192.168.50.1", result.stdout)
@@ -818,6 +828,34 @@ class RenderCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "report-simple.diagram-audit.json").exists())
             self.assertTrue((out_dir / "report-simple.verification.json").exists())
             self.assertTrue((out_dir / "report-simple.verification.md").exists())
+
+    def test_bundle_presentation_preset_adds_dark_report_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "bundle"
+            result = self.run_render(
+                "bundle",
+                str(ROOT / "examples" / "simple-lan.json"),
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "presentation-simple",
+                "--preset",
+                "presentation",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md"])
+            self.assertEqual(manifest["options"]["preset"], "presentation")
+            self.assertEqual(manifest["options"]["theme"], "dark")
+            self.assertEqual(manifest["options"]["link_labels"], False)
+            self.assertEqual(manifest["options"]["group_by"], "auto")
+            self.assertEqual(manifest["options"]["title"], "presentation-simple")
+            self.assertEqual(manifest["options"]["legend"], True)
+            self.assertEqual(manifest["diagram_audit"], {"ok": True, "exit_code": 0})
+            self.assertEqual(manifest["verification_plan"]["ok"], True)
+            self.assertTrue((out_dir / "presentation-simple.diagram-audit.json").exists())
+            self.assertTrue((out_dir / "presentation-simple.verification.json").exists())
+            self.assertTrue((out_dir / "presentation-simple.verification.md").exists())
 
     def test_course_audit_accepts_course_design_plan(self) -> None:
         result = self.run_render("course-audit", str(ROOT / "course-design" / "college-network-topology-pt73-safe.json"))

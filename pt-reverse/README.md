@@ -119,7 +119,9 @@ draw.io, and HTML, plus JSON summary, course audit, and diagram-quality audit
 outputs.
 Use `preset=report` for paper theme, automatic grouping, a visible legend,
 hidden link labels, and report bundle defaults that include `diagram-audit`,
-`verification-json`, and `verification-md`.
+`verification-json`, and `verification-md`.  Use `preset=presentation` for the
+same agent-friendly grouping/audit defaults with a dark high-contrast theme for
+slides, screenshots, and video walkthroughs.
 The `pt730_render_bundle` MCP tool writes a multi-format render bundle plus a
 manifest in one offline call.
 The `pt730_verification_plan` MCP tool writes JSON or Markdown live/manual
@@ -430,9 +432,11 @@ and `--annotations` to add lab-bundle callouts. Use `pt730-lab report <out-dir>/
 --output <out-dir>/deliverable.md` to generate a Markdown coursework index with
 artifact paths, safety status, render outputs, config files, and suggested
 recording checks. Add `--preset report` or set `render.preset` to `report` when
-the agent should use paper theme, automatic grouping, a legend, hidden link
-labels, and default render formats that include `diagram-audit`,
-`verification-json`, and `verification-md`.
+the agent should use paper theme for reports; use `--preset presentation` or
+`render.preset: presentation` for dark high-contrast screenshots and slides.
+Both presets enable automatic grouping, a legend, hidden link labels, and
+default render formats that include `diagram-audit`, `verification-json`, and
+`verification-md`.
 Use `pt730-pipeline campus --ip-plan <ip-plan.json> --compose-spec
 <campus-spec.json> --output-dir <out-dir> --routing ospf` or `--routing eigrp`
 to run the offline
@@ -489,8 +493,10 @@ do not modify the source topology JSON. MCP `pt730_render` and
 Run `pt730-render schema` or MCP `pt730_schema` with `target=render` when an
 agent needs the exact render formats, options, and annotation fields.
 Use `--preset report` on SVG/draw.io/HTML, `diagram-audit`, `bundle`, or
-`pt730-lab plan` when a report-ready default is preferred over hand-picking each
-visual option.
+`pt730-lab plan` when a report-ready paper default is preferred over
+hand-picking each visual option.  Use `--preset presentation` for dark
+high-contrast topology screenshots with the same grouping, legend, diagram
+audit, and verification-plan bundle defaults.
 Use `pt730-render diagram-audit <plan.json>` before final screenshots to catch
 empty plans, missing coordinates, close device overlaps, disconnected
 components, oversized canvases, and dense-label/grouping issues without opening

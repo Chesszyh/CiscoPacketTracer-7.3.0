@@ -20,7 +20,9 @@ RENDER_THEMES = {"light", "dark", "paper"}
 VISUAL_RENDER_FORMATS = {"svg", "drawio", "html"}
 RENDER_OPTION_FORMATS = VISUAL_RENDER_FORMATS | {"diagram-audit"}
 RENDER_GROUP_BY = {"none", "auto", "network", "vlan", "site", "category"}
-RENDER_PRESETS = {"manual", "report"}
+RENDER_PRESETS = {"manual", "report", "presentation"}
+RENDER_PRESET_ENUM = ["manual", "report", "presentation"]
+RENDER_PRESET_MESSAGE = "manual, presentation, report"
 ROUTING_MODES = {"none", "rip", "eigrp", "ospf", "static"}
 REDUNDANT_ROUTING_MODES = {"none", "rip", "eigrp", "ospf"}
 ENTERPRISE_ROUTING_MODES = ROUTING_MODES | {"bgp"}
@@ -620,7 +622,7 @@ def tool_render(root: Path, args: dict[str, Any]) -> dict[str, Any]:
         if fmt not in VISUAL_RENDER_FORMATS and fmt not in {"mermaid", "diagram-audit"}:
             raise ToolError("preset is supported only for mermaid, svg, drawio, html, or diagram-audit renders")
         if preset not in RENDER_PRESETS:
-            raise ToolError("preset must be one of: manual, report")
+            raise ToolError(f"preset must be one of: {RENDER_PRESET_MESSAGE}")
         command.extend(["--preset", preset])
     theme = str_arg(args, "theme", required=False)
     if theme:
@@ -682,7 +684,7 @@ def tool_render_bundle(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     preset = str_arg(args, "preset", required=False)
     if preset:
         if preset not in RENDER_PRESETS:
-            raise ToolError("preset must be one of: manual, report")
+            raise ToolError(f"preset must be one of: {RENDER_PRESET_MESSAGE}")
         command.extend(["--preset", preset])
     theme = str_arg(args, "theme", required=False)
     if theme:
@@ -764,7 +766,7 @@ def tool_lab_plan(root: Path, args: dict[str, Any]) -> dict[str, Any]:
     preset = str_arg(args, "preset", required=False)
     if preset:
         if preset not in RENDER_PRESETS:
-            raise ToolError("preset must be one of: manual, report")
+            raise ToolError(f"preset must be one of: {RENDER_PRESET_MESSAGE}")
         command.extend(["--preset", preset])
     theme = str_arg(args, "theme", required=False)
     if theme:
@@ -2076,11 +2078,11 @@ def tools() -> list[dict[str, Any]]:
         tool("pt730_plan_remove_ios_config", "Remove one IOS command config record from a topology JSON plan.", schema({"plan": string, "device": string, "source": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "device"]), tool_plan_remove_ios_config),
         tool("pt730_plan_add_security_policy", "Append or update one security policy metadata record in a topology JSON plan.", schema({"plan": string, "device": string, "type": string, "interface": string, "acl": string, "direction": string, "summary": string, "replace": boolean, "output": string, "compact": boolean}, ["plan", "device", "type"]), tool_plan_add_security_policy),
         tool("pt730_plan_remove_security_policy", "Remove one or more security policy metadata records from a topology JSON plan.", schema({"plan": string, "device": string, "type": string, "interface": string, "all": boolean, "output": string, "compact": boolean}, ["plan", "device"]), tool_plan_remove_security_policy),
-        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, diagram-audit, verification-json, or verification-md.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
-        tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
+        tool("pt730_render", "Render a topology plan as mermaid, markdown, summary, svg, drawio, html, course-audit, diagram-audit, verification-json, or verification-md.", schema({"format": {"type": "string", "enum": ["mermaid", "markdown", "summary", "svg", "drawio", "html", "course-audit", "diagram-audit", "verification-json", "verification-md"]}, "plan": string, "output": string, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": RENDER_PRESET_ENUM}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["format", "plan"]), tool_render),
+        tool("pt730_render_bundle", "Render one topology plan into multiple offline artifacts plus a JSON manifest in one call.", schema({"plan": string, "output_dir": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": RENDER_PRESET_ENUM}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "allow_risky": boolean}, ["plan", "output_dir"]), tool_render_bundle),
         tool("pt730_verification_plan", "Generate an offline JSON or Markdown live/manual validation checklist for a topology plan.", schema({"plan": string, "format": {"type": "string", "enum": ["json", "markdown"]}, "output": string, "compact": boolean, "max_hosts": integer, "max_service_targets": integer, "strict_safety": boolean, "allow_risky": boolean}, ["plan"]), tool_verification_plan),
         tool("pt730_lab_template", "Generate a full offline lab bundle from one template spec JSON: topology, safety report, render bundle, configs, and manifest.", schema({"spec": string, "output_dir": string, "annotations": annotations, "strict_safety": boolean, "compact": boolean}, ["spec", "output_dir"]), tool_lab_template),
-        tool("pt730_lab_plan", "Generate a full offline lab bundle from an existing topology plan JSON: topology copy, safety report, render bundle, configs, and manifest.", schema({"plan": string, "output_dir": string, "name": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": ["manual", "report"]}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "export_configs": boolean, "config_source": string, "compact": boolean}, ["plan", "output_dir"]), tool_lab_plan),
+        tool("pt730_lab_plan", "Generate a full offline lab bundle from an existing topology plan JSON: topology copy, safety report, render bundle, configs, and manifest.", schema({"plan": string, "output_dir": string, "name": string, "basename": string, "formats": {"oneOf": [{"type": "array", "items": {"type": "string", "enum": ["mermaid", "svg", "drawio", "html", "markdown", "summary", "course-audit", "diagram-audit", "verification-json", "verification-md"]}}, {"type": "string"}]}, "direction": {"type": "string", "enum": ["LR", "TD", "TB", "RL", "BT"]}, "preset": {"type": "string", "enum": RENDER_PRESET_ENUM}, "theme": {"type": "string", "enum": ["light", "dark", "paper"]}, "link_labels": boolean, "model_labels": boolean, "group_by": {"type": "string", "enum": ["none", "auto", "network", "vlan", "site", "category"]}, "title": string, "legend": boolean, "annotations": annotations, "strict_safety": boolean, "export_configs": boolean, "config_source": string, "compact": boolean}, ["plan", "output_dir"]), tool_lab_plan),
         tool("pt730_lab_report", "Generate a Markdown coursework/deliverable index from a pt730-lab manifest.json.", schema({"manifest": string, "output": string, "title": string, "compact": boolean}, ["manifest"]), tool_lab_report),
         tool("pt730_safety_plan", "Check a topology JSON plan offline before live Packet Tracer use.", schema({"plan": string, "strict": boolean}, ["plan"]), tool_safety_plan),
         tool("pt730_safety_js", "Check Packet Tracer JavaScript offline before passing it to pt730-eval.", schema({"code": string, "file": string, "strict": boolean}), tool_safety_js),

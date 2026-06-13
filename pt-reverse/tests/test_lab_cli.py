@@ -253,6 +253,33 @@ class LabCliTest(unittest.TestCase):
             self.assertTrue((out_dir / "render" / "serial-report.verification.md").exists())
             self.assertEqual(manifest["render_bundle"]["verification_plan"]["counts"]["ios"], 2)
 
+    def test_plan_presentation_preset_sets_dark_render_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "plan-lab"
+            result = self.run_lab(
+                "plan",
+                "pt-reverse/examples/two-router-serial-configured.json",
+                "--output-dir",
+                str(out_dir),
+                "--basename",
+                "serial-presentation",
+                "--preset",
+                "presentation",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(result.stdout)
+            self.assertEqual(manifest["render_bundle"]["formats"], ["svg", "drawio", "html", "markdown", "summary", "diagram-audit", "verification-json", "verification-md"])
+            self.assertEqual(manifest["render_bundle"]["options"]["preset"], "presentation")
+            self.assertEqual(manifest["render_bundle"]["options"]["theme"], "dark")
+            self.assertEqual(manifest["render_bundle"]["options"]["link_labels"], False)
+            self.assertEqual(manifest["render_bundle"]["options"]["group_by"], "auto")
+            self.assertEqual(manifest["render_bundle"]["options"]["title"], "serial-presentation")
+            self.assertEqual(manifest["render_bundle"]["options"]["legend"], True)
+            self.assertTrue((out_dir / "render" / "serial-presentation.diagram-audit.json").exists())
+            self.assertTrue((out_dir / "render" / "serial-presentation.verification.json").exists())
+            self.assertTrue((out_dir / "render" / "serial-presentation.verification.md").exists())
+            self.assertEqual(manifest["render_bundle"]["verification_plan"]["counts"]["ios"], 2)
+
     def test_report_generates_coursework_deliverable_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "plan-lab"

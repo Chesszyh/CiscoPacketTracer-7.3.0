@@ -128,6 +128,7 @@ class McpCliTest(unittest.TestCase):
         render = next(tool for tool in tools if tool["name"] == "pt730_render")
         self.assertIn("format", render["inputSchema"]["required"])
         self.assertIn("preset", render["inputSchema"]["properties"])
+        self.assertIn("presentation", render["inputSchema"]["properties"]["preset"]["enum"])
         self.assertIn("group_by", render["inputSchema"]["properties"])
         self.assertIn("title", render["inputSchema"]["properties"])
         self.assertIn("legend", render["inputSchema"]["properties"])
@@ -138,6 +139,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("output_dir", bundle["inputSchema"]["required"])
         self.assertIn("formats", bundle["inputSchema"]["properties"])
         self.assertIn("preset", bundle["inputSchema"]["properties"])
+        self.assertIn("presentation", bundle["inputSchema"]["properties"]["preset"]["enum"])
         self.assertIn("title", bundle["inputSchema"]["properties"])
         self.assertIn("legend", bundle["inputSchema"]["properties"])
         self.assertIn("annotations", bundle["inputSchema"]["properties"])
@@ -154,6 +156,7 @@ class McpCliTest(unittest.TestCase):
         self.assertIn("plan", lab_plan["inputSchema"]["required"])
         self.assertIn("formats", lab_plan["inputSchema"]["properties"])
         self.assertIn("preset", lab_plan["inputSchema"]["properties"])
+        self.assertIn("presentation", lab_plan["inputSchema"]["properties"]["preset"]["enum"])
         self.assertIn("title", lab_plan["inputSchema"]["properties"])
         self.assertIn("legend", lab_plan["inputSchema"]["properties"])
         self.assertIn("annotations", lab_plan["inputSchema"]["properties"])
@@ -800,6 +803,51 @@ class McpCliTest(unittest.TestCase):
         self.assertEqual(audit_result["isError"], False)
         audit = json.loads(audit_result["structuredContent"]["stdout"])
         self.assertEqual(audit["checks"]["render_options"]["preset"], "report")
+        self.assertEqual(audit["checks"]["render_options"]["group_by"], "auto")
+
+    def test_render_tool_exposes_presentation_preset(self) -> None:
+        responses = self.run_mcp(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "svg",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "preset": "presentation",
+                        },
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "pt730_render",
+                        "arguments": {
+                            "format": "diagram-audit",
+                            "plan": "pt-reverse/examples/simple-lan.json",
+                            "preset": "presentation",
+                        },
+                    },
+                },
+            ]
+        )
+        svg_result = responses[0]["result"]
+        audit_result = responses[1]["result"]
+        self.assertEqual(svg_result["isError"], False)
+        self.assertIn("--preset", svg_result["structuredContent"]["command"])
+        self.assertIn("presentation", svg_result["structuredContent"]["command"])
+        self.assertIn("background: #0f172a", svg_result["structuredContent"]["stdout"])
+        self.assertIn("simple-lan", svg_result["structuredContent"]["stdout"])
+        self.assertNotIn("GigabitEthernet0/0", svg_result["structuredContent"]["stdout"])
+        self.assertEqual(audit_result["isError"], False)
+        audit = json.loads(audit_result["structuredContent"]["stdout"])
+        self.assertEqual(audit["checks"]["render_options"]["preset"], "presentation")
+        self.assertEqual(audit["checks"]["render_options"]["theme"], "dark")
         self.assertEqual(audit["checks"]["render_options"]["group_by"], "auto")
 
     def test_render_tool_rejects_visual_options_for_non_visual_formats(self) -> None:

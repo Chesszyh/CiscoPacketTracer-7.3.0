@@ -593,7 +593,7 @@ def _render_settings_from_values(
         raise ValueError(f"render.theme must be one of: {', '.join(RENDER_THEMES)}")
     if resolved_group_by not in RENDER_GROUP_BY:
         raise ValueError(f"render.group_by must be one of: {', '.join(RENDER_GROUP_BY)}")
-    resolved_title = title or (safe_basename if preset == "report" else "")
+    resolved_title = title or (safe_basename if preset in {"report", "presentation"} else "")
     return {
         "basename": safe_basename,
         "formats": _parse_formats(formats if formats is not None else default_bundle_formats(preset)),
@@ -919,7 +919,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--basename", default="", help="render artifact filename stem; defaults to --name or the plan filename stem")
     plan_p.add_argument("--formats", default=None, help="comma-separated formats: mermaid,svg,drawio,html,markdown,summary,course-audit,diagram-audit,verification-json,verification-md; defaults depend on --preset")
     plan_p.add_argument("--direction", choices=("LR", "TD", "TB", "RL", "BT"), default="LR", help="Mermaid direction when mermaid is included")
-    plan_p.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, auto grouping, legend, hidden link labels, and report bundle formats")
+    plan_p.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, presentation uses dark theme, both enable auto grouping, legend, hidden link labels, and report bundle formats")
     plan_p.add_argument("--theme", choices=RENDER_THEMES, default=None, help="diagram color theme")
     plan_p.add_argument("--no-link-labels", action="store_false", dest="link_labels", default=None, help="hide link port/cable/VLAN labels")
     plan_p.add_argument("--no-model-labels", action="store_false", dest="model_labels", default=None, help="hide device model labels")

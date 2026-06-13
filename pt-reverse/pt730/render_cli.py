@@ -27,7 +27,7 @@ COURSE_EXPECTED_SERVERS = 50
 COURSE_EXPECTED_PCS = 1900
 RENDER_THEMES = ("light", "dark", "paper")
 RENDER_GROUP_BY = ("none", "auto", "network", "vlan", "site", "category")
-RENDER_PRESETS = ("manual", "report")
+RENDER_PRESETS = ("manual", "report", "presentation")
 BUNDLE_RENDER_FORMATS = (
     "mermaid",
     "svg",
@@ -2538,7 +2538,7 @@ def parse_bundle_formats(value: str) -> list[str]:
 
 
 def default_bundle_formats(preset: str) -> str:
-    if preset == "report":
+    if preset in {"report", "presentation"}:
         return ",".join(BUNDLE_REPORT_FORMATS)
     return ",".join(BUNDLE_DEFAULT_FORMATS)
 
@@ -2547,6 +2547,15 @@ def preset_render_defaults(preset: str) -> dict[str, Any]:
     if preset == "report":
         return {
             "theme": "paper",
+            "link_labels": False,
+            "model_labels": True,
+            "group_by": "auto",
+            "title": "",
+            "legend": True,
+        }
+    if preset == "presentation":
+        return {
+            "theme": "dark",
             "link_labels": False,
             "model_labels": True,
             "group_by": "auto",
@@ -2728,7 +2737,7 @@ def add_link_label_option(parser: argparse.ArgumentParser) -> None:
 
 
 def add_preset_option(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, auto grouping, legend, hidden link labels, and report bundle formats")
+    parser.add_argument("--preset", choices=RENDER_PRESETS, default="manual", help="render defaults preset; report uses paper theme, presentation uses dark theme, both enable auto grouping, legend, hidden link labels, and report bundle formats")
 
 
 def add_annotation_options(parser: argparse.ArgumentParser) -> None:
@@ -2749,7 +2758,7 @@ def add_visual_options(parser: argparse.ArgumentParser) -> None:
 def render_options(args: argparse.Namespace, *, default_title: str = "") -> RenderOptions:
     preset = getattr(args, "preset", "manual")
     defaults = preset_render_defaults(preset)
-    title = getattr(args, "title", "") or (default_title if preset == "report" else "")
+    title = getattr(args, "title", "") or (default_title if preset in {"report", "presentation"} else "")
     return RenderOptions(
         theme=getattr(args, "theme", None) or defaults["theme"],
         link_labels=defaults["link_labels"] if getattr(args, "link_labels", None) is None else getattr(args, "link_labels"),
